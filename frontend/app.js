@@ -210,7 +210,8 @@ function renderAnalysis(d) {
     ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur),
     returnSection(d), pillarsSection(d), flagsSection(d),
-    chartsSection(d), qualitativeSection(d), peersSection(d), linksSection(d),
+    chartsSection(d), qualitativeSection(d), peersSection(d),
+    summarySection(d), linksSection(d),
   );
   el.classList.remove("hidden"); el.classList.add("fade-in");
   drawCharts(d, cur);
@@ -856,6 +857,72 @@ function flagsSection(d) {
   return h(`<section class="grid md:grid-cols-2 gap-6">
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-good">✓ Strengths</h3>${list(g, "good", "✓")}</div>
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-bad">Watch-outs</h3>${list(r, "bad", "")}</div></section>`);
+}
+
+// Synthesized "Bottom line" — composes the key model outputs into one readable
+// conclusion. Deterministic (no AI), so it's always present.
+function summarySection(d) {
+  const v = d.verdict, m = d.metrics;
+  const val = m.valuation || {}, exp = m.expected_return || {}, mc = m.monte_carlo || {};
+  const cur = d.info.currency === "USD" ? "$" : (d.info.currency || "") + " ";
+  const rc = { "BUY": "good", "HOLD / WATCH": "warn", "AVOID": "bad" }[v.rating] || "warn";
+  const name = d.info.name || d.ticker;
+
+  const methodWord = val.method === "book-value" ? "on book value &amp; through-cycle ROE"
+    : val.method === "earnings" ? "on earnings power" : "on discounted cash flow";
+  const up = val.upside_mid;
+  let valSentence;
+  if (val.suspect) {
+    valSentence = `The valuation is <span class="text-bad">flagged unreliable</span> (${val.suspect_reason || "the model doesn't fit this company"}), so the upside shouldn't be trusted at face value.`;
+  } else if (val.ok && up != null) {
+    valSentence = `Fair value lands near <span class="text-slate-200">${price(val.mid, cur)}</span> (valued ${methodWord}) — ${Math.abs(up * 100).toFixed(0)}% ${up >= 0 ? "above" : "below"} today's ${price(val.current_price, cur)}${mc.ok ? `, and Monte-Carlo puts the odds it's undervalued at <span class="text-slate-200">${fmtPct(mc.prob_undervalued, 0)}</span>` : ""}.`;
+  } else {
+    valSentence = "A reliable intrinsic value couldn't be computed here.";
+  }
+
+  const er = exp.expected_annual_return;
+  const retSentence = er != null
+    ? ` Expected long-term return is ~<span class="text-slate-200">${fmtPct(er, 1)}/yr</span>, which ${exp.beats_inflation ? "clears" : "does <span class='text-bad'>not</span> clear"} the ${fmtPct(exp.inflation_hurdle, 0)} inflation bar.`
+    : "";
+
+  const strengths = (v.green_flags || []).slice(0, 3);
+  const risks = (v.red_flags || []).slice(0, 3);
+
+  // The crux: the single most decision-relevant takeaway.
+  const pillars = v.pillars || [];
+  const drag = pillars.map(p => ({ p, gap: p.max - p.points }))
+    .reduce((a, b) => (b.gap > a.gap ? b : a), { p: pillars[0] || {}, gap: -1 }).p;
+  let crux;
+  if (val.suspect) {
+    crux = "Verify the underlying data before acting — the model doesn't fit this name cleanly.";
+  } else if (m.cyclical_peak && m.cyclical_peak.peak && v.rating !== "AVOID") {
+    crux = "The upside leans on currently-elevated profitability. Use the margin-normalization slider above to see whether the case survives margins reverting to their long-run average.";
+  } else if (v.rating === "BUY") {
+    crux = "Clears the quality-at-a-fair-price bar for a decade-plus hold — but read the watch-outs and do your own diligence before buying.";
+  } else if (v.rating === "HOLD / WATCH") {
+    crux = "A decent business, but the current price (or one weak pillar) leaves too little margin of safety — one to watch for a better entry, not to buy today.";
+  } else {
+    crux = `Falls short of the bar for a decade-plus hold${drag && drag.name ? `, weakest on <span class="text-slate-200">${drag.name.toLowerCase()}</span>` : ""}. Better opportunities likely exist.`;
+  }
+
+  const bullets = (items, color, icon, empty) => items.length
+    ? `<ul class="space-y-1">${items.map(s => `<li class="text-xs text-muted flex gap-2"><span class="text-${color} shrink-0">${icon}</span><span>${s}</span></li>`).join("")}</ul>`
+    : `<p class="text-xs text-muted">${empty}</p>`;
+
+  return h(`
+  <section class="card rounded-2xl p-6 border-${rc}/40">
+    <h3 class="font-semibold mb-3">Bottom line</h3>
+    <p class="text-sm leading-relaxed mb-4">
+      <span class="font-semibold text-${rc}">${name}: ${v.rating} · ${v.score}/100.</span>
+      ${valSentence}${retSentence}
+    </p>
+    <div class="grid sm:grid-cols-2 gap-4 mb-4">
+      <div><div class="text-xs text-good font-medium mb-1.5">What's working</div>${bullets(strengths, "good", "✓", "—")}</div>
+      <div><div class="text-xs text-bad font-medium mb-1.5">What to watch</div>${bullets(risks, "bad", "!", "Nothing major flagged.")}</div>
+    </div>
+    <p class="text-sm text-slate-200 bg-ink/40 rounded-lg p-3 border border-${rc}/30"><span class="text-${rc} font-medium">The crux:</span> ${crux}</p>
+    <p class="text-[10px] text-muted mt-3">Auto-generated synthesis of the analysis above — not new information, and not investment advice.</p>
+  </section>`);
 }
 
 function chartsSection(d) {
