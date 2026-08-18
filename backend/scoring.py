@@ -1,0 +1,252 @@
+"""Composite scoring -> Buy / Hold / Avoid verdict.
+
+Philosophy baked in: we want a quality business we can hold 10-15 years, bought
+with a margin of safety, whose expected return beats inflation. This is NOT a
+momentum or index-tracking score. Each pillar contributes points and, crucially,
+a plain-English reason so the user can see *why*.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+
+def _pct(x):
+    return None if x is None else round(x * 100, 1)
+
+
+def score(metrics: dict[str, Any]) -> dict[str, Any]:
+    """Return {score 0-100, rating, pillars:[{name, points, max, note}], flags}."""
+    pillars: list[dict[str, Any]] = []
+    green: list[str] = []
+    red: list[str] = []
+
+    growth = metrics["growth"]
+    returns = metrics["returns"]
+    balance = metrics["balance"]
+    margins = metrics["margins"]
+    dcf = metrics["dcf"]
+    val = metrics.get("valuation", {})
+    eq = metrics.get("earnings_quality", {})
+    exp = metrics["expected_return"]
+
+    # ---- Pillar 1: Valuation / margin of safety (30 pts) ----
+    # Score off the range MIDPOINT (blend of FCF and owner-earnings DCFs) so a
+    # heavy-capex name is neither unfairly punished (depressed FCF) nor flattered
+    # (lagging depreciation).
+    p, note = 0, "Insufficient data for DCF."
+    upside = val.get("upside_mid") if val.get("ok") else dcf.get("upside")
+
+    if val.get("suspect"):
+        # Guardrail: a suspect valuation (implausible upside, unresolved currency)
+        # must NOT top the ranking. Cap the pillar and flag it, don't reward it.
+        p = 8
+        note = ("⚠ Valuation flagged unreliable — "
+                + (val.get("suspect_reason") or "data/model doesn't fit this company.")
+                + " Not treated as a bargain.")
+        red.append("Valuation unreliable (" + (val.get("suspect_reason") or "data issue") + ").")
+    elif upside is not None and (val.get("ok") or dcf.get("ok")):
+        if upside >= 0.35:
+            p, note = 30, f"Trades ~{_pct(upside)}% below fair value — strong margin of safety."
+            green.append("Large discount to intrinsic value.")
+        elif upside >= 0.15:
+            p, note = 23, f"~{_pct(upside)}% upside to fair value — reasonable margin of safety."
+            green.append("Trades below estimated intrinsic value.")
+        elif upside >= 0.0:
+            p, note = 15, f"Roughly fairly valued (~{_pct(upside)}% to fair value)."
+        elif upside >= -0.15:
+            p, note = 8, f"Slightly above fair value (~{_pct(upside)}%). Limited safety."
+        else:
+            p, note = 2, f"~{_pct(-upside)}% above fair value — priced for perfection."
+            red.append("Trades meaningfully above intrinsic value estimate.")
+        if val.get("method") == "earnings":
+            note += " (Valued on earnings power — an FCF-DCF doesn't fit financials/REITs.)"
+        elif val.get("spread", 0) >= 0.4:
+            note += (f" Wide value range (${val['low']:.0f}–${val['high']:.0f}) "
+                     "reflects heavy capex — treat with caution.")
+    pillars.append({"name": "Valuation & margin of safety", "points": p, "max": 30, "note": note})
+
+    # ---- Pillar 2: Business quality / returns on capital (20 pts) ----
+    p, notes = 0, []
+    roic = returns.get("roic_avg") or returns.get("roic_latest")
+    roe = returns.get("roe_avg") or returns.get("roe_latest")
+    if roic is not None:
+        if roic >= 0.15:
+            p += 12; notes.append(f"High ROIC (~{_pct(roic)}%) — capital-efficient.")
+            green.append("High return on invested capital (quality compounder trait).")
+        elif roic >= 0.08:
+            p += 7; notes.append(f"Decent ROIC (~{_pct(roic)}%).")
+        else:
+            p += 2; notes.append(f"Low ROIC (~{_pct(roic)}%).")
+            red.append("Weak returns on capital.")
+    if roe is not None:
+        if roe >= 0.15:
+            p += 8; notes.append(f"Strong ROE (~{_pct(roe)}%).")
+        elif roe >= 0.08:
+            p += 4; notes.append(f"Moderate ROE (~{_pct(roe)}%).")
+        else:
+            notes.append(f"Low ROE (~{_pct(roe)}%).")
+    pillars.append({"name": "Business quality (returns on capital)", "points": p, "max": 20,
+                    "note": " ".join(notes) or "Returns on capital unavailable."})
+
+    # ---- Pillar 3: Growth durability (15 pts) ----
+    p, notes = 0, []
+    rev_g = growth.get("revenue_cagr")
+    eps_g = growth.get("eps_cagr")
+    fcf_g = growth.get("fcf_cagr")
+    for label, g, w in (("Revenue", rev_g, 5), ("EPS", eps_g, 5), ("FCF", fcf_g, 5)):
+        if g is None:
+            continue
+        if g >= 0.10:
+            p += w; notes.append(f"{label} CAGR ~{_pct(g)}% (strong).")
+        elif g >= 0.04:
+            p += w * 0.6; notes.append(f"{label} CAGR ~{_pct(g)}% (steady).")
+        elif g >= 0:
+            p += w * 0.3; notes.append(f"{label} CAGR ~{_pct(g)}% (slow).")
+        else:
+            notes.append(f"{label} shrinking (~{_pct(g)}%).")
+            red.append(f"{label} declined over the period.")
+    p = round(p)
+    if (rev_g or 0) >= 0.08 and (eps_g or 0) >= 0.08:
+        green.append("Durable multi-year revenue and earnings growth.")
+    pillars.append({"name": "Growth durability", "points": p, "max": 15,
+                    "note": " ".join(notes) or "Growth history unavailable."})
+
+    # ---- Pillar 4: Financial strength / survivability (15 pts) ----
+    p, notes = 0, []
+    de = balance.get("debt_to_equity")
+    cov = balance.get("interest_coverage")
+    cr = balance.get("current_ratio")
+    net_cash = balance.get("net_cash")
+    if de is not None:
+        if de <= 0.5:
+            p += 6; notes.append(f"Low leverage (D/E ~{round(de,2)}).")
+        elif de <= 1.5:
+            p += 3; notes.append(f"Moderate leverage (D/E ~{round(de,2)}).")
+        else:
+            notes.append(f"High leverage (D/E ~{round(de,2)}).")
+            red.append("Elevated debt load.")
+    if net_cash is not None and net_cash > 0:
+        p += 3; notes.append("Net cash on balance sheet.")
+        green.append("Net cash position — balance-sheet resilience.")
+    if cov is not None:
+        if cov >= 8:
+            p += 4; notes.append(f"Interest well covered (~{round(cov,1)}x).")
+        elif cov >= 3:
+            p += 2; notes.append(f"Interest coverage ~{round(cov,1)}x.")
+        else:
+            notes.append(f"Thin interest coverage (~{round(cov,1)}x).")
+            red.append("Weak interest coverage.")
+    if cr is not None and cr >= 1.5:
+        p += 2; notes.append(f"Healthy current ratio (~{round(cr,1)}).")
+    p = min(p, 15)
+    pillars.append({"name": "Financial strength", "points": p, "max": 15,
+                    "note": " ".join(notes) or "Balance-sheet data unavailable."})
+
+    # ---- Pillar 5: Beats inflation over the hold (10 pts) ----
+    p, note = 0, "Expected return unavailable."
+    er = exp.get("expected_annual_return")
+    if er is not None:
+        real = exp.get("real_return_vs_inflation")
+        if er >= 0.12:
+            p, note = 10, f"~{_pct(er)}%/yr expected — comfortably beats the {_pct(exp['inflation_hurdle'])}% inflation bar."
+            green.append("Expected return clears the inflation hurdle with room to spare.")
+        elif er >= 0.08:
+            p, note = 7, f"~{_pct(er)}%/yr expected — beats inflation (+{_pct(real)}% real)."
+            green.append("Expected return beats inflation.")
+        elif er > exp["inflation_hurdle"]:
+            p, note = 4, f"~{_pct(er)}%/yr expected — narrowly beats inflation."
+        else:
+            p, note = 0, f"~{_pct(er)}%/yr expected — does NOT clear the inflation bar."
+            red.append("Expected long-term return may not beat inflation.")
+    pillars.append({"name": "Beats inflation (10-15yr)", "points": p, "max": 10, "note": note})
+
+    # ---- Margins bonus/penalty (10 pts) ----
+    p, notes = 0, []
+    nm = margins["net"].get("latest")
+    nm_trend = margins["net"].get("trend")
+    gm = margins["gross"].get("latest")
+    if nm is not None:
+        if nm >= 0.15:
+            p += 5; notes.append(f"High net margin (~{_pct(nm)}%).")
+        elif nm >= 0.05:
+            p += 3; notes.append(f"Moderate net margin (~{_pct(nm)}%).")
+        elif nm > 0:
+            p += 1; notes.append(f"Thin net margin (~{_pct(nm)}%).")
+        else:
+            notes.append("Unprofitable on a net basis.")
+            red.append("Currently unprofitable.")
+    if nm_trend is not None:
+        if nm_trend > 0.01:
+            p += 3; notes.append("Margins expanding over time.")
+            green.append("Expanding profit margins.")
+        elif nm_trend < -0.02:
+            notes.append("Margins compressing over time.")
+            red.append("Margins have been compressing.")
+    if gm is not None and gm >= 0.4:
+        p += 2; notes.append(f"High gross margin (~{_pct(gm)}%) — pricing power signal.")
+    p = min(p, 10)
+    pillars.append({"name": "Profitability & margins", "points": p, "max": 10,
+                    "note": " ".join(notes) or "Margin data unavailable."})
+
+    # ---- Earnings-quality flags (capex cycle / cash conversion) ----
+    if eq.get("heavy_capex"):
+        ratio = eq.get("capex_to_dep") or eq.get("capex_to_dep_avg")
+        red.append(f"Heavy capex cycle (~{ratio:.1f}× depreciation): reported earnings "
+                   "are flattered and P/E looks cheaper than reality; FCF is depressed.")
+    cc = eq.get("cash_conversion_avg")
+    if cc is not None:
+        if cc < 0.7:
+            red.append(f"Weak cash conversion (~{_pct(cc)}% of earnings become cash).")
+        elif cc >= 1.0 and not eq.get("heavy_capex"):
+            green.append("Strong cash conversion (earnings turn fully into cash).")
+
+    # Value creation: ROIC vs WACC.
+    dd = metrics.get("due_diligence", {})
+    spread = dd.get("roic_vs_wacc_spread")
+    if spread is not None:
+        if spread >= 0.05:
+            green.append(f"Creates economic value — ROIC exceeds WACC by ~{_pct(spread)}%.")
+        elif spread < 0:
+            red.append(f"ROIC is below WACC (~{_pct(spread)}%) — the company may be destroying value.")
+
+    # Cyclical-peak warning (earnings may not be durable).
+    cyc = metrics.get("cyclical_peak", {})
+    if cyc.get("peak"):
+        red.append("Profitability may be at a cyclical peak (" + "; ".join(cyc["reasons"]) +
+                   ") — today's earnings may not be durable.")
+
+    total = sum(pl["points"] for pl in pillars)
+    max_total = sum(pl["max"] for pl in pillars)
+    normalized = round(total / max_total * 100) if max_total else 0
+
+    # ---- Verdict thresholds ----
+    if normalized >= 70:
+        rating, stance = "BUY", (
+            "Meets the quality-at-a-fair-price bar for a 10-15yr hold. Strong "
+            "fundamentals with a margin of safety and an inflation-beating expected return.")
+    elif normalized >= 50:
+        rating, stance = "HOLD / WATCH", (
+            "A solid business but either the price offers limited margin of safety or "
+            "one pillar is weak. Worth watching for a better entry or confirmation.")
+    else:
+        rating, stance = "AVOID", (
+            "Falls short on quality, valuation, or durability for a decade-plus hold. "
+            "Doesn't clear the bar of beating inflation with a margin of safety.")
+
+    # Hard overrides that a value investor treats as near-disqualifying.
+    override_upside = val.get("upside_mid") if val.get("ok") else dcf.get("upside")
+    if val.get("suspect") and rating == "BUY":
+        rating = "HOLD / WATCH"
+        stance += " (Downgraded: the valuation is flagged unreliable — verify the data before trusting it.)"
+    elif override_upside is not None and override_upside < -0.30 and rating == "BUY":
+        rating = "HOLD / WATCH"
+        stance += " (Downgraded: trades well above intrinsic value — wait for a pullback.)"
+
+    return {
+        "score": normalized,
+        "rating": rating,
+        "stance": stance,
+        "pillars": pillars,
+        "green_flags": green,
+        "red_flags": red,
+    }

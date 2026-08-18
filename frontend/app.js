@@ -1,0 +1,944 @@
+/* Long-Term Value Screener — frontend logic. Vanilla JS, no build step. */
+
+const $ = (id) => document.getElementById(id);
+const charts = {}; // Chart.js instances (destroyed on re-render)
+
+// ---------- formatting ----------
+const fmtPct = (x, dp = 1) => (x == null ? "—" : (x * 100).toFixed(dp) + "%");
+const fmtNum = (x, dp = 2) => (x == null ? "—" : Number(x).toFixed(dp));
+function fmtMoney(x) {
+  if (x == null) return "—";
+  const a = Math.abs(x);
+  if (a >= 1e12) return (x / 1e12).toFixed(2) + "T";
+  if (a >= 1e9) return (x / 1e9).toFixed(2) + "B";
+  if (a >= 1e6) return (x / 1e6).toFixed(2) + "M";
+  if (a >= 1e3) return (x / 1e3).toFixed(2) + "K";
+  return x.toFixed(2);
+}
+const price = (x, cur = "$") => (x == null ? "—" : cur + Number(x).toFixed(2));
+const signPct = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(0) + "%");
+
+const RATING_STYLE = {
+  "BUY": { c: "good", bg: "bg-good/15", br: "border-good/50", ring: "#22c55e" },
+  "HOLD / WATCH": { c: "warn", bg: "bg-warn/15", br: "border-warn/50", ring: "#f59e0b" },
+  "AVOID": { c: "bad", bg: "bg-bad/15", br: "border-bad/50", ring: "#ef4444" },
+};
+const scoreColor = (s) => (s >= 70 ? "good" : s >= 50 ? "warn" : "bad");
+
+// ---------- assumptions ----------
+// slider id -> {default (in slider units), toFraction}. projection_years stays integer.
+const ASSUME = {
+  discount_rate:   { def: 10,  unit: "%", frac: (v) => v / 100 },
+  terminal_growth: { def: 2.5, unit: "%", frac: (v) => v / 100 },
+  projection_years:{ def: 10,  unit: "yr", frac: (v) => v },
+  inflation_hurdle:{ def: 3,   unit: "%", frac: (v) => v / 100 },
+  margin_of_safety:{ def: 25,  unit: "%", frac: (v) => v / 100 },
+};
+
+function initAssumptions() {
+  for (const [id, cfg] of Object.entries(ASSUME)) {
+    const el = $(id);
+    el.value = cfg.def;
+    el.addEventListener("input", () => { updateAssumeLabels(); });
+    el.addEventListener("change", () => { onAssumptionsChanged(); });
+  }
+  updateAssumeLabels();
+}
+function updateAssumeLabels() {
+  const parts = [];
+  for (const [id, cfg] of Object.entries(ASSUME)) {
+    const v = $(id).value;
+    $("v_" + id).textContent = v + cfg.unit;
+    const short = { discount_rate: "DR", terminal_growth: "TG", projection_years: "", inflation_hurdle: "infl", margin_of_safety: "MoS" }[id];
+    parts.push(id === "projection_years" ? `${v}yr` : `${short} ${v}${cfg.unit}`);
+  }
+  $("assumeSummary").textContent = parts.join(" · ");
+}
+function readAssumptions() {
+  const out = {};
+  for (const [id, cfg] of Object.entries(ASSUME)) out[id] = cfg.frac(parseFloat($(id).value));
+  return out;
+}
+function assumptionsQS() {
+  const a = readAssumptions();
+  return Object.entries(a).map(([k, v]) => `&${k}=${v}`).join("");
+}
+function resetAssumptions() {
+  for (const [id, cfg] of Object.entries(ASSUME)) $(id).value = cfg.def;
+  updateAssumeLabels();
+  onAssumptionsChanged();
+}
+// Re-run only the single-analysis view live (cheap: backend caches data + AI).
+let lastTicker = null, currentMode = "analyze";
+function onAssumptionsChanged() {
+  if (currentMode === "analyze" && lastTicker && !$("results").classList.contains("hidden")) {
+    analyze(lastTicker);
+  }
+}
+
+// ---------- mode / tabs ----------
+function switchMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
+  ["analyze", "compare", "screen", "watchlist"].forEach(m => $("mode-" + m).classList.toggle("hidden", m !== mode));
+  $("results").classList.add("hidden");
+  $("error").classList.add("hidden");
+  $("loading").classList.add("hidden");
+  if (mode === "watchlist") loadWatchlist();
+}
+
+// ---------- shared fetch helpers ----------
+function showLoading(msg) {
+  $("results").classList.add("hidden");
+  $("error").classList.add("hidden");
+  $("hint")?.classList.add("hidden");
+  $("loadingMsg").innerHTML = msg;
+  $("loading").classList.remove("hidden");
+}
+function showError(msg) {
+  $("loading").classList.add("hidden");
+  $("errorMsg").textContent = msg;
+  $("error").classList.remove("hidden");
+}
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({ detail: "Request failed." }));
+    throw new Error(e.detail || "Something went wrong.");
+  }
+  return res.json();
+}
+
+// ================= ANALYZE (single) =================
+async function analyze(ticker) {
+  ticker = (ticker || $("ticker").value).trim().toUpperCase();
+  if (!ticker) return;
+  $("ticker").value = ticker;
+  lastTicker = ticker;
+  const msgs = ["Pulling financials…", "Running the DCF model…",
+    "Scoring quality &amp; balance sheet…", "Asking Claude for the qualitative read…"];
+  let mi = 0; showLoading(msgs[0]);
+  const timer = setInterval(() => { mi = (mi + 1) % msgs.length; $("loadingMsg").innerHTML = msgs[mi]; }, 1400);
+  try {
+    const useAi = $("useAi").checked;
+    const d = await getJSON(`/api/analyze?ticker=${encodeURIComponent(ticker)}&use_ai=${useAi}${assumptionsQS()}`);
+    clearInterval(timer); $("loading").classList.add("hidden");
+    renderAnalysis(d);
+  } catch (e) {
+    clearInterval(timer); showError(e.message);
+  }
+}
+
+function renderAnalysis(d) {
+  const cur = d.info.currency === "USD" ? "$" : (d.info.currency || "") + " ";
+  const rs = RATING_STYLE[d.verdict.rating] || RATING_STYLE["HOLD / WATCH"];
+  const el = $("results"); el.innerHTML = "";
+  el.append(
+    verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
+    scenariosSection(d, cur), ddSection(d, cur), divSafetySection(d, cur),
+    analystSection(d, cur), earningsQualitySection(d, cur),
+    returnSection(d), pillarsSection(d), flagsSection(d),
+    chartsSection(d), qualitativeSection(d), peersSection(d), linksSection(d),
+  );
+  el.classList.remove("hidden"); el.classList.add("fade-in");
+  drawCharts(d, cur);
+  wireWatchlistControl(d);
+  wirePeers();
+}
+
+function h(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+
+function verdictCard(d, rs, cur) {
+  const v = d.verdict, info = d.info;
+  const dash = 264, off = dash - (dash * v.score) / 100;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex flex-col md:flex-row md:items-center gap-6">
+      <div class="flex-1">
+        <div class="flex items-center gap-3 flex-wrap">
+          <h2 class="text-2xl font-semibold">${info.name}</h2>
+          <span class="text-muted text-sm font-mono px-2 py-0.5 rounded bg-ink/60 border border-line">${d.ticker}</span>
+          ${d.data_source ? `<span class="text-[10px] px-2 py-0.5 rounded ${d.data_source === "SimFin" ? "bg-good/15 text-good border border-good/40" : "bg-ink/60 text-muted border border-line"}">${d.data_source}</span>` : ""}
+        </div>
+        <p class="text-muted text-sm mt-1">${[info.sector, info.industry].filter(Boolean).join(" · ") || ""}</p>
+        <div class="flex items-end gap-4 mt-4 flex-wrap">
+          <div><div class="text-xs text-muted">Price</div><div class="text-2xl font-semibold">${price(info.current_price, cur)}</div></div>
+          <div><div class="text-xs text-muted">Market cap</div><div class="text-lg">${cur}${fmtMoney(info.market_cap)}</div></div>
+          ${info.analyst_target != null ? `<div><div class="text-xs text-muted">Analyst target</div><div class="text-lg">${price(info.analyst_target, cur)}</div></div>` : ""}
+        </div>
+      </div>
+      <div class="flex items-center gap-5">
+        <div class="relative w-28 h-28 grid place-items-center">
+          <svg class="w-28 h-28 -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#26334a" stroke-width="9"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="${rs.ring}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${dash}" stroke-dashoffset="${off}"/>
+          </svg>
+          <div class="absolute text-center"><div class="text-3xl font-bold">${v.score}</div><div class="text-[10px] text-muted -mt-1">/ 100</div></div>
+        </div>
+        <div class="text-center md:text-left max-w-[220px]">
+          <div class="inline-block px-3 py-1 rounded-lg ${rs.bg} border ${rs.br} text-${rs.c} font-bold text-lg">${v.rating}</div>
+          <p class="text-sm text-muted mt-2 leading-snug">${v.stance}</p>
+        </div>
+      </div>
+    </div>
+  </section>`);
+}
+
+function metricsGrid(d, cur) {
+  const m = d.metrics, mm = m.multiples, g = m.growth, r = m.returns, b = m.balance;
+  const eq = m.earnings_quality || {};
+  const cell = (label, val, sub = "", subColor = "") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+      <div class="text-xs text-muted">${label}</div><div class="text-lg font-semibold mt-0.5">${val}</div>
+      ${sub ? `<div class="text-[11px] ${subColor || "text-muted"} mt-0.5">${sub}</div>` : ""}
+    </div>`;
+  const peCaveat = eq.heavy_capex ? "⚠ flattered by capex cycle" : "";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4 flex items-center gap-2">📊 Key metrics <span class="text-xs text-muted font-normal">(${g.years_of_data || "?"}yr of statements · free data tier)</span></h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      ${cell("Trailing P/E", fmtNum(mm.trailing_pe, 1), peCaveat, "text-warn")}
+      ${cell("Forward P/E", fmtNum(mm.forward_pe, 1))}
+      ${mm.peg_ratio != null
+        ? cell("PEG", fmtNum(mm.peg_ratio, 2))
+        : cell("PEG", fmtNum(mm.peg_trailing, 2), mm.peg_trailing != null ? "trailing · vs past growth" : "")}
+      ${cell("Price / Book", fmtNum(mm.price_to_book, 2))}
+      ${cell("Price / FCF", fmtNum(mm.price_to_fcf, 1))}
+      ${cell("Dividend yield", fmtPct(mm.dividend_yield))}
+      ${cell("Revenue CAGR", fmtPct(g.revenue_cagr), `${g.years_of_data || "?"}yr`)}
+      ${cell("EPS CAGR", fmtPct(g.eps_cagr), `${g.years_of_data || "?"}yr`)}
+      ${cell("FCF CAGR", fmtPct(g.fcf_cagr), `${g.years_of_data || "?"}yr`)}
+      ${cell("ROE (avg)", fmtPct(r.roe_avg))}
+      ${cell("ROIC (avg)", fmtPct(r.roic_avg))}
+      ${cell("Net margin", fmtPct(m.margins.net.latest))}
+      ${cell("Debt / Equity", fmtNum(b.debt_to_equity, 2))}
+      ${cell("Interest cov.", b.interest_coverage != null ? fmtNum(b.interest_coverage, 1) + "×" : "—")}
+      ${cell("Current ratio", fmtNum(b.current_ratio, 2))}
+      ${cell("Net cash", b.net_cash != null ? cur + fmtMoney(b.net_cash) : "—")}
+    </div>
+  </section>`);
+}
+
+function dcfSection(d, cur) {
+  const dcf = d.metrics.dcf, val = d.metrics.valuation;
+  if (!val || !val.ok) {
+    return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-2">💰 Discounted cash flow</h3>
+      <p class="text-muted text-sm">${(dcf && dcf.reason) || "DCF unavailable — no positive cash flow to project."}</p></section>`);
+  }
+  const a = dcf.assumptions || {};
+  const px = val.current_price, up = val.upside_mid;
+  const upColor = up == null ? "muted" : up >= 0.15 ? "good" : up >= 0 ? "warn" : "bad";
+  const lo = val.low, hi = val.high, mid = val.mid;
+  const wide = (val.spread || 0) >= 0.4;
+  // bar scaled to max of (high value, price)
+  const barMax = Math.max(hi || 0, px || 0) * 1.1 || 1;
+  const pos = (x) => Math.min(100, Math.max(0, ((x || 0) / barMax) * 100));
+  const methodNote = val.method === "earnings"
+    ? "Valued on <span class='text-slate-300'>earnings power</span> — a free-cash-flow DCF doesn't fit banks / insurers / REITs."
+    : "Two DCFs: <span class='text-slate-300'>conservative</span> discounts free cash flow (penalizes all capex); <span class='text-slate-300'>adjusted</span> discounts owner earnings (credits growth capex). The truth sits between.";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">💰 Intrinsic value ${val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
+    ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed">🚩 <strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
+    <p class="text-xs text-muted mb-4">${methodNote}</p>
+    ${val.method === "earnings" ? `
+    <div class="grid md:grid-cols-2 gap-3 mb-5">
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (earnings power)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
+    </div>` : `
+    <div class="grid md:grid-cols-4 gap-3 mb-5">
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Conservative (FCF)</div><div class="text-xl font-bold text-slate-300">${price(val.conservative_iv, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Midpoint (fair value)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Adjusted (owner earnings)</div><div class="text-xl font-bold text-slate-300">${price(val.adjusted_iv, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside to midpoint</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
+    </div>`}
+    <div class="relative h-10 bg-ink/50 rounded-lg overflow-hidden border border-line/60 mb-2">
+      <div class="absolute top-0 bottom-0 bg-brand/20" style="left:${pos(lo)}%;width:${Math.max(0, pos(hi) - pos(lo))}%"></div>
+      <div class="absolute top-0 bottom-0 w-1 bg-brand" style="left:calc(${pos(mid)}% - 2px)"></div>
+      <div class="absolute -top-0.5 bottom-0 w-0.5 bg-white" style="left:${pos(px)}%"></div>
+      <div class="absolute top-0 bottom-0 border-r-2 border-dashed border-good/70" style="left:${pos(val.buy_below)}%"></div>
+    </div>
+    <div class="flex justify-between text-[11px] text-muted mb-4 flex-wrap gap-1">
+      <span>Value range: ${price(lo, cur)} – ${price(hi, cur)}</span>
+      <span class="text-white">▏ Price ${price(px, cur)}</span>
+      <span class="text-good">▏ Buy-below (${fmtPct(a.margin_of_safety, 0)} MoS): ${price(val.buy_below, cur)}</span>
+    </div>
+    ${wide ? `<div class="text-xs bg-warn/10 border border-warn/30 text-warn rounded-lg p-2 mb-3">⚠ Wide value range — this company's cash flow and earnings diverge (usually heavy capex). Read the Earnings-quality section below before trusting any single number.</div>` : ""}
+    <details class="text-sm">
+      <summary class="cursor-pointer text-muted hover:text-brand">DCF assumptions (tune them in the panel above)</summary>
+      <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-3 text-xs">
+        <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Base FCF</div><div>${cur}${fmtMoney(a.base_fcf)}</div></div>
+        <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Stage-1 growth</div><div>${fmtPct(a.stage1_growth)}</div></div>
+        <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Terminal growth</div><div>${fmtPct(a.terminal_growth)}</div></div>
+        <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Discount rate</div><div>${fmtPct(a.discount_rate)}</div></div>
+        <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Years</div><div>${a.years}</div></div>
+      </div>
+      ${(d.metrics.risk_premium && d.metrics.risk_premium.premium > 0) ? `<p class="text-[11px] text-muted mt-2">Discount rate is risk-adjusted: base ${fmtPct((d.metrics.assumptions_used||{}).discount_rate)} + ${fmtPct(d.metrics.risk_premium.premium)} risk premium (${d.metrics.risk_premium.reasons.join(", ")}).</p>` : ""}
+    </details>
+  </section>`);
+}
+
+function scenariosSection(d, cur) {
+  const s = d.metrics.scenarios, r = d.metrics.reverse_dcf;
+  if (!s) return h(`<div class="hidden"></div>`);
+  const px = s.current_price;
+  const row = (label, sc, color) => {
+    const up = sc.upside;
+    const upc = up == null ? "muted" : up >= 0 ? "good" : "bad";
+    return `<tr class="border-b border-line/40 text-sm">
+      <td class="py-2 font-medium text-${color}">${label}</td>
+      <td class="text-right px-2">${price(sc.fair_value, cur)}</td>
+      <td class="text-right px-2 text-${upc}">${up == null ? "—" : signPct(up)}</td></tr>`;
+  };
+  const impl = r && r.ok ? r.implied_growth : null;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4">🎯 Scenarios &amp; reverse DCF</h3>
+    <div class="grid md:grid-cols-2 gap-6">
+      <div>
+        <div class="text-sm text-muted mb-2">Bear / base / bull fair value</div>
+        <table class="w-full">
+          <tr class="text-xs text-muted border-b border-line"><th class="text-left py-1">Scenario</th><th class="text-right px-2">Fair value</th><th class="text-right px-2">Upside</th></tr>
+          ${row("🐻 Bear", s.bear, "bad")}
+          ${row("Base", s.base, "brand")}
+          ${row("🐂 Bull", s.bull, "good")}
+          <tr class="text-sm"><td class="py-2 text-muted">Current price</td><td class="text-right px-2 font-semibold">${price(px, cur)}</td><td></td></tr>
+        </table>
+        <p class="text-[11px] text-muted mt-2">Bear/bull flex growth, discount rate &amp; terminal growth around the base case.</p>
+      </div>
+      <div>
+        <div class="text-sm text-muted mb-2">Reverse DCF — what the price implies</div>
+        <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
+          <div class="text-xs text-muted">Growth the market is pricing in</div>
+          <div class="text-3xl font-bold text-brand mt-1">${impl == null ? "—" : (impl >= 0.40 ? "≥40%" : fmtPct(impl, 1)) + "/yr"}</div>
+          <p class="text-sm text-muted mt-2 leading-relaxed">Compare with the company's history: revenue ${fmtPct(d.metrics.growth.revenue_cagr, 0)}, FCF ${fmtPct(d.metrics.growth.fcf_cagr, 0)}. ${impl != null && impl >= 0.30 ? "The bar the market sets is demanding — priced for strong growth." : impl != null && impl <= 0.02 ? "The market expects little to no growth — a low bar to beat." : "Ask whether the business can realistically exceed this."}</p>
+        </div>
+      </div>
+    </div>
+    ${sensitivityGrid(d, cur)}
+  </section>`);
+}
+
+function sensitivityGrid(d, cur) {
+  const s = d.metrics.sensitivity;
+  if (!s || !s.ok) return "";
+  const upColor = (u) => u == null ? "bg-ink/40 text-muted"
+    : u >= 0.25 ? "bg-good/30 text-good" : u >= 0 ? "bg-good/10 text-slate-200"
+    : u >= -0.25 ? "bg-bad/10 text-slate-200" : "bg-bad/30 text-bad";
+  const isBase = (dr, g) => Math.abs(dr - s.base_discount) < 1e-6 && Math.abs(g - s.base_growth) < 1e-6;
+  const head = `<tr><th class="text-[10px] text-muted p-1 text-left">disc ↓ / growth →</th>${s.growth_rates.map(g => `<th class="text-[10px] text-muted p-1">${fmtPct(g, 0)}</th>`).join("")}</tr>`;
+  const body = s.cells.map((row, i) => `<tr>
+    <td class="text-[10px] text-muted p-1 font-mono">${fmtPct(s.discount_rates[i], 0)}</td>
+    ${row.map((c, j) => `<td class="p-1 text-center text-[11px] rounded ${upColor(c.upside)} ${isBase(s.discount_rates[i], s.growth_rates[j]) ? "ring-1 ring-brand" : ""}">
+      <div class="font-semibold">${price(c.iv, cur)}</div><div class="text-[9px] opacity-80">${c.upside == null ? "" : signPct(c.upside)}</div></td>`).join("")}
+  </tr>`).join("");
+  return `<div class="mt-6">
+    <div class="text-sm text-muted mb-2">Fair-value sensitivity — discount rate × growth <span class="text-[11px]">(box = base case; green = upside, red = overvalued)</span></div>
+    <div class="overflow-x-auto"><table class="w-full border-separate" style="border-spacing:3px">${head}${body}</table></div>
+  </div>`;
+}
+
+function ddSection(d, cur) {
+  const dd = d.metrics.due_diligence;
+  if (!dd) return h(`<div class="hidden"></div>`);
+  const cell = (label, val, sub = "", color = "") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+      <div class="text-xs text-muted">${label}</div><div class="text-lg font-semibold mt-0.5 ${color}">${val}</div>
+      ${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}</div>`;
+  const dil = dd.dilution_cagr;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4">🔬 Valuation multiples &amp; capital efficiency</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      ${cell("EV / EBITDA", fmtNum(dd.ev_to_ebitda, 1))}
+      ${cell("EV / EBIT", fmtNum(dd.ev_to_ebit, 1))}
+      ${cell("EV / Revenue", fmtNum(dd.ev_to_revenue, 1))}
+      ${cell("FCF yield", fmtPct(dd.fcf_yield), "FCF ÷ market cap")}
+      ${cell("Net debt / EBITDA", dd.net_debt_to_ebitda != null ? fmtNum(dd.net_debt_to_ebitda, 2) + "×" : "—",
+             "", dd.net_debt_to_ebitda != null && dd.net_debt_to_ebitda > 3 ? "text-warn" : "")}
+      ${cell("ROIC (NOPAT)", fmtPct(dd.roic_nopat_avg), "avg, on invested capital")}
+      ${cell("WACC", fmtPct(dd.wacc), "cost of capital")}
+      ${cell("ROIC − WACC", dd.roic_vs_wacc_spread != null ? signPct(dd.roic_vs_wacc_spread) : "—",
+             dd.creates_value ? "creates value ✓" : "destroys value",
+             dd.creates_value ? "text-good" : (dd.roic_vs_wacc_spread != null ? "text-bad" : ""))}
+      ${cell("FCF margin", fmtPct(dd.fcf_margin_avg), "FCF ÷ revenue")}
+      ${cell("FCF / share", dd.fcf_per_share != null ? price(dd.fcf_per_share, cur) : "—")}
+      ${cell("Share count trend", dil != null ? signPct(dil) + "/yr" : "—",
+             dil != null ? (dil > 0.01 ? "dilution" : dil < -0.01 ? "buybacks ✓" : "flat") : "",
+             dil != null && dil > 0.02 ? "text-warn" : dil != null && dil < -0.005 ? "text-good" : "")}
+      ${cell("Insider ownership", fmtPct(dd.held_percent_insiders, 1))}
+      ${cell("Institutional own.", fmtPct(dd.held_percent_institutions, 0))}
+      ${cell("Effective tax rate", fmtPct(dd.effective_tax_rate, 0))}
+      ${cell("Price / Sales", fmtNum(dd.price_to_sales, 1))}
+      ${cell("Return on Assets", fmtPct(dd.return_on_assets))}
+      ${(() => {
+        const p = dd.piotroski;
+        if (!p) return cell("Piotroski F-Score", "—", "financial health");
+        const c = p.score >= 7 ? "text-good" : p.score <= 3 ? "text-bad" : "";
+        return cell("Piotroski F-Score", `${p.score}/9`, p.score >= 7 ? "strong" : p.score <= 3 ? "weak" : "moderate", c);
+      })()}
+      ${(() => {
+        const cr = dd.capital_returns || {};
+        return cell("Shareholder yield", fmtPct(cr.shareholder_yield, 1),
+          cr.buyback_yield != null || cr.dividends_paid != null ? `${fmtPct(cr.buyback_yield, 1)} buyback + div` : "dividends + buybacks");
+      })()}
+      ${cell("Payout ratio", fmtPct((dd.capital_returns || {}).payout_ratio, 0), "dividends ÷ earnings")}
+    </div>
+    ${(() => {
+      const vh = dd.valuation_vs_history || {};
+      const row = (label, m) => {
+        if (!m) return "";
+        const p = m.premium_to_avg;
+        const c = p == null ? "muted" : p <= -0.1 ? "good" : p >= 0.1 ? "bad" : "muted";
+        const tag = p == null ? "" : p <= -0.1 ? "cheap vs its history" : p >= 0.1 ? "rich vs its history" : "in line";
+        return `<div class="flex items-center justify-between text-sm py-1.5 border-b border-line/40">
+          <span class="text-muted">${label}</span>
+          <span>now <span class="font-semibold">${fmtNum(m.current, 1)}</span> · ${m.years}yr avg ${fmtNum(m.avg, 1)} (range ${fmtNum(m.min, 1)}–${fmtNum(m.max, 1)})
+          <span class="text-${c} ml-2">${p == null ? "" : signPct(p) + " · " + tag}</span></span></div>`;
+      };
+      const rows = row("P/E", vh.pe) + row("P/FCF", vh.pfcf);
+      return rows ? `<div class="mt-5"><div class="text-sm font-medium mb-1">Valuation vs its own history</div>${rows}
+        <p class="text-[11px] text-muted mt-1.5">Trading below its own multi-year average can signal a better-than-usual entry (or a broken thesis — check why).</p></div>` : "";
+    })()}
+  </section>`);
+}
+
+function analystSection(d, cur) {
+  const i = d.info;
+  const hasAny = i.analyst_target != null || i.num_analysts != null ||
+    i.short_pct_float != null || i.insider_net_shares != null;
+  if (!hasAny) return h(`<div class="hidden"></div>`);
+  const px = i.current_price;
+  const tgtUp = (i.analyst_target && px) ? (i.analyst_target - px) / px : null;
+  const upc = tgtUp == null ? "muted" : tgtUp >= 0 ? "good" : "bad";
+  const net = i.insider_net_shares;
+  const insiderColor = net == null ? "muted" : net > 0 ? "good" : net < 0 ? "bad" : "muted";
+  const insiderLabel = net == null ? "—" : net > 0 ? "net buying" : net < 0 ? "net selling" : "neutral";
+  const cell = (label, val, sub = "", color = "") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+      <div class="text-xs text-muted">${label}</div><div class="text-lg font-semibold mt-0.5 ${color}">${val}</div>
+      ${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}</div>`;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">🏦 Analyst view &amp; sentiment <span class="text-xs text-muted font-normal">· free Yahoo data</span></h3>
+    <p class="text-xs text-muted mb-4">Wall Street's estimates and market positioning — useful as a *contrarian* cross-check, not a mandate (the crowd is often wrong on 10-15yr value).</p>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      ${cell("Analyst target (mean)", price(i.analyst_target, cur), tgtUp != null ? signPct(tgtUp) + " to target" : "", tgtUp != null ? "text-" + upc : "")}
+      ${cell("Target range", (i.target_low != null && i.target_high != null) ? `${price(i.target_low, cur)}–${price(i.target_high, cur)}` : "—", i.num_analysts != null ? `${Math.round(i.num_analysts)} analysts` : "")}
+      ${cell("Recommendation", i.recommendation ? i.recommendation.replace("_", " ") : "—", i.recommendation_mean != null ? `${fmtNum(i.recommendation_mean, 1)}/5 (1=buy)` : "")}
+      ${cell("Forward P/E", fmtNum(i.forward_pe, 1), "on est. next-yr EPS")}
+      ${cell("Short interest", fmtPct(i.short_pct_float, 1), i.short_ratio != null ? `${fmtNum(i.short_ratio, 1)} days to cover` : "of float")}
+      ${cell("Insider activity (6mo)", insiderLabel, net != null ? `net ${Math.abs(Math.round(net)).toLocaleString()} sh` : "", "text-" + insiderColor)}
+    </div>
+  </section>`);
+}
+
+function divSafetySection(d, cur) {
+  const ds = (d.metrics.due_diligence || {}).dividend_safety;
+  if (!ds || !ds.pays_dividend) return h(`<div class="hidden"></div>`);
+  const cov = ds.fcf_coverage, pay = ds.payout_ratio;
+  const safe = cov == null ? null : (cov >= 2 && (pay == null || pay < 0.6));
+  const badge = safe == null ? { t: "—", c: "muted" } : safe ? { t: "Well covered", c: "good" } : { t: "Watch coverage", c: "warn" };
+  const cell = (label, val, sub = "", color = "") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60"><div class="text-xs text-muted">${label}</div>
+      <div class="text-lg font-semibold mt-0.5 ${color}">${val}</div>${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}</div>`;
+  return h(`<section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">💵 Dividend safety</h3>
+      <span class="text-xs px-2 py-0.5 rounded bg-${badge.c}/15 text-${badge.c} border border-${badge.c}/40">${badge.t}</span></div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      ${cell("Dividend / share", price(ds.dps_latest, cur))}
+      ${cell("Dividend growth", fmtPct(ds.dividend_growth_cagr), `${ds.years}yr CAGR`)}
+      ${cell("FCF coverage", cov != null ? fmtNum(cov, 1) + "×" : "—", "FCF ÷ dividends", cov != null && cov < 1.2 ? "text-warn" : "")}
+      ${cell("Payout ratio", fmtPct(pay, 0), "dividends ÷ earnings", pay != null && pay > 0.8 ? "text-warn" : "")}
+    </div></section>`);
+}
+
+function peersSection(d) {
+  return h(`<section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between"><h3 class="font-semibold">👥 Same-sector peers</h3>
+      <button id="loadPeers" data-ticker="${d.ticker}" class="text-sm bg-brand/20 text-brand border border-brand/40 px-3 py-1.5 rounded-lg hover:bg-brand/30 transition">Load peers</button></div>
+    <div id="peersBody" class="mt-3 text-sm text-muted">Compare ${d.ticker} against curated same-sector names on score, valuation, ROIC and growth.</div>
+  </section>`);
+}
+
+function wirePeers() {
+  const btn = $("loadPeers");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const body = $("peersBody");
+    body.innerHTML = `<span class="text-muted">Loading peers…</span>`;
+    btn.disabled = true;
+    try {
+      const r = await getJSON(`/api/peers?ticker=${encodeURIComponent(btn.dataset.ticker)}`);
+      if (!r.rows.length) { body.innerHTML = `<span class="text-muted">${r.note || "No curated peers found."}</span>`; return; }
+      body.innerHTML = "";
+      body.appendChild(bareTable(r.rows, true));
+      body.querySelectorAll("tr[data-ticker]").forEach(tr => tr.addEventListener("click", () => {
+        const t = tr.dataset.ticker; switchMode("analyze"); $("ticker").value = t; analyze(t); window.scrollTo({ top: 0, behavior: "smooth" });
+      }));
+    } catch (e) { body.innerHTML = `<span class="text-bad">${e.message}</span>`; }
+    finally { btn.disabled = false; }
+  });
+}
+
+function linksSection(d) {
+  const t = d.ticker;
+  const edgar = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&ticker=${t}&type=10-K&dateb=&owner=include&count=40`;
+  const q = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&ticker=${t}&type=10-Q&dateb=&owner=include&count=40`;
+  const proxy = `https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&ticker=${t}&type=DEF+14A&dateb=&owner=include&count=40`;
+  const link = (href, label) => `<a href="${href}" target="_blank" rel="noopener" class="text-brand hover:underline">${label}</a>`;
+  const gaps = [
+    ["Debt maturity schedule", "10-K → notes on long-term debt"],
+    ["Insider transaction detail (who / when / price)", "SEC Form 4 (EDGAR) — the 6-month net is shown above"],
+    ["Segment revenue, customer / supplier concentration", "10-K → business & MD&A"],
+    ["Management guidance & tone, analyst Q&A", "earnings-call transcripts"],
+    ["Deeper automated history (10-20yr)", "free to view on macrotrends.net; $15/mo SimFin to automate here"],
+  ];
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-2">📄 Primary sources (do the reading)</h3>
+    <p class="text-xs text-muted mb-3">The model can't read filings or earnings calls for you — these are the documents to go through before buying.</p>
+    <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-sm mb-5">
+      ${link(edgar, "10-K (annual) ↗")} ${link(q, "10-Q (quarterly) ↗")} ${link(proxy, "DEF 14A (proxy) ↗")}
+      ${d.info.website ? link(d.info.website, "Company site ↗") : ""}
+      ${link(`https://www.google.com/search?q=${t}+earnings+call+transcript`, "Earnings call transcripts ↗")}
+    </div>
+    <div class="text-sm font-medium mb-2 text-muted">Not in free data — check these yourself:</div>
+    <ul class="space-y-1">
+      ${gaps.map(([what, where]) => `<li class="text-xs flex gap-2"><span class="text-warn">•</span><span><span class="text-slate-300">${what}</span> — ${where}</span></li>`).join("")}
+    </ul>
+  </section>`);
+}
+
+function earningsQualitySection(d, cur) {
+  const e = d.metrics.earnings_quality;
+  if (!e) return h(`<div class="hidden"></div>`);
+  const phaseLabel = {
+    intense_buildout: { t: "Intense build-out", c: "bad" },
+    investing: { t: "Investing / building", c: "warn" },
+    steady_state: { t: "Steady state", c: "good" },
+    harvesting: { t: "Harvesting (under-investing)", c: "warn" },
+    unknown: { t: "Unknown", c: "muted" },
+  }[e.phase] || { t: e.phase, c: "muted" };
+  const ratio = e.capex_to_dep || e.capex_to_dep_avg;
+  const cell = (label, val, sub = "", color = "") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+      <div class="text-xs text-muted">${label}</div>
+      <div class="text-lg font-semibold mt-0.5 ${color}">${val}</div>
+      ${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}
+    </div>`;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h3 class="font-semibold">🏗️ Earnings quality &amp; capex cycle</h3>
+      <span class="text-xs px-2 py-0.5 rounded bg-${phaseLabel.c}/15 text-${phaseLabel.c} border border-${phaseLabel.c}/40">${phaseLabel.t}</span>
+    </div>
+    <p class="text-xs text-muted mb-4">Capex hits earnings slowly (as depreciation) but cash immediately. When a company builds hard, earnings look flattered (P/E cheap) and FCF looks depressed — this is where you check for that.</p>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+      ${cell("Capex ÷ depreciation", ratio != null ? ratio.toFixed(1) + "×" : "—",
+             "≈1× steady · >1.5× building", ratio >= 2.5 ? "text-bad" : ratio >= 1.5 ? "text-warn" : "")}
+      ${cell("Capex ÷ op. cash flow", fmtPct(e.capex_intensity, 0), "how cash-hungry")}
+      ${cell("Maintenance capex", e.maintenance_capex != null ? cur + fmtMoney(e.maintenance_capex) : "—", "to sustain the business")}
+      ${cell("Growth capex", e.growth_capex != null ? cur + fmtMoney(e.growth_capex) : "—", "discretionary expansion")}
+      ${cell("Owner earnings", e.owner_earnings != null ? cur + fmtMoney(e.owner_earnings) : "—", "NI + D&A − maint. capex")}
+      ${cell("Net income", e.net_income_latest != null ? cur + fmtMoney(e.net_income_latest) : "—", "reported")}
+      ${cell("Cash conversion", fmtPct(e.cash_conversion_avg, 0), "FCF ÷ net income",
+             e.cash_conversion_avg != null && e.cash_conversion_avg < 0.7 ? "text-warn" : "")}
+      ${cell("Stock-based comp", e.stock_based_comp != null ? cur + fmtMoney(e.stock_based_comp) : "—",
+             e.sbc_pct_ocf != null ? fmtPct(e.sbc_pct_ocf, 0) + " of op. cash flow" : "dilution cost",
+             e.sbc_pct_ocf != null && e.sbc_pct_ocf >= 0.15 ? "text-warn" : "")}
+    </div>
+    ${(() => {
+      const notes = [...(e.notes || []), ...((d.metrics.due_diligence || {}).accrual_flags || [])];
+      return notes.length ? `<div class="space-y-2">${notes.map(n =>
+        `<div class="text-xs bg-warn/10 border border-warn/30 text-warn rounded-lg p-2.5 leading-relaxed">${n}</div>`).join("")}</div>`
+        : `<p class="text-xs text-good">No major earnings-quality red flags — capex, depreciation, accruals and cash flow are broadly in line.</p>`;
+    })()}
+  </section>`);
+}
+
+function returnSection(d) {
+  const e = d.metrics.expected_return;
+  const er = e.expected_annual_return, beats = e.beats_inflation;
+  const c = er == null ? "muted" : beats ? "good" : "bad";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4">📈 Expected return vs inflation <span class="text-xs text-muted font-normal">(~${e.horizon_years}yr hold)</span></h3>
+    <div class="flex flex-wrap items-center gap-6">
+      <div><div class="text-xs text-muted">Est. annual return</div><div class="text-3xl font-bold text-${c}">${er == null ? "—" : fmtPct(er)}</div></div>
+      <div class="text-muted text-2xl">vs</div>
+      <div><div class="text-xs text-muted">Inflation hurdle</div><div class="text-3xl font-bold text-muted">${fmtPct(e.inflation_hurdle)}</div></div>
+      <div class="flex-1 min-w-[180px] text-right">
+        <div class="inline-block px-3 py-1.5 rounded-lg ${beats ? "bg-good/15 text-good border border-good/40" : "bg-bad/15 text-bad border border-bad/40"} font-medium">
+          ${er == null ? "Not enough data" : beats ? `Beats inflation by ${fmtPct(e.real_return_vs_inflation)} real` : "Does NOT beat inflation"}
+        </div>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5 text-xs">
+      <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Underlying growth</div><div>${fmtPct(e.underlying_growth)}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">FCF yield</div><div>${fmtPct(e.fcf_yield)}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Dividend yield</div><div>${fmtPct(e.dividend_yield)}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Mispricing reversion</div><div>${fmtPct(e.reversion_return)}</div></div>
+    </div>
+  </section>`);
+}
+
+function pillarsSection(d) {
+  const rows = d.verdict.pillars.map(p => {
+    const pct = Math.round((p.points / p.max) * 100);
+    const col = pct >= 66 ? "good" : pct >= 40 ? "warn" : "bad";
+    return `<div class="mb-3">
+      <div class="flex justify-between text-sm mb-1"><span>${p.name}</span><span class="text-muted">${p.points}/${p.max}</span></div>
+      <div class="h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-${col} rounded-full" style="width:${pct}%"></div></div>
+      <p class="text-[11px] text-muted mt-1">${p.note}</p></div>`;
+  }).join("");
+  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">🧮 Scorecard breakdown</h3>${rows}</section>`);
+}
+
+function flagsSection(d) {
+  const g = d.verdict.green_flags, r = d.verdict.red_flags;
+  if (!g.length && !r.length) return h(`<div class="hidden"></div>`);
+  const list = (items, color, icon) => (Array.isArray(items) && items.length)
+    ? `<ul class="space-y-1.5">${items.map(x => `<li class="flex gap-2 text-sm"><span class="text-${color}">${icon}</span><span>${x}</span></li>`).join("")}</ul>`
+    : `<p class="text-muted text-sm">None flagged.</p>`;
+  return h(`<section class="grid md:grid-cols-2 gap-6">
+    <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-good">✓ Strengths</h3>${list(g, "good", "✓")}</div>
+    <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-bad">⚠ Watch-outs</h3>${list(r, "bad", "⚠")}</div></section>`);
+}
+
+function chartsSection(d) {
+  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">📉 Trends</h3>
+    <div class="grid md:grid-cols-2 gap-6">
+      <div><div class="text-sm text-muted mb-2">Price (10yr)</div><canvas id="c_price" height="150"></canvas></div>
+      <div><div class="text-sm text-muted mb-2">Revenue</div><canvas id="c_rev" height="150"></canvas></div>
+      <div><div class="text-sm text-muted mb-2">Free cash flow</div><canvas id="c_fcf" height="150"></canvas></div>
+      <div><div class="text-sm text-muted mb-2">EPS &amp; ROE</div><canvas id="c_eps" height="150"></canvas></div>
+    </div></section>`);
+}
+
+function drawCharts(d, cur) {
+  Object.values(charts).forEach(c => c && c.destroy());
+  const grid = "#1f2b3e", tick = "#8ba0bd";
+  const baseOpts = (fmt) => ({
+    responsive: true, plugins: { legend: { display: false } },
+    scales: { x: { grid: { color: grid }, ticks: { color: tick, maxTicksLimit: 8, font: { size: 10 } } },
+      y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: fmt } } },
+  });
+  const bar = (id, labels, data, color, fmt) => {
+    const ctx = document.getElementById(id); if (!ctx) return;
+    charts[id] = new Chart(ctx, { type: "bar",
+      data: { labels, datasets: [{ data, backgroundColor: color, borderRadius: 4 }] }, options: baseOpts(fmt) });
+  };
+  const ph = d.price_history || [];
+  const pctx = document.getElementById("c_price");
+  if (pctx) charts.c_price = new Chart(pctx, { type: "line",
+    data: { labels: ph.map(p => p.date.slice(0, 7)), datasets: [{ data: ph.map(p => p.close), borderColor: "#4f9dff", backgroundColor: "rgba(79,157,255,.12)", fill: true, pointRadius: 0, borderWidth: 2, tension: .25 }] },
+    options: baseOpts(v => cur + v) });
+  const s = d.metrics.series;
+  bar("c_rev", s.revenue.map(x => x.year), s.revenue.map(x => x.value), "#4f9dff", v => fmtMoney(v));
+  bar("c_fcf", s.fcf.map(x => x.year), s.fcf.map(x => x.value), s.fcf.map(x => x.value < 0 ? "#ef4444" : "#22c55e"), v => fmtMoney(v));
+  const epsCtx = document.getElementById("c_eps");
+  if (epsCtx) {
+    const years = s.eps.map(x => x.year);
+    const roeMap = Object.fromEntries(s.roe.map(x => [x.year, x.value]));
+    charts.c_eps = new Chart(epsCtx, {
+      data: { labels: years, datasets: [
+        { type: "bar", data: s.eps.map(x => x.value), backgroundColor: "#4f9dff", borderRadius: 4, yAxisID: "y" },
+        { type: "line", data: years.map(y => roeMap[y] ?? null), borderColor: "#22c55e", borderWidth: 2, pointRadius: 0, tension: .25, yAxisID: "y1" }] },
+      options: { responsive: true, plugins: { legend: { display: false } },
+        scales: { x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 } } },
+          y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: v => cur + v } },
+          y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { color: "#22c55e", font: { size: 10 }, callback: v => (v * 100).toFixed(0) + "%" } } } },
+    });
+  }
+}
+
+function qualitativeSection(d) {
+  const q = d.qualitative;
+  if (q.skipped) return h(`<div class="hidden"></div>`);
+  const moatColor = { Wide: "good", Narrow: "warn", None: "bad", Unknown: "muted" }[q.moat?.rating] || "muted";
+  const mgmtColor = { Strong: "good", Adequate: "warn", Concerns: "bad", Unknown: "muted" }[q.management?.rating] || "muted";
+  const banner = !q.available ? `<div class="mb-4 text-xs bg-warn/10 border border-warn/30 text-warn rounded-lg p-2">${q.error ? q.error : "AI analysis is off — set ANTHROPIC_API_KEY to enable Claude's qualitative read."}</div>` : "";
+  const chips = (arr, color) => (Array.isArray(arr) && arr.length) ? arr.map(x => `<li class="flex gap-2 text-sm mb-1.5"><span class="text-${color} mt-0.5">•</span><span>${x}</span></li>`).join("") : "";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4">🧠 Qualitative read ${q.available ? '<span class="text-xs text-brand font-normal">· Claude</span>' : ""}</h3>${banner}
+    <p class="text-sm leading-relaxed mb-5">${q.business_summary || ""}</p>
+    <div class="grid md:grid-cols-2 gap-4 mb-5">
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
+        <div class="flex items-center justify-between mb-1"><span class="text-sm font-medium">Economic moat</span>
+          <span class="text-xs px-2 py-0.5 rounded bg-${moatColor}/15 text-${moatColor} border border-${moatColor}/40">${q.moat?.rating || "—"}</span></div>
+        <p class="text-xs text-muted leading-relaxed">${q.moat?.reasoning || ""}</p></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
+        <div class="flex items-center justify-between mb-1"><span class="text-sm font-medium">Management</span>
+          <span class="text-xs px-2 py-0.5 rounded bg-${mgmtColor}/15 text-${mgmtColor} border border-${mgmtColor}/40">${q.management?.rating || "—"}</span></div>
+        <p class="text-xs text-muted leading-relaxed">${q.management?.reasoning || ""}</p></div>
+    </div>
+    ${(q.bull_case?.length || q.bear_case?.length) ? `<div class="grid md:grid-cols-2 gap-4 mb-5">
+      <div><div class="text-sm font-medium text-good mb-2">Bull case</div><ul>${chips(q.bull_case, "good")}</ul></div>
+      <div><div class="text-sm font-medium text-bad mb-2">Bear case</div><ul>${chips(q.bear_case, "bad")}</ul></div></div>` : ""}
+    ${q.risks?.length ? `<div class="mb-5"><div class="text-sm font-medium text-warn mb-2">Key risks (10–15yr)</div><ul>${chips(q.risks, "warn")}</ul></div>` : ""}
+    ${(q.catalysts?.length || q.thesis_breakers?.length) ? `<div class="grid md:grid-cols-2 gap-4 mb-5">
+      ${q.catalysts?.length ? `<div><div class="text-sm font-medium text-good mb-2">⚡ Catalysts</div><ul>${chips(q.catalysts, "good")}</ul></div>` : "<div></div>"}
+      ${q.thesis_breakers?.length ? `<div><div class="text-sm font-medium text-bad mb-2">🚫 What would break the thesis</div><ul>${chips(q.thesis_breakers, "bad")}</ul></div>` : ""}
+    </div>` : ""}
+    ${q.investment_thesis ? `<div class="bg-ink/40 border border-line/60 rounded-xl p-4 mb-3"><div class="text-xs text-slate-300 font-medium mb-1">📝 Investment thesis${q.cyclicality && q.cyclicality !== "Unknown" ? ` · <span class="text-muted">${q.cyclicality}</span>` : ""}</div><p class="text-sm leading-relaxed">${q.investment_thesis}</p></div>` : ""}
+    ${q.verdict_narrative ? `<div class="bg-brand/5 border border-brand/20 rounded-xl p-4"><div class="text-xs text-brand font-medium mb-1">Value-investor take</div><p class="text-sm leading-relaxed">${q.verdict_narrative}</p></div>` : ""}
+  </section>`);
+}
+
+// ================= COMPARE =================
+async function runCompare() {
+  const raw = $("compareInput").value.trim();
+  if (!raw) return;
+  showLoading("Scoring your watchlist…");
+  try {
+    const d = await getJSON(`/api/compare?tickers=${encodeURIComponent(raw)}${assumptionsQS()}`);
+    $("loading").classList.add("hidden");
+    renderTable(d, "Watchlist comparison", `${d.rows.length} names, ranked best-first under your assumptions.`);
+  } catch (e) { showError(e.message); }
+}
+
+// ================= SCREEN =================
+async function runScreen() {
+  const minScore = parseInt($("minScore").value) || 70;
+  const universe = $("screenUniverse").value.trim();
+  const scope = $("screenScope").value;
+  const est = universe ? "your list" : { core: "~57 names, ~1 min", full: "~207 names, ~5–7 min", large: "~900 names, ~25 min" }[scope];
+  if (scope === "large" && !universe && !confirm("The large-cap scan covers ~900 names and takes roughly 25 minutes. Keep this tab open. Continue?")) return;
+  showLoading(`Scanning ${est}… surfacing what clears your buy bar.`);
+  try {
+    const qs = `min_score=${minScore}&scope=${scope}${universe ? "&universe=" + encodeURIComponent(universe) : ""}${assumptionsQS()}`;
+    const d = await getJSON(`/api/screen?${qs}`);
+    $("loading").classList.add("hidden");
+    renderScreen(d);
+  } catch (e) { showError(e.message); }
+}
+
+function renderScreen(d) {
+  const el = $("results"); el.innerHTML = "";
+  const cands = d.candidates || [];
+  const header = h(`
+    <section class="card rounded-2xl p-6">
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <div><h3 class="text-lg font-semibold">📋 Weekly buy screen</h3>
+          <p class="text-muted text-sm mt-1">Scanned ${d.scanned}/${d.universe_size} names · buy bar = score ≥ ${d.min_score}</p></div>
+        <div class="text-right"><div class="text-3xl font-bold text-${cands.length ? 'good' : 'muted'}">${cands.length}</div><div class="text-xs text-muted">candidate${cands.length === 1 ? "" : "s"}</div></div>
+      </div>
+      ${cands.length === 0 ? `<p class="text-sm text-muted mt-4 bg-ink/40 border border-line/60 rounded-lg p-3">Nothing clears the bar right now — that's normal for a strict margin-of-safety screen in a richly-priced market. The patient move is to wait (or loosen your assumptions in the panel above). The full ranked list is below; the highest scorers are the closest to a buy.</p>` : `<p class="text-sm text-good mt-4">These names clear your buy bar today. Click any row for the full analysis before acting.</p>`}
+    </section>`);
+  el.append(header);
+  el.append(diffCard(d.diff));
+  if (cands.length) {
+    // group candidates by sector; sectors ordered by their best score
+    const bySector = {};
+    cands.forEach(r => { (bySector[r.sector || "Other / Unknown"] ??= []).push(r); });
+    const ordered = Object.entries(bySector).sort((a, b) =>
+      Math.max(...b[1].map(x => x.score || 0)) - Math.max(...a[1].map(x => x.score || 0)));
+    const wrap = h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-1">✅ Buy candidates — by sector</h3></section>`);
+    for (const [sector, names] of ordered) {
+      names.sort((a, b) => (b.score || 0) - (a.score || 0));
+      wrap.insertAdjacentHTML("beforeend",
+        `<div class="mt-4 mb-1 text-sm font-medium text-brand">${sector} <span class="text-muted font-normal">(${names.length})</span></div>`);
+      wrap.appendChild(bareTable(names, true));
+    }
+    el.append(wrap);
+  }
+  el.append(tableCard(d.rows, "All scanned names (ranked)", true));
+  if (d.errors?.length) el.append(errorsCard(d.errors));
+  el.classList.remove("hidden"); el.classList.add("fade-in");
+  wireRowClicks();
+}
+
+function diffCard(diff) {
+  if (!diff) return h(`<div class="hidden"></div>`);
+  if (!diff.prev_date) {
+    return h(`<section class="card rounded-2xl p-4 text-sm text-muted">🔁 First scan of this universe recorded — next time you'll see what changed.</section>`);
+  }
+  const added = diff.added || [], dropped = diff.dropped || [];
+  const chip = (t, cls) => `<span class="inline-block px-2 py-0.5 rounded bg-${cls}/15 text-${cls} border border-${cls}/40 text-xs font-mono mr-1 mb-1">${t}</span>`;
+  if (!added.length && !dropped.length) {
+    return h(`<section class="card rounded-2xl p-4 text-sm text-muted">🔁 No changes since ${diff.prev_date} — same candidates.</section>`);
+  }
+  return h(`<section class="card rounded-2xl p-5">
+    <h3 class="font-semibold mb-3">🔁 Changes since ${diff.prev_date}</h3>
+    <div class="grid sm:grid-cols-2 gap-4">
+      <div><div class="text-xs text-good mb-1.5">🆕 New (${added.length})</div>
+        <div>${added.length ? added.map(t => chip(t, "good")).join("") : '<span class="text-muted text-xs">none</span>'}</div></div>
+      <div><div class="text-xs text-bad mb-1.5">❌ Dropped (${dropped.length})</div>
+        <div>${dropped.length ? dropped.map(t => chip(t + (diff.prev_scores?.[t] ? ` ${diff.prev_scores[t]}` : ""), "bad")).join("") : '<span class="text-muted text-xs">none</span>'}</div></div>
+    </div></section>`);
+}
+
+function renderTable(d, title, subtitle) {
+  const el = $("results"); el.innerHTML = "";
+  el.append(h(`<section class="card rounded-2xl p-6"><h3 class="text-lg font-semibold">${title}</h3><p class="text-muted text-sm mt-1">${subtitle}</p></section>`));
+  el.append(tableCard(d.rows, "", true));
+  if (d.errors?.length) el.append(errorsCard(d.errors));
+  el.classList.remove("hidden"); el.classList.add("fade-in");
+  wireRowClicks();
+}
+
+function bareTable(rows, clickable) {
+  const head = `<tr class="text-xs text-muted border-b border-line">
+    <th class="text-left py-2 pr-3 font-medium">Ticker</th>
+    <th class="text-right px-2 font-medium">Score</th>
+    <th class="text-left px-2 font-medium">Rating</th>
+    <th class="text-right px-2 font-medium">Price</th>
+    <th class="text-right px-2 font-medium">Fair value</th>
+    <th class="text-right px-2 font-medium">Upside</th>
+    <th class="text-right px-2 font-medium">Exp. return</th>
+    <th class="text-right px-2 font-medium">ROIC</th>
+    <th class="text-right px-2 font-medium">Rev CAGR</th>
+    <th class="text-right pl-2 font-medium">P/E</th></tr>`;
+  const body = rows.map(r => {
+    const rs = RATING_STYLE[r.rating] || RATING_STYLE["HOLD / WATCH"];
+    const upC = r.upside == null ? "muted" : r.upside >= 0.15 ? "good" : r.upside >= 0 ? "warn" : "bad";
+    const capexMark = r.heavy_capex ? ` <span title="Heavy capex cycle — earnings/FCF distorted; value shown is capex-adjusted midpoint">🏗️</span>` : "";
+    const suspectMark = r.suspect ? ` <span title="Valuation flagged unreliable — excluded from buy candidates; verify the data">🚩</span>` : "";
+    return `<tr class="${clickable ? "clickable" : ""} border-b border-line/40 text-sm ${r.suspect ? "opacity-60" : ""}" data-ticker="${r.ticker}">
+      <td class="py-2.5 pr-3"><span class="font-semibold">${r.ticker}</span>${capexMark}${suspectMark}<div class="text-[11px] text-muted truncate max-w-[150px]">${r.name || ""}</div></td>
+      <td class="text-right px-2"><span class="inline-block w-9 text-center font-bold text-${scoreColor(r.score)}">${r.score}</span></td>
+      <td class="px-2"><span class="text-xs text-${rs.c}">${r.rating}</span></td>
+      <td class="text-right px-2">${price(r.price)}</td>
+      <td class="text-right px-2 text-brand">${r.intrinsic_value != null ? price(r.intrinsic_value) : "—"}</td>
+      <td class="text-right px-2 text-${upC}">${signPct(r.upside)}</td>
+      <td class="text-right px-2 ${r.beats_inflation ? "text-good" : "text-muted"}">${fmtPct(r.expected_return, 0)}</td>
+      <td class="text-right px-2">${fmtPct(r.roic, 0)}</td>
+      <td class="text-right px-2">${fmtPct(r.revenue_cagr, 0)}</td>
+      <td class="text-right pl-2">${fmtNum(r.trailing_pe, 1)}</td></tr>`;
+  }).join("");
+  return h(`<div class="overflow-x-auto"><table class="w-full min-w-[720px]"><thead>${head}</thead><tbody>${body}</tbody></table></div>`);
+}
+
+function tableCard(rows, title, clickable) {
+  const card = h(`<section class="card rounded-2xl p-6">
+    ${title ? `<h3 class="font-semibold mb-3">${title}</h3>` : ""}
+    ${clickable ? `<p class="text-[11px] text-muted mt-3 order-last">Click any row to open the full analysis.</p>` : ""}
+  </section>`);
+  card.insertBefore(bareTable(rows, clickable), card.querySelector("p"));
+  return card;
+}
+
+function errorsCard(errors) {
+  return h(`<section class="card rounded-2xl p-4 border-bad/30"><div class="text-sm text-bad mb-1">Couldn't load ${errors.length}:</div>
+    <div class="text-xs text-muted">${errors.map(e => `${e.ticker} (${e.error})`).join(" · ")}</div></section>`);
+}
+
+function wireRowClicks() {
+  document.querySelectorAll("tr[data-ticker]").forEach(tr => {
+    tr.addEventListener("click", () => {
+      const t = tr.dataset.ticker;
+      switchMode("analyze");
+      $("ticker").value = t;
+      analyze(t);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+  });
+}
+
+// ================= WATCHLIST + JOURNAL =================
+function watchlistControl(d) {
+  const t = d.ticker;
+  return h(`<section class="card rounded-2xl p-4">
+    <div class="flex flex-wrap items-end gap-3">
+      <div class="flex-1 min-w-[220px]">
+        <label class="text-xs text-muted">Your thesis / notes on ${t}</label>
+        <input id="wlNotes" placeholder="why you'd own it, what to watch…" class="w-full bg-ink/60 border border-line rounded-lg px-3 py-2 text-sm mt-1">
+      </div>
+      <div><label class="text-xs text-muted">Buy / paid price</label>
+        <input id="wlBuyPrice" type="number" step="0.01" placeholder="—" class="w-28 bg-ink/60 border border-line rounded-lg px-2 py-2 text-sm mt-1"></div>
+      <label class="text-sm flex items-center gap-2 pb-2"><input id="wlOwned" type="checkbox" class="accent-brand w-4 h-4"> Owned</label>
+      <button id="wlSave" class="bg-brand hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition active:scale-95">⭐ Save to watchlist</button>
+      <span id="wlMsg" class="text-xs text-good self-center"></span>
+    </div>
+    <p class="text-[11px] text-muted mt-2">The weekly job checks your watchlist and flags when a name drops into its buy-below zone. Your notes + the AI thesis are saved as a journal entry.</p>
+  </section>`);
+}
+
+function wireWatchlistControl(d) {
+  const save = $("wlSave");
+  if (!save) return;
+  save.addEventListener("click", async () => {
+    const bp = $("wlBuyPrice").value;
+    let q = `ticker=${encodeURIComponent(d.ticker)}&notes=${encodeURIComponent($("wlNotes").value)}` +
+            `&owned=${$("wlOwned").checked}&thesis=${encodeURIComponent(d.qualitative?.investment_thesis || "")}`;
+    if (bp) q += `&buy_price=${bp}`;
+    try { await fetch(`/api/watchlist?${q}`, { method: "POST" }); $("wlMsg").textContent = "Saved ✓"; }
+    catch { $("wlMsg").textContent = "Save failed"; }
+  });
+}
+
+async function loadWatchlist() {
+  showLoading("Checking your watchlist against buy-below prices…");
+  try {
+    const d = await getJSON("/api/watchlist");
+    $("loading").classList.add("hidden");
+    renderWatchlist(d);
+  } catch (e) { showError(e.message); }
+}
+
+function renderWatchlist(d) {
+  const el = $("results"); el.innerHTML = "";
+  if (!d.rows.length) {
+    el.append(h(`<section class="card rounded-2xl p-8 text-center text-muted">
+      <p class="text-lg mb-1">Your watchlist is empty.</p>
+      <p class="text-sm">Analyze a stock, then hit <span class="text-brand">⭐ Save to watchlist</span> to track it here.</p></section>`));
+    el.classList.remove("hidden"); return;
+  }
+  const inZone = d.rows.filter(r => r.in_buy_zone).length;
+  el.append(h(`<section class="card rounded-2xl p-5">
+    <div class="flex items-center justify-between"><h3 class="font-semibold">⭐ Watchlist (${d.count})</h3>
+      <div class="text-right"><div class="text-2xl font-bold text-${inZone ? 'good' : 'muted'}">${inZone}</div><div class="text-xs text-muted">in buy zone</div></div></div>
+    ${inZone ? `<p class="text-sm text-good mt-2">${inZone} name${inZone === 1 ? "" : "s"} trading at or below your buy-below price today.</p>` : `<p class="text-sm text-muted mt-2">Nothing in the buy zone yet — the weekly job will flag names as they drop in.</p>`}
+  </section>`));
+  d.rows.forEach(r => el.append(watchlistRow(r)));
+  el.classList.remove("hidden"); el.classList.add("fade-in");
+  document.querySelectorAll("[data-wl-remove]").forEach(b =>
+    b.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/watchlist?ticker=${b.dataset.wlRemove}`, { method: "DELETE" });
+      loadWatchlist();
+    }));
+  document.querySelectorAll("[data-wl-open]").forEach(row =>
+    row.addEventListener("click", () => { switchMode("analyze"); $("ticker").value = row.dataset.wlOpen; analyze(row.dataset.wlOpen); window.scrollTo({ top: 0, behavior: "smooth" }); }));
+}
+
+function watchlistRow(r) {
+  if (r.error) {
+    return h(`<section class="card rounded-2xl p-4 flex items-center justify-between">
+      <div><span class="font-semibold">${r.ticker}</span> <span class="text-xs text-bad ml-2">${r.error}</span></div>
+      <button data-wl-remove="${r.ticker}" class="text-xs text-muted hover:text-bad">Remove</button></section>`);
+  }
+  const rs = RATING_STYLE[r.rating] || RATING_STYLE["HOLD / WATCH"];
+  const zone = r.in_buy_zone;
+  return h(`<section class="card rounded-2xl p-4 ${zone ? "border-good/50" : ""}" data-wl-open="${r.ticker}" style="cursor:pointer">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div class="min-w-[160px]">
+        <div class="flex items-center gap-2"><span class="font-semibold">${r.ticker}</span>
+          ${zone ? `<span class="text-[10px] px-2 py-0.5 rounded bg-good/15 text-good border border-good/40">IN BUY ZONE</span>` : ""}
+          ${r.owned ? `<span class="text-[10px] px-2 py-0.5 rounded bg-ink/60 text-muted border border-line">owned</span>` : ""}</div>
+        <div class="text-[11px] text-muted truncate max-w-[160px]">${r.name || ""}</div>
+      </div>
+      <div class="text-sm"><span class="text-muted text-xs">Price </span>${price(r.price)}</div>
+      <div class="text-sm"><span class="text-muted text-xs">Buy-below </span><span class="text-good">${price(r.buy_below)}</span></div>
+      <div class="text-sm"><span class="text-muted text-xs">Fair value </span><span class="text-brand">${price(r.intrinsic_value)}</span></div>
+      <div class="text-sm"><span class="text-muted text-xs">Score </span><span class="font-bold text-${scoreColor(r.score)}">${r.score}</span> <span class="text-xs text-${rs.c}">${r.rating}</span></div>
+      ${r.buy_price ? `<div class="text-sm"><span class="text-muted text-xs">Your buy </span>${price(r.buy_price)}</div>` : ""}
+      <button data-wl-remove="${r.ticker}" class="text-xs text-muted hover:text-bad ml-auto">Remove</button>
+    </div>
+    ${r.notes ? `<p class="text-xs text-muted mt-2 border-t border-line/40 pt-2">📝 ${r.notes}</p>` : ""}
+  </section>`);
+}
+
+// ---------- wire up ----------
+document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchMode(t.dataset.mode)));
+$("refreshWatchlist")?.addEventListener("click", loadWatchlist);
+$("go").addEventListener("click", () => analyze());
+$("ticker").addEventListener("keydown", (e) => { if (e.key === "Enter") analyze(); });
+$("goCompare").addEventListener("click", runCompare);
+$("compareInput").addEventListener("keydown", (e) => { if (e.key === "Enter") runCompare(); });
+$("goScreen").addEventListener("click", runScreen);
+$("resetAssume").addEventListener("click", (e) => { e.preventDefault(); resetAssumptions(); });
+document.querySelectorAll(".ex").forEach(b => b.addEventListener("click", () => analyze(b.textContent)));
+initAssumptions();

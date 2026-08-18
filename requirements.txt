@@ -1,0 +1,8 @@
+# Data comes straight from Yahoo Finance's public JSON endpoints via curl_cffi
+# (browser impersonation) — this avoids yfinance's rate-limiting and a
+# Python-3.14 segfault in its threaded session handling. No pandas/numpy needed.
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+curl_cffi==0.16.0
+anthropic==0.42.0
+python-dotenv==1.0.1

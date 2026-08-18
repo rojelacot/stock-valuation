@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.rojelacot.stockvaluation.weeklyscreen</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/rojel_acot/stock-valuation/.venv/bin/python</string>
+    <string>/Users/rojel_acot/stock-valuation/weekly_screen.py</string>
+    <string>--scope</string>
+    <string>all</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/rojel_acot/stock-valuation</string>
+
+  <!-- Every Monday (Weekday 1) at 08:00 local time. Edit and reload to change. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key><integer>1</integer>
+    <key>Hour</key><integer>8</integer>
+    <key>Minute</key><integer>0</integer>
+  </dict>
+
+  <!-- If the Mac was asleep at 08:00, run once it wakes. -->
+  <key>RunAtLoad</key>
+  <false/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/rojel_acot/stock-valuation/logs/weekly_screen.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/rojel_acot/stock-valuation/logs/weekly_screen.err.log</string>
+</dict>
+</plist>

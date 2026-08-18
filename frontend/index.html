@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Long-Term Stock Valuation</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = { darkMode: 'class', theme: { extend: { colors: {
+      ink: '#0b0f17', panel: '#131a26', panel2: '#1b2534', line: '#26334a',
+      brand: '#4f9dff', good: '#22c55e', warn: '#f59e0b', bad: '#ef4444', muted: '#8ba0bd'
+    }}}}
+  </script>
+  <style>
+    body { background: radial-gradient(1200px 600px at 70% -10%, #16233b 0%, #0b0f17 55%); }
+    .card { background: linear-gradient(180deg,#131a26,#0f1520); border:1px solid #26334a; }
+    ::-webkit-scrollbar{height:8px;width:8px}::-webkit-scrollbar-thumb{background:#26334a;border-radius:8px}
+    .fade-in{animation:fade .4s ease}@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+    input[type=range]{-webkit-appearance:none;height:6px;border-radius:6px;background:#26334a;outline:none}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:#4f9dff;cursor:pointer;border:2px solid #0b0f17}
+    .tab{padding:.5rem 1rem;border-radius:.6rem;cursor:pointer;font-size:.9rem;font-weight:500;color:#8ba0bd;transition:.15s}
+    .tab.active{background:#1b2534;color:#e8eefc;box-shadow:inset 0 0 0 1px #26334a}
+    tr.clickable:hover{background:#1b2534}
+  </style>
+</head>
+<body class="text-slate-200 min-h-screen">
+  <div class="max-w-6xl mx-auto px-4 py-8">
+
+    <!-- Header -->
+    <header class="mb-6">
+      <div class="flex items-center gap-3 mb-1">
+        <div class="w-9 h-9 rounded-lg bg-brand/20 border border-brand/40 grid place-items-center text-brand text-lg">◆</div>
+        <h1 class="text-2xl font-semibold tracking-tight">Long-Term Value Screener</h1>
+      </div>
+      <p class="text-muted text-sm ml-12">Multi-source fundamentals · DCF &amp; reverse DCF · moat &amp; quality · inflation-beating · buy &amp; hold 10–15yr — not an index.</p>
+    </header>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-4">
+      <div class="tab active" data-mode="analyze">🔎 Analyze one</div>
+      <div class="tab" data-mode="compare">⚖️ Compare</div>
+      <div class="tab" data-mode="screen">📋 Weekly buy screen</div>
+      <div class="tab" data-mode="watchlist">⭐ Watchlist</div>
+    </div>
+
+    <!-- Assumptions panel (shared) -->
+    <details id="assumptions" class="card rounded-2xl mb-4 overflow-hidden">
+      <summary class="cursor-pointer select-none px-5 py-3 flex items-center justify-between text-sm">
+        <span class="font-medium">⚙️ Valuation assumptions <span id="assumeSummary" class="text-muted font-normal ml-2"></span></span>
+        <span class="text-muted text-xs">click to tune</span>
+      </summary>
+      <div class="px-5 pb-5 pt-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
+        <label class="text-sm">
+          <div class="flex justify-between"><span>Discount rate (required return)</span><span id="v_discount_rate" class="text-brand font-mono"></span></div>
+          <input type="range" id="discount_rate" min="3" max="25" step="0.5" class="w-full mt-1.5">
+        </label>
+        <label class="text-sm">
+          <div class="flex justify-between"><span>Terminal growth</span><span id="v_terminal_growth" class="text-brand font-mono"></span></div>
+          <input type="range" id="terminal_growth" min="0" max="4" step="0.25" class="w-full mt-1.5">
+        </label>
+        <label class="text-sm">
+          <div class="flex justify-between"><span>Projection years</span><span id="v_projection_years" class="text-brand font-mono"></span></div>
+          <input type="range" id="projection_years" min="3" max="20" step="1" class="w-full mt-1.5">
+        </label>
+        <label class="text-sm">
+          <div class="flex justify-between"><span>Inflation hurdle</span><span id="v_inflation_hurdle" class="text-brand font-mono"></span></div>
+          <input type="range" id="inflation_hurdle" min="0" max="15" step="0.5" class="w-full mt-1.5">
+        </label>
+        <label class="text-sm">
+          <div class="flex justify-between"><span>Margin of safety</span><span id="v_margin_of_safety" class="text-brand font-mono"></span></div>
+          <input type="range" id="margin_of_safety" min="0" max="60" step="5" class="w-full mt-1.5">
+        </label>
+        <div class="flex items-end">
+          <button id="resetAssume" class="text-sm text-muted hover:text-brand underline decoration-dotted">Reset to defaults</button>
+        </div>
+      </div>
+    </details>
+
+    <!-- ===== Analyze mode ===== -->
+    <section id="mode-analyze">
+      <div class="card rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
+        <div class="flex-1 flex items-center gap-2 bg-ink/60 rounded-xl px-3 border border-line focus-within:border-brand transition">
+          <span class="text-muted">🔎</span>
+          <input id="ticker" placeholder="Enter a ticker — e.g. AAPL, MSFT, KO, BRK-B"
+                 class="w-full bg-transparent py-3 outline-none text-lg tracking-wide uppercase placeholder:normal-case placeholder:text-muted" />
+        </div>
+        <label class="flex items-center gap-2 text-sm text-muted select-none">
+          <input id="useAi" type="checkbox" checked class="accent-brand w-4 h-4" /> AI qualitative
+        </label>
+        <button id="go" class="bg-brand hover:bg-blue-500 text-white font-medium px-6 py-3 rounded-xl transition active:scale-95">Analyze</button>
+      </div>
+      <div id="hint" class="text-center text-muted text-sm mb-6">
+        Try <button class="ex underline decoration-dotted hover:text-brand">AAPL</button>,
+        <button class="ex underline decoration-dotted hover:text-brand">MSFT</button>,
+        <button class="ex underline decoration-dotted hover:text-brand">KO</button>,
+        <button class="ex underline decoration-dotted hover:text-brand">GOOGL</button>,
+        <button class="ex underline decoration-dotted hover:text-brand">JNJ</button>
+      </div>
+    </section>
+
+    <!-- ===== Compare mode ===== -->
+    <section id="mode-compare" class="hidden">
+      <div class="card rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
+        <div class="flex-1 flex items-center gap-2 bg-ink/60 rounded-xl px-3 border border-line focus-within:border-brand transition">
+          <span class="text-muted">⚖️</span>
+          <input id="compareInput" placeholder="Enter up to 15 tickers — e.g. AAPL MSFT GOOGL KO JNJ V"
+                 class="w-full bg-transparent py-3 outline-none uppercase placeholder:normal-case placeholder:text-muted" />
+        </div>
+        <button id="goCompare" class="bg-brand hover:bg-blue-500 text-white font-medium px-6 py-3 rounded-xl transition active:scale-95">Compare</button>
+      </div>
+    </section>
+
+    <!-- ===== Screener mode ===== -->
+    <section id="mode-screen" class="hidden">
+      <div class="card rounded-2xl p-5 mb-6">
+        <p class="text-sm text-muted mb-4">Scans a universe of quality businesses under your assumptions and surfaces the ones that clear the buy bar. Run it about once a week. Results cache after the first scan.</p>
+        <div class="flex flex-col sm:flex-row gap-3 sm:items-center flex-wrap">
+          <label class="text-sm flex items-center gap-2">
+            Universe
+            <select id="screenScope" class="bg-ink/60 border border-line rounded-lg px-2 py-1.5">
+              <option value="core">Core (~57 · ~1 min)</option>
+              <option value="full" selected>Full (~207 · ~5–7 min)</option>
+              <option value="large">Large-cap ~900 · S&P 900 ≈ Russell 1000 (~25 min)</option>
+            </select>
+          </label>
+          <label class="text-sm flex items-center gap-2">
+            Buy threshold (score ≥)
+            <input id="minScore" type="number" min="50" max="95" value="80" class="w-16 bg-ink/60 border border-line rounded-lg px-2 py-1.5 text-center">
+          </label>
+          <button id="goScreen" class="bg-brand hover:bg-blue-500 text-white font-medium px-6 py-2.5 rounded-xl transition active:scale-95">Scan for buys</button>
+        </div>
+        <input id="screenUniverse" placeholder="(optional) your own tickers — overrides the universe above"
+               class="w-full mt-3 bg-ink/60 border border-line rounded-lg px-3 py-2 text-sm uppercase placeholder:normal-case placeholder:text-muted" />
+        <p class="text-[11px] text-muted mt-2">The weekly automated job scans the full ~900-name large-cap universe (S&P 900 ≈ Russell 1000). Core/Full are for quicker manual checks — the large scan takes ~25 min, so it's best left to the weekly job.</p>
+      </div>
+    </section>
+
+    <!-- ===== Watchlist mode ===== -->
+    <section id="mode-watchlist" class="hidden">
+      <div class="card rounded-2xl p-4 mb-6 flex items-center justify-between">
+        <div><h2 class="font-semibold">⭐ Watchlist &amp; thesis journal</h2>
+          <p class="text-xs text-muted mt-0.5">Saved names checked live against their buy-below price. Add from any analysis.</p></div>
+        <button id="refreshWatchlist" class="text-sm text-muted hover:text-brand">↻ Refresh</button>
+      </div>
+    </section>
+
+    <!-- Shared loading / error / results -->
+    <div id="loading" class="hidden text-center py-16">
+      <div class="inline-block w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin"></div>
+      <p id="loadingMsg" class="text-muted mt-4">Working…</p>
+    </div>
+    <div id="error" class="hidden card rounded-2xl p-6 border-bad/40 text-center">
+      <p class="text-bad font-medium" id="errorMsg"></p>
+    </div>
+    <main id="results" class="hidden space-y-6"></main>
+
+    <footer class="mt-12 text-center text-xs text-muted/70 leading-relaxed">
+      For research and education only — not investment advice. Fundamentals from SimFin (single-stock
+      view, ~7yr) and Yahoo Finance (screener + free analyst estimates &amp; sentiment); data can be
+      delayed or incomplete on free tiers. DCF, scenarios and expected-return figures are model
+      estimates that depend heavily on your assumptions. Always do your own due diligence and read the
+      primary filings.
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
