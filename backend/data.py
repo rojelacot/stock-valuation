@@ -260,11 +260,35 @@ def prefilter_by_size(symbols: list[str], min_cap: float = 2e9,
     return survivors
 
 
-def fetch_stock(ticker: str, use_simfin: bool = True) -> dict[str, Any]:
-    """Fetch one ticker. If a SimFin key is configured and use_simfin is True
-    (single-stock Analyze path), try SimFin first for cleaner/deeper fundamentals
-    and fall back to Yahoo on any problem. Bulk callers pass use_simfin=False."""
+def fetch_stock(ticker: str, use_simfin: bool = True,
+                use_edgar: bool = True) -> dict[str, Any]:
+    """Fetch one ticker in the normalized shape.
+
+    Source priority for the single-stock (Analyze) path:
+      1. SEC EDGAR for statements (10-15yr, as-filed) paired with Yahoo for
+         live price/market/analyst data — the best free combo for US filers.
+      2. SimFin (if a key is set) then Yahoo, for names EDGAR doesn't cover
+         (foreign private issuers file 20-F, not 10-K).
+
+    Bulk callers (the screener) pass use_edgar=False and use_simfin=False so a
+    thousand-name scan stays fast on Yahoo's cheap batched endpoints.
+    """
     import os
+    # 1) EDGAR statements + Yahoo market data (US 10-K filers).
+    if use_edgar:
+        try:
+            import edgar as _ed
+            edg = _ed.fetch_statements(ticker)
+        except Exception:  # noqa: BLE001
+            edg = {"error": "edgar unavailable"}
+        if not edg.get("error") and edg.get("years", 0) >= 4:
+            base = _fetch_yahoo(ticker)
+            if base.get("error"):
+                return base  # need Yahoo for price; nothing to pair EDGAR with
+            _overlay_edgar(base, edg)
+            return base
+
+    # 2) SimFin then Yahoo (EDGAR didn't cover this name).
     if use_simfin and os.environ.get("SIMFIN_API_KEY"):
         try:
             import simfin as _sf
@@ -274,6 +298,26 @@ def fetch_stock(ticker: str, use_simfin: bool = True) -> dict[str, Any]:
         except Exception:  # noqa: BLE001
             pass  # fall through to Yahoo
     return _fetch_yahoo(ticker)
+
+
+def _overlay_edgar(base: dict[str, Any], edg: dict[str, Any]) -> None:
+    """Replace Yahoo's short statement history with EDGAR's deep one in-place.
+
+    EDGAR wins wholesale when it has at least as many revenue-years as Yahoo (it
+    almost always does — 15-19yr vs ~4). For the handful of line items EDGAR
+    doesn't populate for a given filer (e.g. a holding company's EPS), we keep
+    Yahoo's series rather than blanking it. Yahoo's price/market/info is left
+    untouched. Both are USD for a US 10-K filer, so no currency reconciliation is
+    needed (foreign issuers never reach here)."""
+    e_st = edg.get("statements") or {}
+    y_st = base.get("statements") or {}
+    e_years = len(e_st.get("revenue") or {})
+    if e_years < len(y_st.get("revenue") or {}):
+        return  # Yahoo somehow deeper — leave it alone
+    base["statements"] = {k: (e_st.get(k) or y_st.get(k) or {}) for k in STATEMENT_KEYS}
+    base["statement_years"] = e_years
+    base["data_source"] = (f"SEC EDGAR ({e_years}yr as-filed 10-K) "
+                           "+ Yahoo Finance (price/market)")
 
 
 def _fetch_yahoo(ticker: str) -> dict[str, Any]:

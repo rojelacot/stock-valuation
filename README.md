@@ -6,13 +6,14 @@ quality / growth / balance-sheet strength, check whether the expected 10–15yr 
 inflation, layer in an AI qualitative read (moat, management, risks), and output a
 **Buy / Hold / Avoid** verdict — with all the reasoning shown.
 
-> ⚠️ For research and education only. Not investment advice. Data comes from Yahoo Finance's
-> public JSON endpoints and can be delayed or incomplete — **the free tier only returns ~4 years
-> of annual financial statements** (price history is a full 10 years). DCF and expected-return
+> ⚠️ For research and education only. Not investment advice. The single-stock Analyze view pulls
+> **10–19 years of as-filed 10-K fundamentals straight from SEC EDGAR** (free, no key) and pairs
+> them with Yahoo Finance for live price, market data and analyst sentiment. DCF and expected-return
 > numbers are model estimates sensitive to assumptions. Always do your own due diligence.
 >
-> For a true 10-year statement history, swap in a paid data source — see "Swapping the data
-> source" below. Nothing downstream touches Yahoo directly, so it's a one-file change.
+> Foreign filers (which file 20-F, not 10-K) and the bulk screener fall back to Yahoo's ~4-year
+> free statement history; an optional SimFin key adds ~7yr for those names. Nothing downstream is
+> coupled to a single provider — sources are swappable in `backend/data.py`.
 
 ## Philosophy baked in
 - **Hold 10–15 years**, so durability and returns on capital matter more than this quarter.
@@ -68,8 +69,9 @@ recomputes live (no re-fetch, no re-call to Claude).
 ## What each part does
 | File | Role |
 |---|---|
-| `backend/data.py` | Yahoo JSON fetch (via `curl_cffi`) + normalize; SimFin dispatch/fallback; bulk market-cap prefilter; free analyst/sentiment supplement |
-| `backend/simfin.py` | SimFin v3 adapter for the single-stock view (~7yr statements), same normalized shape |
+| `backend/data.py` | Source orchestration + Yahoo JSON fetch (via `curl_cffi`) + normalize; EDGAR/SimFin dispatch + fallback; bulk market-cap prefilter; free analyst/sentiment supplement |
+| `backend/edgar.py` | SEC EDGAR XBRL adapter — 10–19yr as-filed 10-K statements (default single-stock source), same normalized shape |
+| `backend/simfin.py` | SimFin v3 adapter — fallback for names EDGAR doesn't cover (~7yr statements) |
 | `backend/valuation.py` | Growth CAGRs, ROE/ROIC, margins, **DCF value range**, scenarios, reverse DCF, sensitivity grid, expected return |
 | `backend/duediligence.py` | EV multiples, NOPAT-ROIC vs **WACC**, Piotroski, capital returns, dividend safety, valuation-vs-history, accruals |
 | `backend/earnings_quality.py` | Capex-cycle / owner-earnings / cash-conversion analysis |
@@ -200,6 +202,7 @@ It leads with the **median** (outlier-robust) and reports whether higher scores 
 ```bash
 .venv/bin/python backtest.py --years 2                 # core universe, Yahoo
 .venv/bin/python backtest.py --years 3 --scope full    # deeper lookback
+.venv/bin/python backtest.py --years 5 --edgar         # SEC EDGAR's 10–19yr (free, deepest)
 .venv/bin/python backtest.py --years 3 --simfin        # SimFin's 7yr (spends credits)
 ```
 Directional only (restated statements, no dividends), but across runs it consistently shows the
@@ -214,11 +217,19 @@ Assumptions (discount rate, terminal growth, inflation hurdle, margin of safety)
 top of `backend/valuation.py` and `scoring.py`, or drag the sliders live in the app.
 
 ## Data sources
-- **Single-stock Analyze** uses **SimFin** when `SIMFIN_API_KEY` is set (~7yr statements, free tier),
-  else **Yahoo** — with automatic fallback. It's always enriched with free Yahoo analyst estimates
-  and sentiment. Compare and the screener always use Yahoo (SimFin credits are limited).
+- **Single-stock Analyze** uses **SEC EDGAR** — the XBRL `companyfacts` API returns 10–19 years of
+  as-filed 10-K line items for any US filer, free and without a key — for the statement history, and
+  pairs it with **Yahoo** for live price, market cap, ratios and analyst sentiment. This hybrid is
+  the deepest free data available and is the default (`backend/edgar.py`).
+- **Fallback order** when EDGAR doesn't cover a name (e.g. a foreign private issuer that files 20-F):
+  **SimFin** if `SIMFIN_API_KEY` is set (~7yr), else **Yahoo** (~4yr). Fully automatic; the source is
+  shown on every result.
+- **Compare and the bulk screener** always use Yahoo's cheap batched endpoints (an EDGAR fetch per
+  name across a thousand-name universe would be far too heavy).
+- **SEC etiquette:** EDGAR asks for a descriptive `User-Agent` with a contact — set `SEC_EDGAR_UA`
+  in `.env` (default works out of the box). We stay well under SEC's 10 req/sec limit.
 - `data.py` returns a normalized dict; nothing downstream depends on a specific provider. To add
   another source (FMP / Tiingo / EODHD), implement a `fetch_stock()` returning the same shape — see
-  `simfin.py` as the template.
-- The $15/mo SimFin tier unlocks 10–20yr history (and enough credits to run the screener on SimFin)
-  with no code changes.
+  `edgar.py` / `simfin.py` as templates.
+- The backtest can run on EDGAR's deep history with `--edgar` — the fix for the short-lookback data
+  starvation that Yahoo's ~4yr window causes.

@@ -72,6 +72,9 @@ def main():
     ap.add_argument("--scope", choices=["core", "full", "large"], default="core")
     ap.add_argument("--simfin", action="store_true",
                     help="use SimFin (7yr) instead of Yahoo — needs SIMFIN_API_KEY, spends credits")
+    ap.add_argument("--edgar", action="store_true",
+                    help="use SEC EDGAR (10-19yr as-filed) — free, slower per name, "
+                         "but the deepest history and the fix for short-lookback starvation")
     args = ap.parse_args()
     if args.simfin:
         try:
@@ -86,7 +89,7 @@ def main():
     results = []
     for i, sym in enumerate(symbols, 1):
         try:
-            stock = fetch_stock(sym, use_simfin=args.simfin)
+            stock = fetch_stock(sym, use_simfin=args.simfin, use_edgar=args.edgar)
             if stock.get("error"):
                 continue
             yrs = sorted(int(y) for y in stock["statements"]["revenue"])

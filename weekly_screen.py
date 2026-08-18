@@ -48,7 +48,7 @@ def usd(x):
 
 
 def _analyze(sym, assumptions):
-    stock = fetch_stock(sym)
+    stock = fetch_stock(sym, use_edgar=False)  # bulk scan: Yahoo only (fast)
     if stock.get("error"):
         return None, stock["error"]
     m = compute_metrics(stock, assumptions)
