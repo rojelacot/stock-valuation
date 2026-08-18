@@ -795,15 +795,56 @@ function returnSection(d) {
 }
 
 function pillarsSection(d) {
-  const rows = d.verdict.pillars.map(p => {
-    const pct = Math.round((p.points / p.max) * 100);
+  const v = d.verdict;
+  const pillars = v.pillars || [];
+  const raw = pillars.reduce((s, p) => s + p.points, 0);
+  const maxTotal = pillars.reduce((s, p) => s + p.max, 0) || 100;
+  const penalty = v.forensic_penalty || 0;
+  const final = v.score;
+  const rc = { "BUY": "good", "HOLD / WATCH": "warn", "AVOID": "bad" }[v.rating] || "warn";
+
+  const rows = pillars.map(p => {
+    const pct = p.max ? Math.round((p.points / p.max) * 100) : 0;
     const col = pct >= 66 ? "good" : pct >= 40 ? "warn" : "bad";
     return `<div class="mb-3">
-      <div class="flex justify-between text-sm mb-1"><span>${p.name}</span><span class="text-muted">${p.points}/${p.max}</span></div>
+      <div class="flex justify-between text-sm mb-1"><span>${p.name}</span><span class="font-mono text-${col}">${p.points}<span class="text-muted">/${p.max}</span></span></div>
       <div class="h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-${col} rounded-full" style="width:${pct}%"></div></div>
       <p class="text-[11px] text-muted mt-1">${p.note}</p></div>`;
   }).join("");
-  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">Scorecard breakdown</h3>${rows}</section>`);
+
+  const strongest = pillars.reduce((a, b) => (b.points > a.points ? b : a), pillars[0] || {});
+  const biggestGap = pillars.map(p => ({ p, gap: p.max - p.points }))
+    .reduce((a, b) => (b.gap > a.gap ? b : a), { p: pillars[0] || {}, gap: 0 }).p;
+
+  // 0–100 band: AVOID (<50) | HOLD (50–69) | BUY (≥70), with a marker at the score.
+  const band = `
+    <div class="relative h-7 rounded-lg overflow-hidden border border-line/60 flex text-[10px] font-semibold">
+      <div class="bg-bad/25 text-bad grid place-items-center" style="width:50%">AVOID</div>
+      <div class="bg-warn/25 text-warn grid place-items-center" style="width:20%">HOLD</div>
+      <div class="bg-good/25 text-good grid place-items-center" style="width:30%">BUY</div>
+      <div class="absolute -top-0.5 -bottom-0.5 w-1 bg-white rounded" style="left:calc(${Math.min(100, Math.max(0, final))}% - 2px)"></div>
+    </div>
+    <div class="flex justify-between text-[10px] text-muted mt-1 mb-5"><span>0</span><span>50</span><span>70</span><span>100</span></div>`;
+
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
+      <h3 class="font-semibold">Why this score</h3>
+      <div class="text-sm">Final <span class="font-bold text-${rc}">${final}/100</span> · <span class="text-${rc} font-medium">${v.rating}</span></div>
+    </div>
+    <p class="text-xs text-muted mb-4">Six weighted pillars sum to a raw score; forensic red flags (distress / manipulation) dock it. Each pillar shows exactly what it credited and why.</p>
+    ${band}
+    <div class="grid grid-cols-3 gap-2 mb-5 text-center">
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Pillar points</div><div class="text-lg font-bold">${raw}<span class="text-muted text-sm">/${maxTotal}</span></div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Forensic penalty</div><div class="text-lg font-bold ${penalty > 0 ? "text-bad" : "text-muted"}">${penalty > 0 ? "−" + penalty : "0"}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5 border border-${rc}/40"><div class="text-[11px] text-muted">Final score</div><div class="text-lg font-bold text-${rc}">${final}</div></div>
+    </div>
+    ${rows}
+    <div class="mt-4 pt-3 border-t border-line/40 grid sm:grid-cols-2 gap-2 text-[11px]">
+      <div><span class="text-good font-medium">Carrying the score:</span> <span class="text-muted">${strongest.name || "—"} (${strongest.points ?? "—"}/${strongest.max ?? "—"})</span></div>
+      <div><span class="text-bad font-medium">Biggest drag:</span> <span class="text-muted">${biggestGap.name || "—"} (${biggestGap.points ?? "—"}/${biggestGap.max ?? "—"})</span></div>
+    </div>
+  </section>`);
 }
 
 function flagsSection(d) {
