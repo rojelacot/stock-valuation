@@ -234,6 +234,19 @@ def compute_metrics(stock: dict[str, Any],
         target_margin = nm_latest + (nm_avg - nm_latest) * mn
         margin_ratio = max(target_margin / nm_latest, 0.0)
 
+    # ---- Data-sanity guard ----
+    # A broken data feed (e.g. revenue picking up a small partial line) can produce
+    # physically impossible fundamentals and a confident-looking but garbage
+    # valuation. A sustained net margin above 100%, or non-positive revenue, is not
+    # real — flag it so the valuation is treated as unreliable rather than a bargain.
+    _rev_latest = revenue[-1][1] if revenue else None
+    data_bad_reason = None
+    if nm_latest is not None and abs(nm_latest) > 1.0:
+        data_bad_reason = (f"implied net margin {nm_latest*100:.0f}% isn't physically "
+                           "possible — the revenue figure looks wrong (bad data feed).")
+    elif _rev_latest is not None and _rev_latest <= 0:
+        data_bad_reason = "non-positive revenue — the data looks broken."
+
     # ---- Returns on capital (ROE, ROIC-ish) ----
     equity = dict(_series(st["total_equity"]))
     debt = dict(_series(st["total_debt"]))
@@ -338,6 +351,10 @@ def compute_metrics(stock: dict[str, Any],
 
     # ---- Valuation range: the width IS the capex distortion ----
     valuation = build_valuation_range(dcf, dcf_owner, info, A["margin_of_safety"])
+    if data_bad_reason:  # data-sanity guard overrides any apparent bargain
+        valuation["suspect"] = True
+        valuation["suspect_reason"] = "Data quality: " + data_bad_reason
+        valuation["data_quality_bad"] = True
 
     # ---- Multiples vs the stock's own recent history ----
     multiples = compute_multiples(stock, eps, fcf)

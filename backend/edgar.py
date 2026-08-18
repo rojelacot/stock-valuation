@@ -234,15 +234,43 @@ def _tag_series(node: Any, unit: str, instant: bool) -> dict[str, tuple[str, flo
 
 def _concept(facts: dict[str, Any], tags: list[str], unit: str,
              negate: bool, instant: bool) -> dict[str, float]:
-    """Merge candidate tags into one {year: value} series (priority tag wins)."""
-    merged: dict[str, float] = {}
+    """Merge candidate tags into one {year: value} series.
+
+    A concept's history often spans a tag change (e.g. Revenues -> ASC 606
+    RevenueFromContractWithCustomer), so we stitch tags together. But some filers
+    report BOTH a total line and a much smaller partial line under different tags
+    (e.g. an insurer's total 'Revenues' vs a small 'RevenueFromContractWithCustomer'
+    fee subset) — naively letting the higher-priority tag win per year mixes the
+    two and creates a fake order-of-magnitude cliff. So: take the tag with the
+    LONGEST annual history as the primary series (ties broken by priority order),
+    then back-fill missing years from other tags ONLY when the value is within an
+    order of magnitude of the primary's scale.
+    """
+    per_tag: dict[str, dict[str, float]] = {}
     for tag in tags:
         node = facts.get(tag)
         if not node:
             continue
-        for yr, (_, val) in _tag_series(node, unit, instant).items():
-            merged.setdefault(yr, -val if negate else val)
-    return merged
+        s = {yr: val for yr, (_, val) in _tag_series(node, unit, instant).items()}
+        if s:
+            per_tag[tag] = s
+    if not per_tag:
+        return {}
+    primary = max(per_tag, key=lambda t: (len(per_tag[t]), -tags.index(t)))
+    merged: dict[str, float] = dict(per_tag[primary])
+    scale = sorted(abs(v) for v in merged.values() if v)
+    ref = scale[len(scale) // 2] if scale else 0.0  # median magnitude of primary
+    for tag in tags:
+        s = per_tag.get(tag)
+        if not s or tag == primary:
+            continue
+        for yr, val in s.items():
+            if yr in merged:
+                continue
+            if ref and val and not (ref / 10 <= abs(val) <= ref * 10):
+                continue  # scale-inconsistent (partial vs total line) — don't stitch
+            merged[yr] = val
+    return {yr: (-v if negate else v) for yr, v in merged.items()}
 
 
 def fetch_statements(ticker: str) -> dict[str, Any]:
