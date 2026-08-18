@@ -874,7 +874,9 @@ function watchlistControl(d) {
         <input id="wlNotes" placeholder="why you'd own it, what to watch…" class="w-full bg-ink/60 border border-line rounded-lg px-3 py-2 text-sm mt-1">
       </div>
       <div><label class="text-xs text-muted">Buy / paid price</label>
-        <input id="wlBuyPrice" type="number" step="0.01" placeholder="—" class="w-28 bg-ink/60 border border-line rounded-lg px-2 py-2 text-sm mt-1"></div>
+        <input id="wlBuyPrice" type="number" step="0.01" placeholder="—" class="w-24 bg-ink/60 border border-line rounded-lg px-2 py-2 text-sm mt-1"></div>
+      <div><label class="text-xs text-muted">Shares</label>
+        <input id="wlShares" type="number" step="0.0001" placeholder="—" class="w-24 bg-ink/60 border border-line rounded-lg px-2 py-2 text-sm mt-1"></div>
       <label class="text-sm flex items-center gap-2 pb-2"><input id="wlOwned" type="checkbox" class="accent-brand w-4 h-4"> Owned</label>
       <button id="wlSave" class="bg-brand hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition active:scale-95">⭐ Save to watchlist</button>
       <span id="wlMsg" class="text-xs text-good self-center"></span>
@@ -887,10 +889,11 @@ function wireWatchlistControl(d) {
   const save = $("wlSave");
   if (!save) return;
   save.addEventListener("click", async () => {
-    const bp = $("wlBuyPrice").value;
+    const bp = $("wlBuyPrice").value, sh = $("wlShares").value;
     let q = `ticker=${encodeURIComponent(d.ticker)}&notes=${encodeURIComponent($("wlNotes").value)}` +
             `&owned=${$("wlOwned").checked}&thesis=${encodeURIComponent(d.qualitative?.investment_thesis || "")}`;
     if (bp) q += `&buy_price=${bp}`;
+    if (sh) q += `&shares=${sh}`;
     try { await fetch(`/api/watchlist?${q}`, { method: "POST" }); $("wlMsg").textContent = "Saved ✓"; }
     catch { $("wlMsg").textContent = "Save failed"; }
   });
@@ -913,6 +916,7 @@ function renderWatchlist(d) {
       <p class="text-sm">Analyze a stock, then hit <span class="text-brand">⭐ Save to watchlist</span> to track it here.</p></section>`));
     el.classList.remove("hidden"); return;
   }
+  if (d.portfolio) el.append(portfolioCard(d.portfolio));
   const inZone = d.rows.filter(r => r.in_buy_zone).length;
   el.append(h(`<section class="card rounded-2xl p-5">
     <div class="flex items-center justify-between"><h3 class="font-semibold">⭐ Watchlist (${d.count})</h3>
@@ -929,6 +933,35 @@ function renderWatchlist(d) {
     }));
   document.querySelectorAll("[data-wl-open]").forEach(row =>
     row.addEventListener("click", () => { switchMode("analyze"); $("ticker").value = row.dataset.wlOpen; analyze(row.dataset.wlOpen); window.scrollTo({ top: 0, behavior: "smooth" }); }));
+}
+
+function portfolioCard(p) {
+  const cell = (label, val, sub = "", color = "") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60"><div class="text-xs text-muted">${label}</div>
+      <div class="text-lg font-semibold mt-0.5 ${color}">${val}</div>${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}</div>`;
+  const gainC = p.gain_pct == null ? "" : p.gain_pct >= 0 ? "text-good" : "text-bad";
+  const conc = p.largest_position_pct;
+  const alloc = p.sector_allocation.map(([sec, w]) =>
+    `<div class="flex items-center gap-2 text-xs"><div class="w-28 truncate text-muted">${sec}</div>
+      <div class="flex-1 h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-brand rounded-full" style="width:${(w * 100).toFixed(0)}%"></div></div>
+      <div class="w-10 text-right">${fmtPct(w, 0)}</div></div>`).join("");
+  return h(`<section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4">📦 Portfolio ${p.value_weighted ? "" : `<span class="text-xs text-muted font-normal">· equal-weighted (add shares for $ values)</span>`}</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+      ${p.value_weighted ? cell("Market value", "$" + fmtMoney(p.total_value)) : cell("Positions", p.n_positions)}
+      ${p.value_weighted ? cell("Cost basis", "$" + fmtMoney(p.total_cost)) : cell("Sectors", p.n_sectors)}
+      ${p.gain_pct != null ? cell("Unrealized gain", (p.gain >= 0 ? "+$" : "-$") + fmtMoney(Math.abs(p.gain)), signPct(p.gain_pct), gainC) : cell("Sectors", p.n_sectors)}
+      ${cell("Weighted score", p.weighted_score, "portfolio quality")}
+    </div>
+    <div class="grid md:grid-cols-2 gap-6">
+      <div><div class="text-sm text-muted mb-2">Sector allocation</div><div class="space-y-1.5">${alloc}</div></div>
+      <div><div class="text-sm text-muted mb-2">Diversification</div>
+        <div class="text-sm space-y-1">
+          <div>${p.n_positions} positions across ${p.n_sectors} sector${p.n_sectors === 1 ? "" : "s"}</div>
+          <div class="${conc > 0.4 ? "text-warn" : "text-muted"}">Largest position: ${fmtPct(conc, 0)}${conc > 0.4 ? " — concentrated" : ""}</div>
+        </div></div>
+    </div>
+  </section>`);
 }
 
 function watchlistRow(r) {

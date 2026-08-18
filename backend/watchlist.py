@@ -31,7 +31,7 @@ def upsert(ticker: str, fields: dict[str, Any], today: str) -> dict[str, Any]:
     data = load()
     ticker = ticker.strip().upper()
     entry = data.get(ticker, {"added": today})
-    for k in ("notes", "buy_price", "thesis", "owned"):
+    for k in ("notes", "buy_price", "thesis", "owned", "shares"):
         if k in fields:
             entry[k] = fields[k]
     if "thesis_breakers" in fields:

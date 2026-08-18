@@ -302,16 +302,56 @@ def watchlist_list():
             row["error"] = str(getattr(e, "detail", e))
         rows.append(row)
     rows.sort(key=lambda x: (not x.get("in_buy_zone"), -(x.get("score") or 0)))
-    return {"rows": rows, "count": len(rows)}
+    return {"rows": rows, "count": len(rows), "portfolio": _portfolio_summary(rows)}
+
+
+def _portfolio_summary(rows: list[dict]) -> Optional[dict[str, Any]]:
+    """Aggregate the owned positions: value/cost/gain, sector allocation,
+    value- (or equal-) weighted score, and diversification."""
+    pos = [r for r in rows if r.get("owned") and r.get("price") is not None]
+    if not pos:
+        return None
+    has_shares = any(r.get("shares") for r in pos)
+    weights, total_value, total_cost = {}, 0.0, 0.0
+    for r in pos:
+        if has_shares:
+            sh = r.get("shares") or 0
+            val = sh * r["price"]
+            total_cost += sh * (r.get("buy_price") or r["price"])
+        else:
+            val = 1.0  # equal weight
+        weights[r["ticker"]] = val
+        total_value += val
+    if total_value <= 0:
+        return None
+    sectors: dict[str, float] = {}
+    wscore = 0.0
+    for r in pos:
+        w = weights[r["ticker"]] / total_value
+        sectors[r.get("sector") or "Other"] = sectors.get(r.get("sector") or "Other", 0) + w
+        wscore += w * (r.get("score") or 0)
+    top = max(weights.values()) / total_value
+    return {
+        "n_positions": len(pos),
+        "n_sectors": len(sectors),
+        "value_weighted": has_shares,
+        "total_value": total_value if has_shares else None,
+        "total_cost": total_cost if has_shares else None,
+        "gain": (total_value - total_cost) if (has_shares and total_cost) else None,
+        "gain_pct": ((total_value - total_cost) / total_cost) if (has_shares and total_cost) else None,
+        "weighted_score": round(wscore, 1),
+        "largest_position_pct": top,
+        "sector_allocation": sorted(sectors.items(), key=lambda kv: -kv[1]),
+    }
 
 
 @app.post("/api/watchlist")
 def watchlist_add(ticker: str, notes: str = "", buy_price: Optional[float] = None,
-                  owned: bool = False, thesis: str = ""):
-    from datetime import date as _date
+                  owned: bool = False, thesis: str = "", shares: Optional[float] = None):
     entry = watchlist.upsert(ticker, {
         "notes": notes, "buy_price": buy_price, "owned": owned, "thesis": thesis,
-    }, _date.today().isoformat())
+        "shares": shares,
+    }, date.today().isoformat())
     return {"ticker": ticker.strip().upper(), "entry": entry}
 
 
