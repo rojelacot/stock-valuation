@@ -35,26 +35,52 @@ cp .env.example .env    # then paste your ANTHROPIC_API_KEY into .env
 ```
 Then open http://127.0.0.1:8000 and type a ticker (AAPL, MSFT, KO, GOOGL, JNJ, BRK-B…).
 
-## Three modes
-- **Analyze one** — full report for a single ticker (verdict, DCF, scorecard, charts, AI read).
+## Four modes
+- **Analyze one** — the full single-stock report (see the feature list below).
 - **Compare** — up to 15 tickers ranked side-by-side under the same assumptions.
-- **Weekly buy screen** — scans a curated universe of ~55 quality names and surfaces the
-  ones clearing your buy bar (score ≥ 70 by default). Run it about once a week.
+- **Weekly buy screen** — scans a universe (Core/Full/Large) and surfaces names clearing your
+  buy bar (score ≥ 80 by default), grouped by sector, with a week-over-week diff.
+- **Watchlist** — save any analysis with notes/buy-price/shares; tracked live against its
+  buy-below price, with a portfolio roll-up. See "Watchlist & portfolio" below.
 
 Every mode obeys the shared **valuation-assumptions** panel — drag the sliders (discount rate,
 terminal growth, projection years, inflation hurdle, margin of safety) and the single-ticker view
 recomputes live (no re-fetch, no re-call to Claude).
 
+## What the single-stock analysis shows
+- **Verdict** — 0–100 score → Buy / Hold / Avoid, with the reasoning and strengths/watch-outs.
+- **Intrinsic value range** — conservative (FCF) → adjusted (owner-earnings) DCF; scores off the midpoint.
+- **Scenarios & reverse DCF** — bear/base/bull fair values, a discount-rate × growth **sensitivity grid**,
+  and the growth rate the current price *implies* ("what does the market expect?").
+- **Valuation multiples & capital efficiency** — P/E, forward P/E, PEG (trailing proxy when needed),
+  P/B, P/FCF, P/S, EV/EBITDA·EBIT·Sales, FCF yield, **ROIC (NOPAT) vs WACC** value-creation spread,
+  **Piotroski F-Score**, shareholder yield / payout, dilution, **valuation vs its own history**.
+- **Earnings quality & capex cycle** — capex-to-depreciation, maintenance/growth capex split, owner
+  earnings vs net income, cash conversion, SBC, accruals.
+- **Analyst view & sentiment** — price targets, coverage, recommendation, short interest, net insider
+  activity (free Yahoo data).
+- **Dividend safety** — DPS, dividend growth, FCF coverage, payout (for payers).
+- **Trends** — price, revenue, FCF, EPS/ROE, margins, and ROIC/ROE over time.
+- **AI read (Claude)** — moat, management, risks, bull/bear, catalysts, investment thesis, thesis-breakers.
+- **Peers & sector benchmarking** — same-sector comparison and metrics vs the sector median.
+- **Primary sources** — direct links to the 10-K / 10-Q / DEF 14A / transcripts, plus what to check yourself.
+
 ## What each part does
 | File | Role |
 |---|---|
-| `backend/data.py` | Fetch + normalize price history (10yr) + financials (~4yr) + key stats, direct from Yahoo's JSON endpoints via `curl_cffi` |
-| `backend/valuation.py` | Growth CAGRs, ROE/ROIC, margins, **DCF**, multiples, expected return — all under tunable assumptions |
-| `backend/scoring.py` | 6-pillar composite score → Buy/Hold/Avoid with reasons |
-| `backend/qualitative.py` | Claude's moat / management / risk assessment (optional) |
-| `backend/main.py` | FastAPI: `/api/analyze`, `/api/compare`, `/api/screen` + serves the dashboard |
-| `frontend/` | Single-page dashboard, 3 tabs (Tailwind + Chart.js via CDN, no build step) |
-| `weekly_screen.py` | Headless weekly screen — prints the buy list and saves a dated report to `reports/` (no server needed) |
+| `backend/data.py` | Yahoo JSON fetch (via `curl_cffi`) + normalize; SimFin dispatch/fallback; bulk market-cap prefilter; free analyst/sentiment supplement |
+| `backend/simfin.py` | SimFin v3 adapter for the single-stock view (~7yr statements), same normalized shape |
+| `backend/valuation.py` | Growth CAGRs, ROE/ROIC, margins, **DCF value range**, scenarios, reverse DCF, sensitivity grid, expected return |
+| `backend/duediligence.py` | EV multiples, NOPAT-ROIC vs **WACC**, Piotroski, capital returns, dividend safety, valuation-vs-history, accruals |
+| `backend/earnings_quality.py` | Capex-cycle / owner-earnings / cash-conversion analysis |
+| `backend/scoring.py` | 6-pillar composite score → Buy/Hold/Avoid with reasons + guardrail flags |
+| `backend/qualitative.py` | Claude's moat / management / risks / catalysts / thesis (optional) |
+| `backend/watchlist.py` + `diffstate.py` | Persistent watchlist/journal + week-over-week candidate diffs |
+| `backend/main.py` | FastAPI: `/api/analyze`, `/api/compare`, `/api/screen`, `/api/peers`, `/api/watchlist` + serves the dashboard |
+| `frontend/` | Single-page dashboard, 4 tabs (Tailwind + Chart.js via CDN, no build step) |
+| `weekly_screen.py` | Headless weekly screen — buy list + AI reads + diff + watchlist alerts, saved to `reports/` |
+| `backtest.py` | Median-weighted validation — as-of score vs forward return |
+| `tests/smoke.py` | Offline robustness tests for the valuation/scoring pipeline |
 
 ## Screening universes
 The screener can scan four preset universes (or your own pasted list):
@@ -159,10 +185,40 @@ understand the business, and size positions as a basket.
 
 ≥70 → **Buy** · 50–69 → **Hold/Watch** · <50 → **Avoid**
 
+## Watchlist & portfolio
+Save any analysis to the **⭐ Watchlist** tab with your notes/thesis, a buy price, share count, and
+an owned flag. Each entry is checked live against its buy-below price and flagged **IN BUY ZONE**
+when it drops in. Owned positions roll up into a **portfolio** view: market value / cost / unrealized
+gain (with shares) or equal-weighted, sector allocation, value-weighted quality score, and a
+concentration/diversification read. The weekly job also flags watchlist names in the buy zone.
+State lives in `reports/watchlist.json`.
+
+## Backtest / validation
+`backtest.py` rebuilds each name's score **as of ~N years ago** (statements truncated to that year,
+price then, look-ahead fields blanked) and measures the actual forward return, bucketed by score.
+It leads with the **median** (outlier-robust) and reports whether higher scores earned higher returns.
+```bash
+.venv/bin/python backtest.py --years 2                 # core universe, Yahoo
+.venv/bin/python backtest.py --years 3 --scope full    # deeper lookback
+.venv/bin/python backtest.py --years 3 --simfin        # SimFin's 7yr (spends credits)
+```
+Directional only (restated statements, no dividends), but across runs it consistently shows the
+score sorts stocks by typical forward return.
+
+## Tests
+`python tests/smoke.py` runs offline robustness checks — the valuation/scoring pipeline must survive
+degenerate data (empty/zero/negative/missing) without crashing and keep scores in range.
+
 ## Tuning
 Assumptions (discount rate, terminal growth, inflation hurdle, margin of safety) live at the
-top of `backend/valuation.py` and `scoring.py`. Change them to match your own required return.
+top of `backend/valuation.py` and `scoring.py`, or drag the sliders live in the app.
 
-## Swapping the data source later
-`data.py` returns a normalized dict; nothing downstream touches yfinance directly. To move to
-Financial Modeling Prep / Tiingo / Polygon, reimplement `fetch_stock()` to return the same shape.
+## Data sources
+- **Single-stock Analyze** uses **SimFin** when `SIMFIN_API_KEY` is set (~7yr statements, free tier),
+  else **Yahoo** — with automatic fallback. It's always enriched with free Yahoo analyst estimates
+  and sentiment. Compare and the screener always use Yahoo (SimFin credits are limited).
+- `data.py` returns a normalized dict; nothing downstream depends on a specific provider. To add
+  another source (FMP / Tiingo / EODHD), implement a `fetch_stock()` returning the same shape — see
+  `simfin.py` as the template.
+- The $15/mo SimFin tier unlocks 10–20yr history (and enough credits to run the screener on SimFin)
+  with no code changes.
