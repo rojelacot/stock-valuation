@@ -97,13 +97,15 @@ def _get_stock(ticker: str, refresh: bool = False, use_simfin: bool = False,
 
 
 def _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                            inflation_hurdle, margin_of_safety) -> dict[str, Any]:
+                            inflation_hurdle, margin_of_safety,
+                            margin_normalization=None) -> dict[str, Any]:
     return resolve_assumptions({
         "discount_rate": discount_rate,
         "terminal_growth": terminal_growth,
         "projection_years": projection_years,
         "inflation_hurdle": inflation_hurdle,
         "margin_of_safety": margin_of_safety,
+        "margin_normalization": margin_normalization,
     })
 
 
@@ -151,9 +153,10 @@ def analyze_ticker(
     projection_years: Optional[float] = Query(None),
     inflation_hurdle: Optional[float] = Query(None),
     margin_of_safety: Optional[float] = Query(None),
+    margin_normalization: Optional[float] = Query(None),
 ):
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety)
+                                inflation_hurdle, margin_of_safety, margin_normalization)
     # Single-stock view may use SimFin (if a key is set); bulk paths never do.
     return _analyze_one(ticker, a, use_ai, refresh, use_simfin=True)
 
@@ -225,11 +228,12 @@ def compare_tickers(
     projection_years: Optional[float] = Query(None),
     inflation_hurdle: Optional[float] = Query(None),
     margin_of_safety: Optional[float] = Query(None),
+    margin_normalization: Optional[float] = Query(None),
 ):
     """Compact side-by-side summary for a watchlist. No AI (kept fast); uses the
     same assumptions across all names so the ranking is apples-to-apples."""
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety)
+                                inflation_hurdle, margin_of_safety, margin_normalization)
     symbols = [t.strip().upper() for t in tickers.replace(",", " ").split() if t.strip()]
     symbols = list(dict.fromkeys(symbols))[:15]
     if not symbols:
@@ -249,6 +253,7 @@ def screen_universe(
     projection_years: Optional[float] = Query(None),
     inflation_hurdle: Optional[float] = Query(None),
     margin_of_safety: Optional[float] = Query(None),
+    margin_normalization: Optional[float] = Query(None),
 ):
     """Scan a universe of quality names and surface those clearing the buy bar.
 
@@ -256,7 +261,7 @@ def screen_universe(
     ('core' or 'full'). Returns every scanned name ranked best-first, plus the
     subset at/above `min_score` (default 70 = the BUY threshold)."""
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety)
+                                inflation_hurdle, margin_of_safety, margin_normalization)
     if universe:
         symbols = [t.strip().upper() for t in universe.replace(",", " ").split() if t.strip()]
     else:
@@ -345,13 +350,14 @@ def screen_start(min_score: int = 80, universe: Optional[str] = None,
                  terminal_growth: Optional[float] = Query(None),
                  projection_years: Optional[float] = Query(None),
                  inflation_hurdle: Optional[float] = Query(None),
-                 margin_of_safety: Optional[float] = Query(None)):
+                 margin_of_safety: Optional[float] = Query(None),
+                 margin_normalization: Optional[float] = Query(None)):
     """Start a screen in the background; returns a job id to poll via
     /api/screen/status. Lets the large-cap (~900-name, ~25min) scan run without
     a blocking, timeout-prone request."""
     _prune_jobs()
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety)
+                                inflation_hurdle, margin_of_safety, margin_normalization)
     if universe:
         symbols = [t.strip().upper() for t in universe.replace(",", " ").split() if t.strip()]
     else:

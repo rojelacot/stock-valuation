@@ -72,6 +72,10 @@
           <div class="flex justify-between"><span>Margin of safety</span><span id="v_margin_of_safety" class="text-brand font-mono"></span></div>
           <input type="range" id="margin_of_safety" min="0" max="60" step="5" class="w-full mt-1.5">
         </label>
+        <label class="text-sm">
+          <div class="flex justify-between"><span>Margin normalization <span class="text-muted" title="Scales the earnings base toward the stock's own long-run average net margin. 0% = as reported; 100% = full reversion. A stress test for peak (or trough) profitability.">ⓘ</span></span><span id="v_margin_normalization" class="text-brand font-mono"></span></div>
+          <input type="range" id="margin_normalization" min="0" max="100" step="5" class="w-full mt-1.5">
+        </label>
         <div class="flex items-end">
           <button id="resetAssume" class="text-sm text-muted hover:text-brand underline decoration-dotted">Reset to defaults</button>
         </div>
@@ -171,6 +175,6 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/app.js?v=4"></script>
 </body>
 </html>

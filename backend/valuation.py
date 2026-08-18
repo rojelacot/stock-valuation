@@ -26,6 +26,7 @@ DEFAULT_ASSUMPTIONS = {
     "projection_years": DEFAULT_PROJECTION_YEARS,
     "inflation_hurdle": INFLATION_HURDLE,
     "margin_of_safety": MARGIN_OF_SAFETY,
+    "margin_normalization": 0.0,       # 0 = as-reported; 1 = revert to long-run avg margin
 }
 
 
@@ -48,6 +49,7 @@ def resolve_assumptions(a: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     out["projection_years"] = int(min(max(out["projection_years"], 3), 20))
     out["inflation_hurdle"] = min(max(out["inflation_hurdle"], 0.0), 0.15)
     out["margin_of_safety"] = min(max(out["margin_of_safety"], 0.0), 0.60)
+    out["margin_normalization"] = min(max(out["margin_normalization"], 0.0), 1.0)
     return out
 
 
@@ -219,6 +221,19 @@ def compute_metrics(stock: dict[str, Any],
     operating = margin_series(operating_income_s)
     net_margin = margin_series(net_income)
 
+    # ---- Margin-normalization stress lever ----
+    # Scale the earnings base that feeds the DCF toward the company's own long-run
+    # average net margin: 0 = as-reported (no change), 1 = full reversion to the
+    # average. Lets you ask "what's it worth if today's peak (or trough) margins
+    # normalize?" — the DCF, scenarios, Monte-Carlo, expected return and score all
+    # follow. Skipped when margins are non-positive or unavailable.
+    mn = A.get("margin_normalization", 0.0)
+    nm_latest, nm_avg = net_margin.get("latest"), net_margin.get("avg")
+    margin_ratio, target_margin = 1.0, nm_latest
+    if mn > 0 and nm_latest and nm_latest > 0 and nm_avg and nm_avg > 0:
+        target_margin = nm_latest + (nm_avg - nm_latest) * mn
+        margin_ratio = max(target_margin / nm_latest, 0.0)
+
     # ---- Returns on capital (ROE, ROIC-ish) ----
     equity = dict(_series(st["total_equity"]))
     debt = dict(_series(st["total_debt"]))
@@ -269,6 +284,8 @@ def compute_metrics(stock: dict[str, Any],
 
     # ---- Normalized base FCF (shared by DCF + expected return) ----
     base_fcf = _normalized_base_fcf(fcf, info.get("free_cashflow_ttm"))
+    if base_fcf and margin_ratio != 1.0:
+        base_fcf *= margin_ratio
 
     # Guardrail 3: with only a short history, extrapolate growth more cautiously.
     yrs = growth.get("years_of_data") or 0
@@ -304,6 +321,8 @@ def compute_metrics(stock: dict[str, Any],
     base_ni = _normalized_base_fcf(net_income, None)
     is_fin = needs_earnings_valuation(info)
     earnings_base = base_ni if is_fin else (eq.get("owner_earnings") or base_ni)
+    if earnings_base and margin_ratio != 1.0:
+        earnings_base *= margin_ratio
     dcf_owner = discounted_cash_flow(
         base_fcf=earnings_base,
         info=info,
@@ -368,6 +387,11 @@ def compute_metrics(stock: dict[str, Any],
         "sensitivity": sensitivity,
         "monte_carlo": monte_carlo,
         "forensics": forensic_scores,
+        "margin_normalization": {
+            "factor": mn, "ratio": margin_ratio, "applied": margin_ratio != 1.0,
+            "latest_margin": nm_latest, "avg_margin": nm_avg,
+            "target_margin": target_margin,
+        },
         "earnings_quality": eq,
         "dcf_owner": dcf_owner,
         "valuation": valuation,
