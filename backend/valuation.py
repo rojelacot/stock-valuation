@@ -351,6 +351,40 @@ def compute_metrics(stock: dict[str, Any],
 
     # ---- Valuation range: the width IS the capex distortion ----
     valuation = build_valuation_range(dcf, dcf_owner, info, A["margin_of_safety"])
+
+    # For financials (banks/insurers/brokers), replace the meaningless FCF/earnings
+    # DCF with the justified price-to-book model (book value x sustainable ROE) —
+    # the method that actually fits them. Through-cycle average ROE keeps a
+    # cyclical peak from inflating the value.
+    fin_valuation = None
+    price = info.get("current_price")
+    if is_fin:
+        import financials
+        fin_shares = (info.get("shares_outstanding")
+                      or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
+        # Sustainable ROE = median of the last ~7 years: current-regime (not
+        # dragged by a 2008 that may never recur) yet smoothed against a single
+        # peak/trough. Falls back to the full-history average.
+        _roe_recent = [roe_by_year[y] for y in sorted(roe_by_year)][-7:]
+        if _roe_recent:
+            _rs = sorted(_roe_recent); _n = len(_rs)
+            fin_roe = _rs[_n // 2] if _n % 2 else (_rs[_n // 2 - 1] + _rs[_n // 2]) / 2
+        else:
+            fin_roe = returns.get("roe_avg") or returns.get("roe_latest")
+        fv = financials.value(latest_equity, fin_shares, fin_roe, eff_discount,
+                              A["terminal_growth"], price, A["margin_of_safety"])
+        # The P/B model only fits balance-sheet financials, where book value ≈
+        # economic capital. Capital-light "financials" — payment networks (V, MA),
+        # exchanges, capital-light fintechs — earn enormous ROE on tiny equity, so
+        # book value is meaningless (Mastercard: 156% ROE, 64x book). Detect them
+        # (very high ROE AND very high price/book) and keep the earnings valuation.
+        capital_light = (fin_roe is not None and fin_roe > 0.35
+                         and fv.get("current_pb") is not None and fv["current_pb"] > 8)
+        if fv.get("ok") and not capital_light:
+            fv["roe_basis"] = "7yr median"
+            valuation = fv
+            fin_valuation = fv
+
     if data_bad_reason:  # data-sanity guard overrides any apparent bargain
         valuation["suspect"] = True
         valuation["suspect_reason"] = "Data quality: " + data_bad_reason
@@ -388,6 +422,17 @@ def compute_metrics(stock: dict[str, Any],
                                    A["terminal_growth"], A["projection_years"])
     monte_carlo = monte_carlo_dcf(val_base_cf, info, base_growth, eff_discount,
                                   A["terminal_growth"], A["projection_years"])
+
+    # Financials: flex ROE & required return (not cash-flow growth) for scenarios
+    # and Monte-Carlo, and report the ROE the price implies instead of a growth rate.
+    if fin_valuation:
+        import financials
+        _bvps, _roe = fin_valuation["bvps"], fin_valuation["roe_used"]
+        scenarios = financials.scenarios(_bvps, _roe, eff_discount, A["terminal_growth"], price)
+        monte_carlo = financials.monte_carlo(_bvps, _roe, eff_discount, A["terminal_growth"], price)
+        sensitivity = {"ok": False}  # the DCF discount×growth grid doesn't apply
+        reverse = {"ok": True, "method": "book-value",
+                   "implied_roe": fin_valuation.get("implied_roe")}
 
     # ---- Forensic scores: Altman Z (distress) + Beneish M (manipulation) ----
     import forensics  # lazy: forensics imports this module (needs_earnings_valuation)

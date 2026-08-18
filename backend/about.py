@@ -30,6 +30,9 @@ CAPABILITIES = [
          "assumptions and reports the odds the stock is currently undervalued.",
          "Bear / base / bull fair values, plus a reverse-DCF that reveals the "
          "growth the current price already assumes.",
+         "Banks, insurers and brokers are valued the way analysts actually value "
+         "them — the justified price-to-book model (book value x through-cycle ROE) "
+         "instead of a cash-flow DCF that doesn't fit them.",
      ]},
     {"title": "Scores the business 0-100 -> Buy / Hold / Avoid",
      "items": [

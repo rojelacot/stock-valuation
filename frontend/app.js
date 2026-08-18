@@ -305,18 +305,32 @@ function dcfSection(d, cur) {
   // bar scaled to max of (high value, price)
   const barMax = Math.max(hi || 0, px || 0) * 1.1 || 1;
   const pos = (x) => Math.min(100, Math.max(0, ((x || 0) / barMax) * 100));
-  const methodNote = val.method === "earnings"
+  const methodNote = val.method === "book-value"
+    ? "Valued on the <span class='text-slate-300'>justified price-to-book</span> model — the tool bank &amp; insurance analysts actually use: fair P/B = (ROE − g) / (r − g), applied to book value per share. A financial is worth a premium to book only insofar as its return on equity beats the return you require. Uses through-cycle (7-yr median) ROE so a cyclical peak doesn't inflate it."
+    : val.method === "earnings"
     ? "Valued on <span class='text-slate-300'>earnings power</span> — a free-cash-flow DCF doesn't fit banks / insurers / REITs."
     : "Two DCFs: <span class='text-slate-300'>conservative</span> discounts free cash flow (penalizes all capex); <span class='text-slate-300'>adjusted</span> discounts owner earnings (credits growth capex). The truth sits between.";
   const mn = d.metrics.margin_normalization || {};
   const mnBanner = mn.applied ? `<div class="text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 my-2 leading-relaxed"><strong>Stress test active:</strong> earnings normalized to a ${fmtPct(mn.target_margin, 1)} net margin (${Math.round(mn.factor * 100)}% of the way from the current ${fmtPct(mn.latest_margin, 1)} toward the ${fmtPct(mn.avg_margin, 1)} long-run average). The earnings base is scaled ${mn.ratio.toFixed(2)}×, so this valuation and the score below reflect that assumption — not as-reported earnings.</div>` : "";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
+    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
     ${mnBanner}
     ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed"><strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
     <p class="text-xs text-muted mb-4">${methodNote}</p>
-    ${val.method === "earnings" ? `
+    ${val.method === "book-value" ? `
+    <div class="grid md:grid-cols-3 gap-3 mb-4">
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (justified P/B)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Book value / share</div><div class="text-2xl font-bold text-slate-300">${price(val.bvps, cur)}</div></div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Current P/B</div><div class="text-sm font-semibold">${fmtNum(val.current_pb, 2)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Justified P/B</div><div class="text-sm font-semibold text-brand">${fmtNum(val.justified_pb, 2)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Sustainable ROE <span class="opacity-70">(${val.roe_basis || "7yr"})</span></div><div class="text-sm font-semibold">${fmtPct(val.roe_used, 1)}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Required return</div><div class="text-sm font-semibold">${fmtPct(val.cost_of_equity, 1)}</div></div>
+    </div>
+    ${val.implied_roe != null ? `<p class="text-[11px] text-muted mb-4 leading-relaxed">At today's ${fmtNum(val.current_pb, 1)}× book, the market is implying a sustainable ROE of about <span class="text-slate-200">${fmtPct(val.implied_roe, 1)}</span> — versus the <span class="text-slate-200">${fmtPct(val.roe_used, 1)}</span> the business has actually earned through the cycle. Above it = the market expects returns to improve; below = it's skeptical.</p>` : ""}` : val.method === "earnings" ? `
     <div class="grid md:grid-cols-2 gap-3 mb-5">
       <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (earnings power)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
       <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
@@ -381,6 +395,15 @@ function scenariosSection(d, cur) {
         </table>
         <p class="text-[11px] text-muted mt-2">Bear/bull flex growth, discount rate &amp; terminal growth around the base case.</p>
       </div>
+      ${r && r.method === "book-value" ? `
+      <div>
+        <div class="text-sm text-muted mb-2">Reverse model — what the price implies</div>
+        <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
+          <div class="text-xs text-muted">Sustainable ROE the market is pricing in</div>
+          <div class="text-3xl font-bold text-brand mt-1">${r.implied_roe == null ? "—" : fmtPct(r.implied_roe, 1)}</div>
+          <p class="text-sm text-muted mt-2 leading-relaxed">Versus the ${fmtPct((d.metrics.valuation || {}).roe_used, 1)} this financial has actually earned through the cycle. ${r.implied_roe != null && (d.metrics.valuation || {}).roe_used != null ? (r.implied_roe > d.metrics.valuation.roe_used ? "The market expects returns to <span class='text-slate-200'>improve</span> — a demanding bar." : "The market is <span class='text-slate-200'>skeptical</span> — pricing in returns below the historical level.") : ""}</p>
+        </div>
+      </div>` : `
       <div>
         <div class="text-sm text-muted mb-2">Reverse DCF — what the price implies</div>
         <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
@@ -388,7 +411,7 @@ function scenariosSection(d, cur) {
           <div class="text-3xl font-bold text-brand mt-1">${impl == null ? "—" : (impl >= 0.40 ? "≥40%" : fmtPct(impl, 1)) + "/yr"}</div>
           <p class="text-sm text-muted mt-2 leading-relaxed">Compare with the company's history: revenue ${fmtPct(d.metrics.growth.revenue_cagr, 0)}, FCF ${fmtPct(d.metrics.growth.fcf_cagr, 0)}. ${impl != null && impl >= 0.30 ? "The bar the market sets is demanding — priced for strong growth." : impl != null && impl <= 0.02 ? "The market expects little to no growth — a low bar to beat." : "Ask whether the business can realistically exceed this."}</p>
         </div>
-      </div>
+      </div>`}
     </div>
     ${sensitivityGrid(d, cur)}
   </section>`);
