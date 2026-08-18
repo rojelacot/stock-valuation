@@ -34,6 +34,15 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 app = FastAPI(title="Long-Term Stock Valuation")
 
+
+@app.middleware("http")
+async def _no_cache(request, call_next):
+    """Local, frequently-revised tool: never let the browser serve a stale
+    index.html or app.js, so every revision shows up on a plain reload."""
+    resp = await call_next(request)
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
 _STOCK_CACHE: dict[str, dict] = {}   # ticker -> raw fetch_stock result
 _AI_CACHE: dict[str, dict] = {}      # ticker -> qualitative assessment
 _SUPP_CACHE: dict[str, dict] = {}    # ticker -> free Yahoo market supplement
@@ -363,6 +372,13 @@ def watchlist_delete(ticker: str):
 @app.get("/api/health")
 def health():
     return {"ok": True, "ai_enabled": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+
+
+@app.get("/api/about")
+def about():
+    """Guide-tab content: capabilities & limitations + a live config snapshot."""
+    import about as _about
+    return _about.build()
 
 
 @app.get("/")

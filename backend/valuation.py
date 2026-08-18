@@ -658,9 +658,12 @@ def sensitivity_grid(base_cf: Optional[float], info: dict[str, Any], base_growth
             "base_discount": discount_rate, "base_growth": base_growth}
 
 
+MC_ITERATIONS = 2000  # Monte-Carlo simulation count (Guide tab reads this)
+
+
 def monte_carlo_dcf(base_cf: Optional[float], info: dict[str, Any], base_growth: float,
                     discount_rate: float, terminal_growth: float, years: int,
-                    iterations: int = 2000) -> dict[str, Any]:
+                    iterations: int = MC_ITERATIONS) -> dict[str, Any]:
     """Monte-Carlo intrinsic value.
 
     A single-point DCF is false precision — its answer is only as good as four

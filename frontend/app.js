@@ -83,11 +83,75 @@ function onAssumptionsChanged() {
 function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
-  ["analyze", "compare", "screen", "watchlist"].forEach(m => $("mode-" + m).classList.toggle("hidden", m !== mode));
+  ["analyze", "compare", "screen", "watchlist", "guide"].forEach(m => $("mode-" + m).classList.toggle("hidden", m !== mode));
   $("results").classList.add("hidden");
   $("error").classList.add("hidden");
   $("loading").classList.add("hidden");
   if (mode === "watchlist") loadWatchlist();
+  if (mode === "guide") loadGuide();
+}
+
+// ---------- Guide tab (capabilities & limitations + live config) ----------
+async function loadGuide() {
+  const el = $("guideBody");
+  el.innerHTML = `<div class="text-muted text-sm py-8 text-center">Loading…</div>`;
+  let d;
+  try { d = await getJSON("/api/about"); }
+  catch (e) { el.innerHTML = `<div class="card rounded-2xl p-6 text-bad">${e.message}</div>`; return; }
+  const live = d.live || {};
+  const listCard = (title, groups, accent, mark) => `
+    <section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-4 text-${accent}">${title}</h3>
+      <div class="space-y-4">
+        ${groups.map(g => `
+          <div>
+            <div class="font-medium text-sm mb-1.5">${g.title}</div>
+            <ul class="space-y-1">
+              ${g.items.map(it => `<li class="text-sm text-muted flex gap-2"><span class="text-${accent} shrink-0">${mark}</span><span>${it}</span></li>`).join("")}
+            </ul>
+          </div>`).join("")}
+      </div>
+    </section>`;
+  const s = live.scoring || {}, vd = live.valuation_defaults || {}, un = live.universe_sizes || {};
+  const chip = (label, val) => `<div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${label}</div><div class="text-sm font-semibold">${val}</div></div>`;
+  const pills = (s.pillars || []).map(p => `<div class="flex justify-between items-center bg-ink/40 rounded-lg px-3 py-1.5 text-xs"><span>${p.name}</span><span class="text-brand font-mono ml-2 shrink-0">${p.max} pts</span></div>`).join("");
+  const liveCard = `
+    <section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-1">Live configuration snapshot</h3>
+      <p class="text-xs text-muted mb-4">${live.note || ""}</p>
+      <div class="text-sm font-medium mb-2">Data sources</div>
+      <ul class="space-y-1 mb-5">${(live.data_sources || []).map(x => `<li class="text-xs text-muted flex gap-2"><span class="text-brand shrink-0">•</span><span>${x}</span></li>`).join("")}</ul>
+      <div class="text-sm font-medium mb-2">Key settings</div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+        ${chip("Buy bar", "score ≥ " + s.buy_bar)}
+        ${chip("Hold bar", "score ≥ " + s.hold_bar)}
+        ${chip("Monte-Carlo runs", (vd.monte_carlo_runs || 0).toLocaleString())}
+        ${chip("Forensic max penalty", "−" + s.forensic_max_penalty + " pts")}
+        ${chip("Default discount rate", fmtPct(vd.discount_rate, 0))}
+        ${chip("Terminal growth", fmtPct(vd.terminal_growth, 1))}
+        ${chip("Projection years", vd.projection_years)}
+        ${chip("Margin of safety", fmtPct(vd.margin_of_safety, 0))}
+      </div>
+      <div class="text-sm font-medium mb-2">Screening universes</div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5">
+        ${chip("Core", (un.core || "—") + " names")}
+        ${chip("Full", (un.full || "—") + " names")}
+        ${chip("Large", (un.large || "—") + " names")}
+        ${chip("All US-listed", (un.all_us_listed || "—") + " names")}
+      </div>
+      <div class="text-sm font-medium mb-2">Scoring pillars (weights, out of 100)</div>
+      <div class="grid sm:grid-cols-2 gap-2">${pills || '<span class="text-muted text-xs">n/a</span>'}</div>
+    </section>`;
+  el.innerHTML = "";
+  const wrap = document.createElement("div");
+  wrap.className = "space-y-6 fade-in";
+  wrap.innerHTML =
+    `<div class="card rounded-2xl p-6"><h2 class="text-xl font-semibold mb-1">What this tool does — and doesn't</h2>
+      <p class="text-sm text-muted">Professional-grade fundamental analysis and valuation on individual US stocks, for free, with strong guardrails against value traps — but every number is an informed estimate, not a promise, and the final decision is yours. The snapshot at the bottom is read live from the running code, so this page stays accurate as the app is revised.</p></div>`
+    + listCard("What it does", d.capabilities, "good", "✓")
+    + listCard("Limitations", d.limitations, "warn", "•")
+    + liveCard;
+  el.append(wrap);
 }
 
 // ---------- shared fetch helpers ----------

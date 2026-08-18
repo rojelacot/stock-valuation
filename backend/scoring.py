@@ -9,6 +9,10 @@ from __future__ import annotations
 
 from typing import Any
 
+# Verdict thresholds (single source of truth; the Guide tab reads these).
+BUY_THRESHOLD = 70    # score >= this -> BUY
+HOLD_THRESHOLD = 50   # score >= this -> HOLD / WATCH; below -> AVOID
+
 
 def _pct(x):
     return None if x is None else round(x * 100, 1)
@@ -255,11 +259,11 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
     normalized = max(0, normalized - penalty)
 
     # ---- Verdict thresholds ----
-    if normalized >= 70:
+    if normalized >= BUY_THRESHOLD:
         rating, stance = "BUY", (
             "Meets the quality-at-a-fair-price bar for a 10-15yr hold. Strong "
             "fundamentals with a margin of safety and an inflation-beating expected return.")
-    elif normalized >= 50:
+    elif normalized >= HOLD_THRESHOLD:
         rating, stance = "HOLD / WATCH", (
             "A solid business but either the price offers limited margin of safety or "
             "one pillar is weak. Worth watching for a better entry or confirmation.")

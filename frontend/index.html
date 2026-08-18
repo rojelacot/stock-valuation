@@ -42,6 +42,7 @@
       <div class="tab" data-mode="compare">Compare</div>
       <div class="tab" data-mode="screen">Weekly buy screen</div>
       <div class="tab" data-mode="watchlist">Watchlist</div>
+      <div class="tab" data-mode="guide">Guide</div>
     </div>
 
     <!-- Assumptions panel (shared) -->
@@ -145,6 +146,11 @@
       </div>
     </section>
 
+    <!-- ===== Guide mode ===== -->
+    <section id="mode-guide" class="hidden">
+      <div id="guideBody"><div class="text-muted text-sm">Loading…</div></div>
+    </section>
+
     <!-- Shared loading / error / results -->
     <div id="loading" class="hidden text-center py-16">
       <div class="inline-block w-8 h-8 border-2 border-brand/30 border-t-brand rounded-full animate-spin"></div>
@@ -165,6 +171,6 @@
     </footer>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=2"></script>
 </body>
 </html>
