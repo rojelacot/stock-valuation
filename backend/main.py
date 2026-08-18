@@ -8,7 +8,9 @@ re-fetch, no re-call to Claude — while still reflecting the new numbers.
 from __future__ import annotations
 
 import os
+import threading
 import time
+import uuid
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
@@ -282,6 +284,122 @@ def screen_universe(
         "diff": diff,
         "ai_enabled": bool(os.environ.get("ANTHROPIC_API_KEY")),
     }
+
+
+# ---- Background screen jobs (so the ~900-name large scan doesn't block) ----
+_SCAN_JOBS: dict[str, dict[str, Any]] = {}
+_SCAN_LOCK = threading.Lock()
+_SCAN_JOB_TTL = 3600  # keep a finished job's results for an hour, then prune
+
+
+def _prune_jobs() -> None:
+    now = time.time()
+    with _SCAN_LOCK:
+        for jid in [j for j, v in _SCAN_JOBS.items()
+                    if v.get("finished") and now - v["finished"] > _SCAN_JOB_TTL]:
+            _SCAN_JOBS.pop(jid, None)
+
+
+def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
+                  min_score: int, scope: str, is_custom: bool) -> None:
+    """Worker thread: scan each symbol, updating progress; finalize on completion."""
+    job = _SCAN_JOBS[job_id]
+    pace = 0.15 if len(symbols) > 80 else 0.0
+    for i, sym in enumerate(symbols, 1):
+        if job.get("cancelled"):
+            break
+        try:
+            row = _summary_row(sym, a)
+            with _SCAN_LOCK:
+                job["rows"].append(row)
+        except HTTPException as e:
+            with _SCAN_LOCK:
+                job["errors"].append({"ticker": sym, "error": e.detail})
+        except Exception as e:  # noqa: BLE001
+            with _SCAN_LOCK:
+                job["errors"].append({"ticker": sym, "error": str(e)})
+        with _SCAN_LOCK:
+            job["done"] = i
+        if pace:
+            time.sleep(pace)
+    with _SCAN_LOCK:
+        rows = sorted(job["rows"], key=lambda x: (x["score"] is None, -(x["score"] or 0)))
+        candidates = [r for r in rows if (r["score"] or 0) >= min_score and not r.get("suspect")]
+        diff = None
+        if not is_custom and not job.get("cancelled"):
+            try:
+                diff = diffstate.compute_diff(
+                    scope, {r["ticker"]: r["score"] for r in candidates},
+                    date.today().isoformat())
+            except Exception:  # noqa: BLE001
+                diff = None
+        job["rows"], job["candidates"], job["diff"] = rows, candidates, diff
+        job["status"] = "cancelled" if job.get("cancelled") else "done"
+        job["finished"] = time.time()
+
+
+@app.get("/api/screen/start")
+def screen_start(min_score: int = 80, universe: Optional[str] = None,
+                 scope: str = "core",
+                 discount_rate: Optional[float] = Query(None),
+                 terminal_growth: Optional[float] = Query(None),
+                 projection_years: Optional[float] = Query(None),
+                 inflation_hurdle: Optional[float] = Query(None),
+                 margin_of_safety: Optional[float] = Query(None)):
+    """Start a screen in the background; returns a job id to poll via
+    /api/screen/status. Lets the large-cap (~900-name, ~25min) scan run without
+    a blocking, timeout-prone request."""
+    _prune_jobs()
+    a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
+                                inflation_hurdle, margin_of_safety)
+    if universe:
+        symbols = [t.strip().upper() for t in universe.replace(",", " ").split() if t.strip()]
+    else:
+        symbols = _universe.get(scope)
+    symbols = list(dict.fromkeys(symbols))[:1100]
+    if not symbols:
+        raise HTTPException(status_code=400, detail="No tickers to scan.")
+    job_id = uuid.uuid4().hex[:12]
+    _SCAN_JOBS[job_id] = {
+        "status": "running", "total": len(symbols), "done": 0,
+        "rows": [], "errors": [], "candidates": None, "diff": None,
+        "min_score": min_score, "scope": scope, "assumptions": a,
+        "is_custom": bool(universe), "started": time.time(), "finished": None,
+    }
+    threading.Thread(target=_run_scan_job,
+                     args=(job_id, symbols, a, min_score, scope, bool(universe)),
+                     daemon=True).start()
+    return {"job_id": job_id, "total": len(symbols)}
+
+
+@app.get("/api/screen/status")
+def screen_status(job_id: str):
+    """Progress while running; full results once finished."""
+    job = _SCAN_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404,
+                            detail="Scan job not found — it may have expired. Start a new scan.")
+    with _SCAN_LOCK:
+        out = {"status": job["status"], "total": job["total"], "done": job["done"],
+               "min_score": job["min_score"], "scope": job["scope"],
+               "ai_enabled": bool(os.environ.get("ANTHROPIC_API_KEY"))}
+        if job["status"] in ("done", "cancelled"):
+            out.update({
+                "rows": job["rows"], "candidates": job["candidates"] or [],
+                "errors": job["errors"], "diff": job["diff"],
+                "assumptions": job["assumptions"],
+                "scanned": len(job["rows"]), "universe_size": job["total"],
+            })
+    return out
+
+
+@app.get("/api/screen/cancel")
+def screen_cancel(job_id: str):
+    """Ask a running scan to stop (it finalizes with whatever it has so far)."""
+    job = _SCAN_JOBS.get(job_id)
+    if job:
+        job["cancelled"] = True
+    return {"ok": True}
 
 
 @app.get("/api/peers")

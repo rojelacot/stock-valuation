@@ -89,6 +89,7 @@ function switchMode(mode) {
   $("loading").classList.add("hidden");
   if (mode === "watchlist") loadWatchlist();
   if (mode === "guide") loadGuide();
+  if (mode === "screen") resumeScreen();
 }
 
 // ---------- Guide tab (capabilities & limitations + live config) ----------
@@ -916,19 +917,72 @@ async function runCompare() {
 }
 
 // ================= SCREEN =================
+// Background screen job state (survives tab switches; server keeps scanning).
+let screenPoll = null, screenJob = null, screenState = null, screenResult = null;
+
 async function runScreen() {
   const minScore = parseInt($("minScore").value) || 70;
   const universe = $("screenUniverse").value.trim();
   const scope = $("screenScope").value;
-  const est = universe ? "your list" : { core: "~57 names, ~1 min", full: "~207 names, ~5–7 min", large: "~900 names, ~25 min" }[scope];
-  if (scope === "large" && !universe && !confirm("The large-cap scan covers ~900 names and takes roughly 25 minutes. Keep this tab open. Continue?")) return;
-  showLoading(`Scanning ${est}… surfacing what clears your buy bar.`);
+  stopScreenPoll();
+  screenResult = null;
   try {
     const qs = `min_score=${minScore}&scope=${scope}${universe ? "&universe=" + encodeURIComponent(universe) : ""}${assumptionsQS()}`;
-    const d = await getJSON(`/api/screen?${qs}`);
-    $("loading").classList.add("hidden");
-    renderScreen(d);
+    const start = await getJSON(`/api/screen/start?${qs}`);
+    screenJob = start.job_id;
+    screenState = { done: 0, total: start.total, scope: universe ? "your list" : scope };
+    showScreenProgress();
+    screenPoll = setInterval(pollScreen, 2500);
   } catch (e) { showError(e.message); }
+}
+
+function stopScreenPoll() {
+  if (screenPoll) { clearInterval(screenPoll); screenPoll = null; }
+}
+
+async function pollScreen() {
+  if (!screenJob) { stopScreenPoll(); return; }
+  let st;
+  try { st = await getJSON(`/api/screen/status?job_id=${screenJob}`); }
+  catch (e) { stopScreenPoll(); if (currentMode === "screen") showError(e.message); return; }
+  screenState = { done: st.done, total: st.total, scope: st.scope };
+  if (st.status === "running") {
+    if (currentMode === "screen") showScreenProgress();
+    return;
+  }
+  // finished (done or cancelled)
+  stopScreenPoll();
+  screenResult = st;
+  screenJob = null;
+  if (currentMode === "screen") { $("loading").classList.add("hidden"); renderScreen(st); }
+}
+
+function showScreenProgress() {
+  if (!screenState) return;
+  const { done, total, scope } = screenState;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  $("results").classList.add("hidden");
+  $("error").classList.add("hidden");
+  $("hint")?.classList.add("hidden");
+  $("loadingMsg").innerHTML = `
+    <div class="max-w-md mx-auto text-left">
+      <div class="flex justify-between text-sm mb-2"><span>Scanning <span class="text-slate-200">${scope}</span> universe…</span><span class="text-brand font-medium">${done} / ${total} (${pct}%)</span></div>
+      <div class="h-2.5 bg-ink/60 rounded-full overflow-hidden border border-line/60"><div class="h-full bg-brand rounded-full" style="width:${pct}%;transition:width .4s"></div></div>
+      <div class="text-xs text-muted mt-3">Runs in the background — you can switch tabs or keep using the app; the scan keeps going and you can come back to it.</div>
+      <button id="cancelScreen" class="mt-3 text-xs text-muted hover:text-bad underline decoration-dotted">Stop scan (keep results so far)</button>
+    </div>`;
+  $("loading").classList.remove("hidden");
+  const c = $("cancelScreen");
+  if (c) c.onclick = async () => {
+    if (screenJob) { try { await getJSON(`/api/screen/cancel?job_id=${screenJob}`); } catch (e) {} }
+  };
+}
+
+// Returning to the Screen tab: resume an in-flight scan's progress, or re-show
+// the finished results (the server-side job kept running while you were away).
+function resumeScreen() {
+  if (screenResult) { $("loading").classList.add("hidden"); renderScreen(screenResult); }
+  else if (screenPoll && screenState) showScreenProgress();
 }
 
 function renderScreen(d) {
