@@ -373,8 +373,18 @@ def compute_metrics(stock: dict[str, Any],
             "eps": [{"year": y, "value": v} for y, v in eps],
             "fcf": [{"year": y, "value": v} for y, v in fcf],
             "roe": [{"year": y, "value": roe_by_year[y]} for y in sorted(roe_by_year)],
+            "roic": [{"year": y, "value": roic_by_year[y]} for y in sorted(roic_by_year)],
+            "gross_margin": _margin_by_year(_series(st["gross_profit"]), revenue),
+            "operating_margin": _margin_by_year(_series(st["operating_income"]), revenue),
+            "net_margin": _margin_by_year(net_income, revenue),
         },
     }
+
+
+def _margin_by_year(numer: list, revenue: list) -> list:
+    """[{year, value}] of numer ÷ revenue per year — for margin-trend charts."""
+    rev = dict(revenue)
+    return [{"year": y, "value": v / rev[y]} for y, v in numer if rev.get(y)]
 
 
 def discounted_cash_flow(

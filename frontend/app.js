@@ -613,6 +613,8 @@ function chartsSection(d) {
       <div><div class="text-sm text-muted mb-2">Revenue</div><canvas id="c_rev" height="150"></canvas></div>
       <div><div class="text-sm text-muted mb-2">Free cash flow</div><canvas id="c_fcf" height="150"></canvas></div>
       <div><div class="text-sm text-muted mb-2">EPS &amp; ROE</div><canvas id="c_eps" height="150"></canvas></div>
+      <div><div class="text-sm text-muted mb-2">Margins (gross / operating / net)</div><canvas id="c_margins" height="150"></canvas></div>
+      <div><div class="text-sm text-muted mb-2">ROIC &amp; ROE over time</div><canvas id="c_roic" height="150"></canvas></div>
     </div></section>`);
 }
 
@@ -651,6 +653,27 @@ function drawCharts(d, cur) {
           y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { color: "#22c55e", font: { size: 10 }, callback: v => (v * 100).toFixed(0) + "%" } } } },
     });
   }
+
+  // Percent-axis multi-line helper for the trend charts.
+  const pctLines = (id, labels, datasets) => {
+    const ctx = document.getElementById(id); if (!ctx) return;
+    charts[id] = new Chart(ctx, {
+      type: "line", data: { labels, datasets: datasets.map(ds => ({ ...ds, pointRadius: 0, borderWidth: 2, tension: .25 })) },
+      options: { responsive: true, plugins: { legend: { display: true, labels: { color: tick, font: { size: 10 }, boxWidth: 10 } } },
+        scales: { x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 } } },
+          y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: v => (v * 100).toFixed(0) + "%" } } } },
+    });
+  };
+  const yr = (arr) => (arr || []).map(x => x.year);
+  const gm = s.gross_margin, om = s.operating_margin, nm = s.net_margin;
+  if (gm && gm.length) pctLines("c_margins", yr(gm), [
+    { label: "Gross", data: gm.map(x => x.value), borderColor: "#4f9dff" },
+    { label: "Operating", data: (om || []).map(x => x.value), borderColor: "#f59e0b" },
+    { label: "Net", data: (nm || []).map(x => x.value), borderColor: "#22c55e" }]);
+  const roic = s.roic, roe = s.roe;
+  if ((roic && roic.length) || (roe && roe.length)) pctLines("c_roic", yr(roic && roic.length ? roic : roe), [
+    { label: "ROIC", data: (roic || []).map(x => x.value), borderColor: "#4f9dff" },
+    { label: "ROE", data: (roe || []).map(x => x.value), borderColor: "#22c55e" }]);
 }
 
 function qualitativeSection(d) {
