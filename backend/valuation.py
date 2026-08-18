@@ -212,8 +212,10 @@ def compute_metrics(stock: dict[str, Any],
             "trend": (vals[-1] - vals[0]) if len(vals) >= 2 else None,
         }
 
-    gross = margin_series(_series(st["gross_profit"]))
-    operating = margin_series(_series(st["operating_income"]))
+    gross_profit_s = _series(st["gross_profit"])
+    operating_income_s = _series(st["operating_income"])
+    gross = margin_series(gross_profit_s)
+    operating = margin_series(operating_income_s)
     net_margin = margin_series(net_income)
 
     # ---- Returns on capital (ROE, ROIC-ish) ----
@@ -374,8 +376,8 @@ def compute_metrics(stock: dict[str, Any],
             "fcf": [{"year": y, "value": v} for y, v in fcf],
             "roe": [{"year": y, "value": roe_by_year[y]} for y in sorted(roe_by_year)],
             "roic": [{"year": y, "value": roic_by_year[y]} for y in sorted(roic_by_year)],
-            "gross_margin": _margin_by_year(_series(st["gross_profit"]), revenue),
-            "operating_margin": _margin_by_year(_series(st["operating_income"]), revenue),
+            "gross_margin": _margin_by_year(gross_profit_s, revenue),
+            "operating_margin": _margin_by_year(operating_income_s, revenue),
             "net_margin": _margin_by_year(net_income, revenue),
         },
     }

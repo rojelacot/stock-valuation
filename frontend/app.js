@@ -654,26 +654,30 @@ function drawCharts(d, cur) {
     });
   }
 
-  // Percent-axis multi-line helper for the trend charts.
-  const pctLines = (id, labels, datasets) => {
+  // Align each series to a shared year axis (nulls for missing years) so
+  // datasets with differing year sets don't shift against the x-axis.
+  const alignPct = (id, defs) => {  // defs: [{label, series, color}]
     const ctx = document.getElementById(id); if (!ctx) return;
+    const years = [...new Set(defs.flatMap(d => (d.series || []).map(p => p.year)))].sort();
+    if (!years.length) return;
+    const opts = baseOpts(v => (v * 100).toFixed(0) + "%");
+    opts.plugins.legend = { display: true, labels: { color: tick, font: { size: 10 }, boxWidth: 10 } };
     charts[id] = new Chart(ctx, {
-      type: "line", data: { labels, datasets: datasets.map(ds => ({ ...ds, pointRadius: 0, borderWidth: 2, tension: .25 })) },
-      options: { responsive: true, plugins: { legend: { display: true, labels: { color: tick, font: { size: 10 }, boxWidth: 10 } } },
-        scales: { x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 } } },
-          y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: v => (v * 100).toFixed(0) + "%" } } } },
+      type: "line",
+      data: { labels: years, datasets: defs.map(d => {
+        const m = Object.fromEntries((d.series || []).map(p => [p.year, p.value]));
+        return { label: d.label, data: years.map(y => y in m ? m[y] : null), borderColor: d.color, pointRadius: 0, borderWidth: 2, tension: .25 };
+      }) },
+      options: opts,
     });
   };
-  const yr = (arr) => (arr || []).map(x => x.year);
-  const gm = s.gross_margin, om = s.operating_margin, nm = s.net_margin;
-  if (gm && gm.length) pctLines("c_margins", yr(gm), [
-    { label: "Gross", data: gm.map(x => x.value), borderColor: "#4f9dff" },
-    { label: "Operating", data: (om || []).map(x => x.value), borderColor: "#f59e0b" },
-    { label: "Net", data: (nm || []).map(x => x.value), borderColor: "#22c55e" }]);
-  const roic = s.roic, roe = s.roe;
-  if ((roic && roic.length) || (roe && roe.length)) pctLines("c_roic", yr(roic && roic.length ? roic : roe), [
-    { label: "ROIC", data: (roic || []).map(x => x.value), borderColor: "#4f9dff" },
-    { label: "ROE", data: (roe || []).map(x => x.value), borderColor: "#22c55e" }]);
+  alignPct("c_margins", [
+    { label: "Gross", series: s.gross_margin, color: "#4f9dff" },
+    { label: "Operating", series: s.operating_margin, color: "#f59e0b" },
+    { label: "Net", series: s.net_margin, color: "#22c55e" }]);
+  alignPct("c_roic", [
+    { label: "ROIC", series: s.roic, color: "#4f9dff" },
+    { label: "ROE", series: s.roe, color: "#22c55e" }]);
 }
 
 function qualitativeSection(d) {
