@@ -7,6 +7,7 @@ own history. Everything here is deterministic and explainable.
 """
 from __future__ import annotations
 
+import random
 from typing import Any, Optional
 
 import earnings_quality
@@ -349,6 +350,12 @@ def compute_metrics(stock: dict[str, Any],
                           A["projection_years"])
     sensitivity = sensitivity_grid(val_base_cf, info, base_growth, eff_discount,
                                    A["terminal_growth"], A["projection_years"])
+    monte_carlo = monte_carlo_dcf(val_base_cf, info, base_growth, eff_discount,
+                                  A["terminal_growth"], A["projection_years"])
+
+    # ---- Forensic scores: Altman Z (distress) + Beneish M (manipulation) ----
+    import forensics  # lazy: forensics imports this module (needs_earnings_valuation)
+    forensic_scores = forensics.analyze(st, info)
 
     return {
         "assumptions_used": A,
@@ -359,6 +366,8 @@ def compute_metrics(stock: dict[str, Any],
         "scenarios": scenarios,
         "reverse_dcf": reverse,
         "sensitivity": sensitivity,
+        "monte_carlo": monte_carlo,
+        "forensics": forensic_scores,
         "earnings_quality": eq,
         "dcf_owner": dcf_owner,
         "valuation": valuation,
@@ -647,6 +656,60 @@ def sensitivity_grid(base_cf: Optional[float], info: dict[str, Any], base_growth
     return {"ok": True, "discount_rates": dr_axis, "growth_rates": g_axis,
             "cells": cells, "current_price": price,
             "base_discount": discount_rate, "base_growth": base_growth}
+
+
+def monte_carlo_dcf(base_cf: Optional[float], info: dict[str, Any], base_growth: float,
+                    discount_rate: float, terminal_growth: float, years: int,
+                    iterations: int = 2000) -> dict[str, Any]:
+    """Monte-Carlo intrinsic value.
+
+    A single-point DCF is false precision — its answer is only as good as four
+    guessed inputs. Instead we sample growth, discount rate, terminal growth and
+    the starting cash flow from distributions centered on the base case, run the
+    DCF thousands of times, and report the *spread* of fair values plus the
+    probability the current price sits below fair value. That converts "worth
+    $X" into "P10-P90 is $A-$B, ~N% chance it's undervalued" — an honest read of
+    how assumption-sensitive the call is.
+
+    Seeded (fixed) so identical inputs always yield the same distribution; no
+    flickering verdicts between requests."""
+    price = info.get("current_price")
+    if not base_cf or base_cf <= 0 or not price or price <= 0:
+        return {"ok": False}
+    rng = random.Random(1_234_567)
+    ivs: list[float] = []
+    for _ in range(iterations):
+        g = min(max(rng.gauss(base_growth, 0.03), -0.02), 0.25)
+        dr = min(max(rng.gauss(discount_rate, 0.015), 0.06), 0.20)
+        tg = min(max(rng.gauss(terminal_growth, 0.005), 0.0), 0.04)
+        if tg >= dr:
+            tg = dr - 0.01
+        cf = base_cf * (1 + rng.gauss(0, 0.10))  # ±10% on the starting cash flow
+        if cf <= 0:
+            continue
+        d = discounted_cash_flow(cf, info, None, None, discount_rate=dr,
+                                 terminal_growth=tg, years=years,
+                                 growth_estimate=g, max_stage1_growth=0.25)
+        iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
+        if iv is not None and iv > 0:
+            ivs.append(iv)
+    if len(ivs) < iterations * 0.5:  # too many degenerate draws — don't pretend
+        return {"ok": False}
+    ivs.sort()
+
+    def pct(q):
+        return ivs[min(int(q * len(ivs)), len(ivs) - 1)]
+
+    p50 = pct(0.50)
+    return {
+        "ok": True,
+        "iterations": len(ivs),
+        "p10": pct(0.10), "p25": pct(0.25), "p50": p50,
+        "p75": pct(0.75), "p90": pct(0.90),
+        "prob_undervalued": sum(1 for v in ivs if v > price) / len(ivs),
+        "median_upside": (p50 - price) / price,
+        "current_price": price,
+    }
 
 
 def compute_multiples(stock: dict[str, Any], eps: list, fcf: list) -> dict[str, Any]:

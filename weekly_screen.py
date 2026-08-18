@@ -6,9 +6,9 @@ buy list to the terminal, and saves a dated Markdown report under reports/.
 Intended to be run about once a week (see README for scheduling).
 
 Usage:
-    .venv/bin/python weekly_screen.py                 # curated universe, buy bar 70
+    .venv/bin/python weekly_screen.py # curated universe, buy bar 70
     .venv/bin/python weekly_screen.py --min-score 65
-    .venv/bin/python weekly_screen.py AAPL MSFT KO    # your own tickers
+    .venv/bin/python weekly_screen.py AAPL MSFT KO # your own tickers
 """
 from __future__ import annotations
 
@@ -24,17 +24,17 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(ROOT / ".env")        # so the AI read can see ANTHROPIC_API_KEY
+    load_dotenv(ROOT / ".env") # so the AI read can see ANTHROPIC_API_KEY
 except ImportError:
     pass
 
-from data import fetch_stock, prefilter_by_size  # noqa: E402
-from valuation import compute_metrics, resolve_assumptions  # noqa: E402
-from scoring import score             # noqa: E402
-from qualitative import analyze as ai_analyze  # noqa: E402
-import universe as _universe          # noqa: E402  (single source of truth)
-import all_us_symbols                 # noqa: E402
-import diffstate                      # noqa: E402  (shared with the app)
+from data import fetch_stock, prefilter_by_size # noqa: E402
+from valuation import compute_metrics, resolve_assumptions # noqa: E402
+from scoring import score # noqa: E402
+from qualitative import analyze as ai_analyze # noqa: E402
+import universe as _universe # noqa: E402 (single source of truth)
+import all_us_symbols # noqa: E402
+import diffstate # noqa: E402 (shared with the app)
 
 CHECKPOINT = ROOT / "reports" / ".scan_checkpoint.json"
 
@@ -48,7 +48,7 @@ def usd(x):
 
 
 def _analyze(sym, assumptions):
-    stock = fetch_stock(sym, use_edgar=False)  # bulk scan: Yahoo only (fast)
+    stock = fetch_stock(sym, use_edgar=False) # bulk scan: Yahoo only (fast)
     if stock.get("error"):
         return None, stock["error"]
     m = compute_metrics(stock, assumptions)
@@ -61,7 +61,7 @@ def _analyze(sym, assumptions):
         "score": v["score"],
         "rating": v["rating"],
         "price": stock["info"].get("current_price"),
-        "iv": val.get("mid"),               # capex-adjusted range midpoint
+        "iv": val.get("mid"), # capex-adjusted range midpoint
         "iv_low": val.get("low"),
         "iv_high": val.get("high"),
         "buy_below": val.get("buy_below"),
@@ -87,8 +87,8 @@ def scan(symbols, assumptions, signature=None):
                 errors = [tuple(e) for e in ck.get("errors", [])]
                 done = set(ck.get("done", []))
                 if done:
-                    print(f"  ↻ resuming — {len(done)} already scanned")
-        except Exception:  # noqa: BLE001
+                    print(f" ↻ resuming — {len(done)} already scanned")
+        except Exception: # noqa: BLE001
             pass
 
     def save():
@@ -102,19 +102,19 @@ def scan(symbols, assumptions, signature=None):
     for i, sym in enumerate(symbols, 1):
         if sym in done:
             continue
-        print(f"  [{i}/{len(symbols)}] {sym} …", end="", flush=True)
+        print(f" [{i}/{len(symbols)}] {sym} …", end="", flush=True)
         try:
             row, err = _analyze(sym, assumptions)
             if err:
                 errors.append((sym, err)); print(" skipped")
             else:
                 rows.append(row); print(f" {row['score']} {row['rating']}")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e: # noqa: BLE001
             errors.append((sym, str(e))); print(" error")
         done.add(sym)
         if signature and i % 25 == 0:
             save()
-        time.sleep(0.2)  # be gentle with Yahoo
+        time.sleep(0.2) # be gentle with Yahoo
     save()
     rows.sort(key=lambda r: -(r["score"] or 0))
     return rows, errors
@@ -125,16 +125,16 @@ def enrich_with_ai(candidates, assumptions):
     risks / verdict). Adds an 'ai' dict per candidate. Needs ANTHROPIC_API_KEY."""
     import os
     if not os.environ.get("ANTHROPIC_API_KEY"):
-        print("  (AI read skipped — no ANTHROPIC_API_KEY)")
+        print(" (AI read skipped — no ANTHROPIC_API_KEY)")
         return False
     for i, r in enumerate(candidates, 1):
-        print(f"  AI {i}/{len(candidates)} {r['ticker']} …", end="", flush=True)
+        print(f" AI {i}/{len(candidates)} {r['ticker']} …", end="", flush=True)
         try:
             s = fetch_stock(r["ticker"])
             m = compute_metrics(s, assumptions)
             r["ai"] = ai_analyze(s, m)
             print(" ok")
-        except Exception as e:  # noqa: BLE001
+        except Exception as e: # noqa: BLE001
             r["ai"] = {"available": False, "error": str(e)}
             print(" err")
     return True
@@ -150,18 +150,18 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
     lines.append("")
     # ---- Changes since last scan ----
     if diff and diff.get("prev_date"):
-        lines.append(f"## 🔁 Changes since {diff['prev_date']}")
+        lines.append(f"## Changes since {diff['prev_date']}")
         lines.append("")
         if diff["added"]:
-            lines.append(f"**🆕 New ({len(diff['added'])}):** " + ", ".join(diff["added"]))
+            lines.append(f"**New ({len(diff['added'])}):** " + ", ".join(diff["added"]))
         if diff["dropped"]:
             drop = [f"{t} (was {diff['prev_scores'].get(t,'?')})" for t in diff["dropped"]]
-            lines.append(f"**❌ Dropped ({len(diff['dropped'])}):** " + ", ".join(drop))
+            lines.append(f"**Dropped ({len(diff['dropped'])}):** " + ", ".join(drop))
         if not diff["added"] and not diff["dropped"]:
             lines.append("No changes — same candidates as last scan.")
         lines.append("")
     if candidates:
-        lines.append(f"## ✅ {len(candidates)} candidate(s) clearing the bar — grouped by sector")
+        lines.append(f"## {len(candidates)} candidate(s) clearing the bar — grouped by sector")
         lines.append("")
         # group by sector, sectors ordered by their best score, names by score desc
         by_sector: dict[str, list] = {}
@@ -176,7 +176,7 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
             lines.append("| Ticker | Name | Score | Rating | Price | Fair value (mid) | Buy-below | Upside | Exp. return |")
             lines.append("|---|---|---:|---|---:|---:|---:|---:|---:|")
             for r in names:
-                tick = r['ticker'] + (" 🏗️" if r.get("heavy_capex") else "")
+                tick = r['ticker'] + (" " if r.get("heavy_capex") else "")
                 lines.append(f"| {tick} | {r['name']} | {r['score']} | {r['rating']} | "
                              f"{usd(r['price'])} | {usd(r['iv'])} | {usd(r['buy_below'])} | "
                              f"{pct(r['upside'])} | {pct(r['exp_return'])} |")
@@ -184,14 +184,14 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
 
         # ---- AI qualitative read (moat / management / risks / take) ----
         if any(r.get("ai") for r in candidates):
-            lines.append("## 🧠 AI qualitative read (candidates)")
+            lines.append("## AI qualitative read (candidates)")
             lines.append("")
             for r in sorted(candidates, key=lambda x: -(x["score"] or 0)):
                 ai = r.get("ai") or {}
                 if not ai.get("available"):
                     continue
                 moat = ai.get("moat", {}); mgmt = ai.get("management", {})
-                lines.append(f"**{r['ticker']} — {r['name']}**  ·  Moat: {moat.get('rating','?')} · "
+                lines.append(f"**{r['ticker']} — {r['name']}** · Moat: {moat.get('rating','?')} · "
                              f"Management: {mgmt.get('rating','?')}")
                 if ai.get("verdict_narrative"):
                     lines.append(f"> {ai['verdict_narrative']}")
@@ -211,7 +211,7 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
     lines.append("| Ticker | Score | Rating | Price | Fair value | Upside | ROIC |")
     lines.append("|---|---:|---|---:|---:|---:|---:|")
     for r in rows:
-        tick = r['ticker'] + (" 🏗️" if r.get("heavy_capex") else "")
+        tick = r['ticker'] + (" " if r.get("heavy_capex") else "")
         lines.append(f"| {tick} | {r['score']} | {r['rating']} | {usd(r['price'])} | {usd(r['iv'])} | "
                      f"{pct(r['upside'])} | {pct(r['roic'])} |")
     if errors:
@@ -239,7 +239,7 @@ def main():
                     help="skip Claude's qualitative read on the candidates")
     args = ap.parse_args()
 
-    assumptions = resolve_assumptions()  # defaults
+    assumptions = resolve_assumptions() # defaults
 
     if args.tickers:
         symbols = [t.upper() for t in args.tickers]
@@ -248,9 +248,9 @@ def main():
         print(f"Pre-filtering {len(raw)} US-listed names "
               f"(cap ≥ ${args.min_cap/1e9:.0f}B, price ≥ ${args.min_price:.0f})…")
         symbols = prefilter_by_size(raw, args.min_cap, args.min_price,
-                                    progress=lambda d, t: print(f"  quoted {d}/{t}", flush=True)
+                                    progress=lambda d, t: print(f" quoted {d}/{t}", flush=True)
                                     if d % 1000 == 0 or d >= t else None)
-        print(f"  → {len(symbols)} names pass the floor.\n")
+        print(f" → {len(symbols)} names pass the floor.\n")
     else:
         symbols = _universe.get(args.scope)
 
@@ -276,10 +276,10 @@ def main():
             row, err = _analyze(tk, assumptions)
             if row and row.get("buy_below") and row.get("price") and row["price"] <= row["buy_below"]:
                 wl_alerts.append(row)
-        except Exception:  # noqa: BLE001
+        except Exception: # noqa: BLE001
             pass
     if wl_alerts:
-        print(f"\n⭐ {len(wl_alerts)} WATCHLIST NAME(S) IN BUY ZONE:",
+        print(f"\n{len(wl_alerts)} WATCHLIST NAME(S) IN BUY ZONE:",
               ", ".join(f"{r['ticker']} ({usd(r['price'])} ≤ {usd(r['buy_below'])})" for r in wl_alerts))
 
     # ---- AI qualitative read on the candidates (the value-trap / moat check) ----
@@ -291,21 +291,21 @@ def main():
     if diff["prev_date"]:
         print(f"Δ vs {diff['prev_date']}: +{len(diff['added'])} new, -{len(diff['dropped'])} dropped")
         if diff["added"]:
-            print("  NEW:", ", ".join(diff["added"]))
+            print(" NEW:", ", ".join(diff["added"]))
         if diff["dropped"]:
-            print("  DROPPED:", ", ".join(diff["dropped"]))
+            print(" DROPPED:", ", ".join(diff["dropped"]))
         print("=" * 56)
     if candidates:
-        print(f"✅ {len(candidates)} BUY CANDIDATE(S):\n")
+        print(f"{len(candidates)} BUY CANDIDATE(S):\n")
         for r in candidates:
-            mark = " 🏗️" if r.get("heavy_capex") else ""
-            print(f"  {r['ticker']:6} score {r['score']:>3}  {r['rating']:14} "
-                  f"price {usd(r['price'])}  fair {usd(r['iv'])}  "
-                  f"buy-below {usd(r['buy_below'])}  upside {pct(r['upside'])}{mark}")
+            mark = " " if r.get("heavy_capex") else ""
+            print(f" {r['ticker']:6} score {r['score']:>3} {r['rating']:14} "
+                  f"price {usd(r['price'])} fair {usd(r['iv'])} "
+                  f"buy-below {usd(r['buy_below'])} upside {pct(r['upside'])}{mark}")
     else:
         print("No names cleared the bar this week. Top 5 closest:\n")
         for r in rows[:5]:
-            print(f"  {r['ticker']:6} score {r['score']:>3}  {r['rating']:14} upside {pct(r['upside'])}")
+            print(f" {r['ticker']:6} score {r['score']:>3} {r['rating']:14} upside {pct(r['upside'])}")
     print("=" * 56 + "\n")
 
     reports = ROOT / "reports"
@@ -313,7 +313,7 @@ def main():
     out = reports / f"screen-{date.today().isoformat()}.md"
     md = report_md(rows, candidates, errors, args.min_score, assumptions, diff)
     if wl_alerts:
-        alert_md = ["## ⭐ Watchlist — in the buy zone", "",
+        alert_md = ["## Watchlist — in the buy zone", "",
                     "| Ticker | Name | Price | Buy-below | Upside |", "|---|---|---:|---:|---:|"]
         for r in wl_alerts:
             alert_md.append(f"| {r['ticker']} | {r['name']} | {usd(r['price'])} | "
@@ -323,7 +323,7 @@ def main():
     out.write_text(md)
     print(f"Report saved: {out}")
     if CHECKPOINT.exists():
-        CHECKPOINT.unlink()  # run completed cleanly — clear resume state
+        CHECKPOINT.unlink() # run completed cleanly — clear resume state
 
 
 if __name__ == "__main__":

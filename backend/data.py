@@ -61,6 +61,9 @@ TS_MAP = {
     # Capital returns (dividends + buybacks) for shareholder-yield analysis:
     "annualCashDividendsPaid": "dividends_paid",
     "annualRepurchaseOfCapitalStock": "buybacks",
+    # For forensic scores (Altman Z distress, Beneish M manipulation):
+    "annualRetainedEarnings": "retained_earnings",
+    "annualSellingGeneralAndAdministration": "sga",
 }
 STATEMENT_KEYS = [
     "revenue", "gross_profit", "operating_income", "net_income", "eps",
@@ -69,7 +72,7 @@ STATEMENT_KEYS = [
     "operating_cashflow", "capex", "free_cashflow", "stock_based_comp",
     "depreciation", "depreciation_recon", "gross_ppe", "net_ppe",
     "ebitda", "receivables", "inventory", "pretax_income", "tax_provision",
-    "dividends_paid", "buybacks",
+    "dividends_paid", "buybacks", "retained_earnings", "sga",
 ]
 
 

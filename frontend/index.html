@@ -38,16 +38,16 @@
 
     <!-- Tabs -->
     <div class="flex gap-2 mb-4">
-      <div class="tab active" data-mode="analyze">🔎 Analyze one</div>
-      <div class="tab" data-mode="compare">⚖️ Compare</div>
-      <div class="tab" data-mode="screen">📋 Weekly buy screen</div>
-      <div class="tab" data-mode="watchlist">⭐ Watchlist</div>
+      <div class="tab active" data-mode="analyze">Analyze one</div>
+      <div class="tab" data-mode="compare">Compare</div>
+      <div class="tab" data-mode="screen">Weekly buy screen</div>
+      <div class="tab" data-mode="watchlist">Watchlist</div>
     </div>
 
     <!-- Assumptions panel (shared) -->
     <details id="assumptions" class="card rounded-2xl mb-4 overflow-hidden">
       <summary class="cursor-pointer select-none px-5 py-3 flex items-center justify-between text-sm">
-        <span class="font-medium">⚙️ Valuation assumptions <span id="assumeSummary" class="text-muted font-normal ml-2"></span></span>
+        <span class="font-medium">Valuation assumptions <span id="assumeSummary" class="text-muted font-normal ml-2"></span></span>
         <span class="text-muted text-xs">click to tune</span>
       </summary>
       <div class="px-5 pb-5 pt-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-4">
@@ -81,7 +81,7 @@
     <section id="mode-analyze">
       <div class="card rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
         <div class="flex-1 flex items-center gap-2 bg-ink/60 rounded-xl px-3 border border-line focus-within:border-brand transition">
-          <span class="text-muted">🔎</span>
+          <span class="text-muted"></span>
           <input id="ticker" placeholder="Enter a ticker — e.g. AAPL, MSFT, KO, BRK-B"
                  class="w-full bg-transparent py-3 outline-none text-lg tracking-wide uppercase placeholder:normal-case placeholder:text-muted" />
         </div>
@@ -103,7 +103,7 @@
     <section id="mode-compare" class="hidden">
       <div class="card rounded-2xl p-4 mb-6 flex flex-col sm:flex-row gap-3 sm:items-center">
         <div class="flex-1 flex items-center gap-2 bg-ink/60 rounded-xl px-3 border border-line focus-within:border-brand transition">
-          <span class="text-muted">⚖️</span>
+          <span class="text-muted"></span>
           <input id="compareInput" placeholder="Enter up to 15 tickers — e.g. AAPL MSFT GOOGL KO JNJ V"
                  class="w-full bg-transparent py-3 outline-none uppercase placeholder:normal-case placeholder:text-muted" />
         </div>
@@ -139,7 +139,7 @@
     <!-- ===== Watchlist mode ===== -->
     <section id="mode-watchlist" class="hidden">
       <div class="card rounded-2xl p-4 mb-6 flex items-center justify-between">
-        <div><h2 class="font-semibold">⭐ Watchlist &amp; thesis journal</h2>
+        <div><h2 class="font-semibold">Watchlist &amp; thesis journal</h2>
           <p class="text-xs text-muted mt-0.5">Saved names checked live against their buy-below price. Add from any analysis.</p></div>
         <button id="refreshWatchlist" class="text-sm text-muted hover:text-brand">↻ Refresh</button>
       </div>

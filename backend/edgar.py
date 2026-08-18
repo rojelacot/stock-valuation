@@ -170,6 +170,10 @@ _CONCEPTS: dict[str, tuple[list[str], str, bool, bool]] = {
     "inventory": (["InventoryNet"], "USD", False, True),
     "net_ppe": (["PropertyPlantAndEquipmentNet"], "USD", False, True),
     "gross_ppe": (["PropertyPlantAndEquipmentGross"], "USD", False, True),
+    "retained_earnings": (["RetainedEarningsAccumulatedDeficit"], "USD", False, True),
+    # SG&A (duration) — for Beneish SGAI; neutralized if absent.
+    "sga": (["SellingGeneralAndAdministrativeExpense",
+             "GeneralAndAdministrativeExpense"], "USD", False, False),
 }
 # Current portion of debt — summed into total_debt, not surfaced on its own.
 _DEBT_CURRENT_TAGS = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"]

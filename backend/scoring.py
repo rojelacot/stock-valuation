@@ -40,7 +40,7 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         # Guardrail: a suspect valuation (implausible upside, unresolved currency)
         # must NOT top the ranking. Cap the pillar and flag it, don't reward it.
         p = 8
-        note = ("⚠ Valuation flagged unreliable — "
+        note = ("Valuation flagged unreliable — "
                 + (val.get("suspect_reason") or "data/model doesn't fit this company.")
                 + " Not treated as a bargain.")
         red.append("Valuation unreliable (" + (val.get("suspect_reason") or "data issue") + ").")
@@ -219,6 +219,41 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
     max_total = sum(pl["max"] for pl in pillars)
     normalized = round(total / max_total * 100) if max_total else 0
 
+    # ---- Forensic penalties: distress (Altman Z) & manipulation (Beneish M) ----
+    # These are near-disqualifying for a decade-plus hold, so they dock the
+    # NUMERIC score (not just the label) — which is what the ≥80 buy-screen gate
+    # filters on. Capped so they can knock a name out of BUY without nuking it.
+    fx = metrics.get("forensics", {})
+    penalty = 0
+    if fx.get("applicable"):
+        az = fx.get("altman") or {}
+        z = az.get("z")
+        if z is not None:
+            if az.get("distress"):
+                penalty += 12
+                red.append(f"Altman Z ~{z:.1f} (distress zone) — elevated bankruptcy "
+                           "risk over a long hold.")
+            elif az.get("zone") == "grey":
+                penalty += 4
+                red.append(f"Altman Z ~{z:.1f} (grey zone) — financial-distress risk "
+                           "is not negligible.")
+            else:
+                green.append(f"Altman Z ~{z:.1f} — financially sound, low distress risk.")
+        bm = fx.get("beneish") or {}
+        m = bm.get("m")
+        if m is not None:
+            if bm.get("manipulator"):
+                penalty += 12
+                red.append(f"Beneish M ~{m:.2f} — accounting profile resembles earnings "
+                           "manipulators; scrutinize revenue recognition & accruals.")
+            elif bm.get("level") == "elevated":
+                penalty += 5
+                red.append(f"Beneish M ~{m:.2f} — some manipulation-risk markers; "
+                           "worth a closer look at accruals.")
+    penalty = min(penalty, 20)
+    forensic_penalty = penalty
+    normalized = max(0, normalized - penalty)
+
     # ---- Verdict thresholds ----
     if normalized >= 70:
         rating, stance = "BUY", (
@@ -235,9 +270,16 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
 
     # Hard overrides that a value investor treats as near-disqualifying.
     override_upside = val.get("upside_mid") if val.get("ok") else dcf.get("upside")
+    az = (fx.get("altman") or {}) if fx.get("applicable") else {}
+    bm = (fx.get("beneish") or {}) if fx.get("applicable") else {}
     if val.get("suspect") and rating == "BUY":
         rating = "HOLD / WATCH"
         stance += " (Downgraded: the valuation is flagged unreliable — verify the data before trusting it.)"
+    elif (az.get("distress") or bm.get("manipulator")) and rating == "BUY":
+        rating = "HOLD / WATCH"
+        why = "in Altman distress zone" if az.get("distress") else "flagged by Beneish M"
+        stance += (f" (Downgraded: {why} — a decade-plus holder shouldn't buy through a "
+                   "distress/manipulation signal, however cheap it looks.)")
     elif override_upside is not None and override_upside < -0.30 and rating == "BUY":
         rating = "HOLD / WATCH"
         stance += " (Downgraded: trades well above intrinsic value — wait for a pullback.)"
@@ -249,4 +291,5 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         "pillars": pillars,
         "green_flags": green,
         "red_flags": red,
+        "forensic_penalty": forensic_penalty,
     }

@@ -28,11 +28,11 @@ const scoreColor = (s) => (s >= 70 ? "good" : s >= 50 ? "warn" : "bad");
 // ---------- assumptions ----------
 // slider id -> {default (in slider units), toFraction}. projection_years stays integer.
 const ASSUME = {
-  discount_rate:   { def: 10,  unit: "%", frac: (v) => v / 100 },
+  discount_rate: { def: 10, unit: "%", frac: (v) => v / 100 },
   terminal_growth: { def: 2.5, unit: "%", frac: (v) => v / 100 },
-  projection_years:{ def: 10,  unit: "yr", frac: (v) => v },
-  inflation_hurdle:{ def: 3,   unit: "%", frac: (v) => v / 100 },
-  margin_of_safety:{ def: 25,  unit: "%", frac: (v) => v / 100 },
+  projection_years:{ def: 10, unit: "yr", frac: (v) => v },
+  inflation_hurdle:{ def: 3, unit: "%", frac: (v) => v / 100 },
+  margin_of_safety:{ def: 25, unit: "%", frac: (v) => v / 100 },
 };
 
 function initAssumptions() {
@@ -135,7 +135,8 @@ function renderAnalysis(d) {
   const el = $("results"); el.innerHTML = "";
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
-    scenariosSection(d, cur), ddSection(d, cur), divSafetySection(d, cur),
+    monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
+    ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur),
     returnSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d), linksSection(d),
@@ -192,10 +193,10 @@ function metricsGrid(d, cur) {
       <div class="text-xs text-muted">${label}</div><div class="text-lg font-semibold mt-0.5">${val}</div>
       ${sub ? `<div class="text-[11px] ${subColor || "text-muted"} mt-0.5">${sub}</div>` : ""}
     </div>`;
-  const peCaveat = eq.heavy_capex ? "⚠ flattered by capex cycle" : "";
+  const peCaveat = eq.heavy_capex ? "flattered by capex cycle" : "";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-4 flex items-center gap-2">📊 Key metrics <span class="text-xs text-muted font-normal">(${g.years_of_data || "?"}yr of statements · free data tier)</span></h3>
+    <h3 class="font-semibold mb-4 flex items-center gap-2">Key metrics <span class="text-xs text-muted font-normal">(${g.years_of_data || "?"}yr of statements · free data tier)</span></h3>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       ${cell("Trailing P/E", fmtNum(mm.trailing_pe, 1), peCaveat, "text-warn")}
       ${cell("Forward P/E", fmtNum(mm.forward_pe, 1))}
@@ -222,7 +223,7 @@ function metricsGrid(d, cur) {
 function dcfSection(d, cur) {
   const dcf = d.metrics.dcf, val = d.metrics.valuation;
   if (!val || !val.ok) {
-    return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-2">💰 Discounted cash flow</h3>
+    return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-2">Discounted cash flow</h3>
       <p class="text-muted text-sm">${(dcf && dcf.reason) || "DCF unavailable — no positive cash flow to project."}</p></section>`);
   }
   const a = dcf.assumptions || {};
@@ -238,8 +239,8 @@ function dcfSection(d, cur) {
     : "Two DCFs: <span class='text-slate-300'>conservative</span> discounts free cash flow (penalizes all capex); <span class='text-slate-300'>adjusted</span> discounts owner earnings (credits growth capex). The truth sits between.";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-1">💰 Intrinsic value ${val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
-    ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed">🚩 <strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
+    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
+    ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed"><strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
     <p class="text-xs text-muted mb-4">${methodNote}</p>
     ${val.method === "earnings" ? `
     <div class="grid md:grid-cols-2 gap-3 mb-5">
@@ -263,7 +264,7 @@ function dcfSection(d, cur) {
       <span class="text-white">▏ Price ${price(px, cur)}</span>
       <span class="text-good">▏ Buy-below (${fmtPct(a.margin_of_safety, 0)} MoS): ${price(val.buy_below, cur)}</span>
     </div>
-    ${wide ? `<div class="text-xs bg-warn/10 border border-warn/30 text-warn rounded-lg p-2 mb-3">⚠ Wide value range — this company's cash flow and earnings diverge (usually heavy capex). Read the Earnings-quality section below before trusting any single number.</div>` : ""}
+    ${wide ? `<div class="text-xs bg-warn/10 border border-warn/30 text-warn rounded-lg p-2 mb-3">Wide value range — this company's cash flow and earnings diverge (usually heavy capex). Read the Earnings-quality section below before trusting any single number.</div>` : ""}
     <details class="text-sm">
       <summary class="cursor-pointer text-muted hover:text-brand">DCF assumptions (tune them in the panel above)</summary>
       <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mt-3 text-xs">
@@ -293,15 +294,15 @@ function scenariosSection(d, cur) {
   const impl = r && r.ok ? r.implied_growth : null;
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-4">🎯 Scenarios &amp; reverse DCF</h3>
+    <h3 class="font-semibold mb-4">Scenarios &amp; reverse DCF</h3>
     <div class="grid md:grid-cols-2 gap-6">
       <div>
         <div class="text-sm text-muted mb-2">Bear / base / bull fair value</div>
         <table class="w-full">
           <tr class="text-xs text-muted border-b border-line"><th class="text-left py-1">Scenario</th><th class="text-right px-2">Fair value</th><th class="text-right px-2">Upside</th></tr>
-          ${row("🐻 Bear", s.bear, "bad")}
+          ${row("Bear", s.bear, "bad")}
           ${row("Base", s.base, "brand")}
-          ${row("🐂 Bull", s.bull, "good")}
+          ${row("Bull", s.bull, "good")}
           <tr class="text-sm"><td class="py-2 text-muted">Current price</td><td class="text-right px-2 font-semibold">${price(px, cur)}</td><td></td></tr>
         </table>
         <p class="text-[11px] text-muted mt-2">Bear/bull flex growth, discount rate &amp; terminal growth around the base case.</p>
@@ -338,6 +339,87 @@ function sensitivityGrid(d, cur) {
   </div>`;
 }
 
+function monteCarloSection(d, cur) {
+  const mc = d.metrics.monte_carlo;
+  if (!mc || !mc.ok) return h(`<div class="hidden"></div>`);
+  const px = mc.current_price, prob = mc.prob_undervalued;
+  const probColor = prob >= 0.6 ? "good" : prob >= 0.35 ? "warn" : "bad";
+  const lo = mc.p10, hi = mc.p90;
+  const base = Math.min(lo, px) * 0.9, span = (Math.max(hi, px) * 1.1 - base) || 1;
+  const pos = (x) => Math.min(100, Math.max(0, ((x - base) / span) * 100));
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">Monte-Carlo intrinsic value</h3>
+    <p class="text-xs text-muted mb-4">${mc.iterations.toLocaleString()} simulations sampling growth, discount rate, terminal growth &amp; starting cash flow. The single DCF above is just one point in this cloud — this shows the whole spread and how often the price looks cheap.</p>
+    <div class="grid md:grid-cols-3 gap-3 mb-5">
+      <div class="bg-ink/40 rounded-xl p-4 border border-${probColor}/40">
+        <div class="text-xs text-muted">Chance it's undervalued</div>
+        <div class="text-3xl font-bold text-${probColor}">${fmtPct(prob, 0)}</div>
+        <div class="text-[11px] text-muted mt-1">of runs put fair value above ${price(px, cur)}</div>
+      </div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40">
+        <div class="text-xs text-muted">Median fair value (P50)</div>
+        <div class="text-2xl font-bold text-brand">${price(mc.p50, cur)}</div>
+        <div class="text-[11px] text-muted mt-1">${signPct(mc.median_upside)} vs price</div>
+      </div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
+        <div class="text-xs text-muted">80% range (P10–P90)</div>
+        <div class="text-lg font-bold text-slate-300">${price(mc.p10, cur)} – ${price(mc.p90, cur)}</div>
+        <div class="text-[11px] text-muted mt-1">width = how assumption-sensitive</div>
+      </div>
+    </div>
+    <div class="relative h-10 bg-ink/50 rounded-lg overflow-hidden border border-line/60 mb-2">
+      <div class="absolute top-0 bottom-0 bg-brand/10" style="left:${pos(lo)}%;width:${Math.max(0, pos(hi) - pos(lo))}%"></div>
+      <div class="absolute top-0 bottom-0 bg-brand/25" style="left:${pos(mc.p25)}%;width:${Math.max(0, pos(mc.p75) - pos(mc.p25))}%"></div>
+      <div class="absolute top-0 bottom-0 w-1 bg-brand" style="left:calc(${pos(mc.p50)}% - 2px)"></div>
+      <div class="absolute -top-0.5 bottom-0 w-0.5 bg-white" style="left:${pos(px)}%"></div>
+    </div>
+    <div class="flex justify-between text-[11px] text-muted flex-wrap gap-1">
+      <span>P10 ${price(lo, cur)}</span><span>P25 ${price(mc.p25, cur)}</span>
+      <span class="text-brand">P50 ${price(mc.p50, cur)}</span>
+      <span>P75 ${price(mc.p75, cur)}</span><span>P90 ${price(hi, cur)}</span>
+      <span class="text-white">▏Price ${price(px, cur)}</span>
+    </div>
+  </section>`);
+}
+
+function forensicsSection(d) {
+  const fx = d.metrics.forensics;
+  if (!fx) return h(`<div class="hidden"></div>`);
+  if (!fx.applicable) {
+    return h(`<section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-1">Forensic checks (distress &amp; manipulation)</h3>
+      <p class="text-muted text-sm">${fx.reason}</p></section>`);
+  }
+  const az = fx.altman, bm = fx.beneish;
+  const zc = { safe: "good", grey: "warn", distress: "bad" };
+  const azCard = az ? `
+    <div class="bg-ink/40 rounded-xl p-4 border border-${zc[az.zone]}/40">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-muted">Altman Z-score</div>
+        <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${zc[az.zone]}/15 text-${zc[az.zone]}">${az.zone}</div>
+      </div>
+      <div class="text-3xl font-bold text-${zc[az.zone]} mt-1">${fmtNum(az.z, 2)}</div>
+      <p class="text-[11px] text-muted mt-2 leading-relaxed">Distance-to-bankruptcy. &gt;2.99 safe · 1.81–2.99 grey · &lt;1.81 distress. ${az.distress ? "<span class='text-bad'>In the distress zone — elevated failure risk over a long hold.</span>" : az.zone === "grey" ? "<span class='text-warn'>Grey zone — not clearly safe.</span>" : "Comfortably in the safe zone."}</p>
+    </div>` : `<div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-sm text-muted">Altman Z-score</div><div class="text-muted text-sm mt-2">Not enough balance-sheet data to compute.</div></div>`;
+  const bc = bm ? (bm.manipulator ? "bad" : bm.level === "elevated" ? "warn" : "good") : "muted";
+  const bmCard = bm ? `
+    <div class="bg-ink/40 rounded-xl p-4 border border-${bc}/40">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-muted">Beneish M-score</div>
+        <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${bc}/15 text-${bc}">${bm.manipulator ? "flagged" : bm.level}</div>
+      </div>
+      <div class="text-3xl font-bold text-${bc} mt-1">${fmtNum(bm.m, 2)}</div>
+      <p class="text-[11px] text-muted mt-2 leading-relaxed">Earnings-manipulation profile. &gt;−1.78 resembles manipulators. ${bm.manipulator ? "<span class='text-bad'>Above the threshold — scrutinize revenue recognition &amp; accruals.</span>" : "Below the manipulation threshold."}${bm.sga_used ? "" : " <span class='opacity-70'>(SG&amp;A unavailable — that index neutralized.)</span>"}</p>
+    </div>` : `<div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-sm text-muted">Beneish M-score</div><div class="text-muted text-sm mt-2">Needs two comparable years of data — not available.</div></div>`;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">Forensic checks (distress &amp; manipulation)</h3>
+    <p class="text-xs text-muted mb-4">Two classic screens for the failure modes a DCF and a quality score miss — bankruptcy risk and cooked books. A red flag here docks the score directly.</p>
+    <div class="grid md:grid-cols-2 gap-3">${azCard}${bmCard}</div>
+  </section>`);
+}
+
 function ddSection(d, cur) {
   const dd = d.metrics.due_diligence;
   if (!dd) return h(`<div class="hidden"></div>`);
@@ -348,7 +430,7 @@ function ddSection(d, cur) {
   const dil = dd.dilution_cagr;
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-4">🔬 Valuation multiples &amp; capital efficiency</h3>
+    <h3 class="font-semibold mb-4">Valuation multiples &amp; capital efficiency</h3>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       ${cell("EV / EBITDA", fmtNum(dd.ev_to_ebitda, 1))}
       ${cell("EV / EBIT", fmtNum(dd.ev_to_ebit, 1))}
@@ -420,7 +502,7 @@ function analystSection(d, cur) {
       ${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}</div>`;
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-1">🏦 Analyst view &amp; sentiment <span class="text-xs text-muted font-normal">· free Yahoo data</span></h3>
+    <h3 class="font-semibold mb-1">Analyst view &amp; sentiment <span class="text-xs text-muted font-normal">· free Yahoo data</span></h3>
     <p class="text-xs text-muted mb-4">Wall Street's estimates and market positioning — useful as a *contrarian* cross-check, not a mandate (the crowd is often wrong on 10-15yr value).</p>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
       ${cell("Analyst target (mean)", price(i.analyst_target, cur), tgtUp != null ? signPct(tgtUp) + " to target" : "", tgtUp != null ? "text-" + upc : "")}
@@ -443,7 +525,7 @@ function divSafetySection(d, cur) {
     <div class="bg-ink/40 rounded-xl p-3 border border-line/60"><div class="text-xs text-muted">${label}</div>
       <div class="text-lg font-semibold mt-0.5 ${color}">${val}</div>${sub ? `<div class="text-[11px] text-muted mt-0.5">${sub}</div>` : ""}</div>`;
   return h(`<section class="card rounded-2xl p-6">
-    <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">💵 Dividend safety</h3>
+    <div class="flex items-center justify-between mb-4"><h3 class="font-semibold">Dividend safety</h3>
       <span class="text-xs px-2 py-0.5 rounded bg-${badge.c}/15 text-${badge.c} border border-${badge.c}/40">${badge.t}</span></div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
       ${cell("Dividend / share", price(ds.dps_latest, cur))}
@@ -455,7 +537,7 @@ function divSafetySection(d, cur) {
 
 function peersSection(d) {
   return h(`<section class="card rounded-2xl p-6">
-    <div class="flex items-center justify-between"><h3 class="font-semibold">👥 Same-sector peers</h3>
+    <div class="flex items-center justify-between"><h3 class="font-semibold">Same-sector peers</h3>
       <button id="loadPeers" data-ticker="${d.ticker}" class="text-sm bg-brand/20 text-brand border border-brand/40 px-3 py-1.5 rounded-lg hover:bg-brand/30 transition">Load peers</button></div>
     <div id="peersBody" class="mt-3 text-sm text-muted">Compare ${d.ticker} against curated same-sector names on score, valuation, ROIC and growth.</div>
   </section>`);
@@ -528,7 +610,7 @@ function linksSection(d) {
   ];
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-2">📄 Primary sources (do the reading)</h3>
+    <h3 class="font-semibold mb-2">Primary sources (do the reading)</h3>
     <p class="text-xs text-muted mb-3">The model can't read filings or earnings calls for you — these are the documents to go through before buying.</p>
     <div class="flex flex-wrap gap-x-5 gap-y-1.5 text-sm mb-5">
       ${link(edgar, "10-K (annual) ↗")} ${link(q, "10-Q (quarterly) ↗")} ${link(proxy, "DEF 14A (proxy) ↗")}
@@ -562,7 +644,7 @@ function earningsQualitySection(d, cur) {
   return h(`
   <section class="card rounded-2xl p-6">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h3 class="font-semibold">🏗️ Earnings quality &amp; capex cycle</h3>
+      <h3 class="font-semibold">Earnings quality &amp; capex cycle</h3>
       <span class="text-xs px-2 py-0.5 rounded bg-${phaseLabel.c}/15 text-${phaseLabel.c} border border-${phaseLabel.c}/40">${phaseLabel.t}</span>
     </div>
     <p class="text-xs text-muted mb-4">Capex hits earnings slowly (as depreciation) but cash immediately. When a company builds hard, earnings look flattered (P/E cheap) and FCF looks depressed — this is where you check for that.</p>
@@ -595,7 +677,7 @@ function returnSection(d) {
   const c = er == null ? "muted" : beats ? "good" : "bad";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-4">📈 Expected return vs inflation <span class="text-xs text-muted font-normal">(~${e.horizon_years}yr hold)</span></h3>
+    <h3 class="font-semibold mb-4">Expected return vs inflation <span class="text-xs text-muted font-normal">(~${e.horizon_years}yr hold)</span></h3>
     <div class="flex flex-wrap items-center gap-6">
       <div><div class="text-xs text-muted">Est. annual return</div><div class="text-3xl font-bold text-${c}">${er == null ? "—" : fmtPct(er)}</div></div>
       <div class="text-muted text-2xl">vs</div>
@@ -624,7 +706,7 @@ function pillarsSection(d) {
       <div class="h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-${col} rounded-full" style="width:${pct}%"></div></div>
       <p class="text-[11px] text-muted mt-1">${p.note}</p></div>`;
   }).join("");
-  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">🧮 Scorecard breakdown</h3>${rows}</section>`);
+  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">Scorecard breakdown</h3>${rows}</section>`);
 }
 
 function flagsSection(d) {
@@ -635,11 +717,11 @@ function flagsSection(d) {
     : `<p class="text-muted text-sm">None flagged.</p>`;
   return h(`<section class="grid md:grid-cols-2 gap-6">
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-good">✓ Strengths</h3>${list(g, "good", "✓")}</div>
-    <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-bad">⚠ Watch-outs</h3>${list(r, "bad", "⚠")}</div></section>`);
+    <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-bad">Watch-outs</h3>${list(r, "bad", "")}</div></section>`);
 }
 
 function chartsSection(d) {
-  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">📉 Trends</h3>
+  return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">Trends</h3>
     <div class="grid md:grid-cols-2 gap-6">
       <div><div class="text-sm text-muted mb-2">Price (10yr)</div><canvas id="c_price" height="150"></canvas></div>
       <div><div class="text-sm text-muted mb-2">Revenue</div><canvas id="c_rev" height="150"></canvas></div>
@@ -688,7 +770,7 @@ function drawCharts(d, cur) {
 
   // Align each series to a shared year axis (nulls for missing years) so
   // datasets with differing year sets don't shift against the x-axis.
-  const alignPct = (id, defs) => {  // defs: [{label, series, color}]
+  const alignPct = (id, defs) => { // defs: [{label, series, color}]
     const ctx = document.getElementById(id); if (!ctx) return;
     const years = [...new Set(defs.flatMap(d => (d.series || []).map(p => p.year)))].sort();
     if (!years.length) return;
@@ -721,7 +803,7 @@ function qualitativeSection(d) {
   const chips = (arr, color) => (Array.isArray(arr) && arr.length) ? arr.map(x => `<li class="flex gap-2 text-sm mb-1.5"><span class="text-${color} mt-0.5">•</span><span>${x}</span></li>`).join("") : "";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-4">🧠 Qualitative read ${q.available ? '<span class="text-xs text-brand font-normal">· Claude</span>' : ""}</h3>${banner}
+    <h3 class="font-semibold mb-4">Qualitative read ${q.available ? '<span class="text-xs text-brand font-normal">· Claude</span>' : ""}</h3>${banner}
     <p class="text-sm leading-relaxed mb-5">${q.business_summary || ""}</p>
     <div class="grid md:grid-cols-2 gap-4 mb-5">
       <div class="bg-ink/40 rounded-xl p-4 border border-line/60">
@@ -738,10 +820,10 @@ function qualitativeSection(d) {
       <div><div class="text-sm font-medium text-bad mb-2">Bear case</div><ul>${chips(q.bear_case, "bad")}</ul></div></div>` : ""}
     ${q.risks?.length ? `<div class="mb-5"><div class="text-sm font-medium text-warn mb-2">Key risks (10–15yr)</div><ul>${chips(q.risks, "warn")}</ul></div>` : ""}
     ${(q.catalysts?.length || q.thesis_breakers?.length) ? `<div class="grid md:grid-cols-2 gap-4 mb-5">
-      ${q.catalysts?.length ? `<div><div class="text-sm font-medium text-good mb-2">⚡ Catalysts</div><ul>${chips(q.catalysts, "good")}</ul></div>` : "<div></div>"}
-      ${q.thesis_breakers?.length ? `<div><div class="text-sm font-medium text-bad mb-2">🚫 What would break the thesis</div><ul>${chips(q.thesis_breakers, "bad")}</ul></div>` : ""}
+      ${q.catalysts?.length ? `<div><div class="text-sm font-medium text-good mb-2">Catalysts</div><ul>${chips(q.catalysts, "good")}</ul></div>` : "<div></div>"}
+      ${q.thesis_breakers?.length ? `<div><div class="text-sm font-medium text-bad mb-2">What would break the thesis</div><ul>${chips(q.thesis_breakers, "bad")}</ul></div>` : ""}
     </div>` : ""}
-    ${q.investment_thesis ? `<div class="bg-ink/40 border border-line/60 rounded-xl p-4 mb-3"><div class="text-xs text-slate-300 font-medium mb-1">📝 Investment thesis${q.cyclicality && q.cyclicality !== "Unknown" ? ` · <span class="text-muted">${q.cyclicality}</span>` : ""}</div><p class="text-sm leading-relaxed">${q.investment_thesis}</p></div>` : ""}
+    ${q.investment_thesis ? `<div class="bg-ink/40 border border-line/60 rounded-xl p-4 mb-3"><div class="text-xs text-slate-300 font-medium mb-1">Investment thesis${q.cyclicality && q.cyclicality !== "Unknown" ? ` · <span class="text-muted">${q.cyclicality}</span>` : ""}</div><p class="text-sm leading-relaxed">${q.investment_thesis}</p></div>` : ""}
     ${q.verdict_narrative ? `<div class="bg-brand/5 border border-brand/20 rounded-xl p-4"><div class="text-xs text-brand font-medium mb-1">Value-investor take</div><p class="text-sm leading-relaxed">${q.verdict_narrative}</p></div>` : ""}
   </section>`);
 }
@@ -780,7 +862,7 @@ function renderScreen(d) {
   const header = h(`
     <section class="card rounded-2xl p-6">
       <div class="flex items-center justify-between flex-wrap gap-3">
-        <div><h3 class="text-lg font-semibold">📋 Weekly buy screen</h3>
+        <div><h3 class="text-lg font-semibold">Weekly buy screen</h3>
           <p class="text-muted text-sm mt-1">Scanned ${d.scanned}/${d.universe_size} names · buy bar = score ≥ ${d.min_score}</p></div>
         <div class="text-right"><div class="text-3xl font-bold text-${cands.length ? 'good' : 'muted'}">${cands.length}</div><div class="text-xs text-muted">candidate${cands.length === 1 ? "" : "s"}</div></div>
       </div>
@@ -794,7 +876,7 @@ function renderScreen(d) {
     cands.forEach(r => { (bySector[r.sector || "Other / Unknown"] ??= []).push(r); });
     const ordered = Object.entries(bySector).sort((a, b) =>
       Math.max(...b[1].map(x => x.score || 0)) - Math.max(...a[1].map(x => x.score || 0)));
-    const wrap = h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-1">✅ Buy candidates — by sector</h3></section>`);
+    const wrap = h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-1">Buy candidates — by sector</h3></section>`);
     for (const [sector, names] of ordered) {
       names.sort((a, b) => (b.score || 0) - (a.score || 0));
       wrap.insertAdjacentHTML("beforeend",
@@ -812,19 +894,19 @@ function renderScreen(d) {
 function diffCard(diff) {
   if (!diff) return h(`<div class="hidden"></div>`);
   if (!diff.prev_date) {
-    return h(`<section class="card rounded-2xl p-4 text-sm text-muted">🔁 First scan of this universe recorded — next time you'll see what changed.</section>`);
+    return h(`<section class="card rounded-2xl p-4 text-sm text-muted">First scan of this universe recorded — next time you'll see what changed.</section>`);
   }
   const added = diff.added || [], dropped = diff.dropped || [];
   const chip = (t, cls) => `<span class="inline-block px-2 py-0.5 rounded bg-${cls}/15 text-${cls} border border-${cls}/40 text-xs font-mono mr-1 mb-1">${t}</span>`;
   if (!added.length && !dropped.length) {
-    return h(`<section class="card rounded-2xl p-4 text-sm text-muted">🔁 No changes since ${diff.prev_date} — same candidates.</section>`);
+    return h(`<section class="card rounded-2xl p-4 text-sm text-muted">No changes since ${diff.prev_date} — same candidates.</section>`);
   }
   return h(`<section class="card rounded-2xl p-5">
-    <h3 class="font-semibold mb-3">🔁 Changes since ${diff.prev_date}</h3>
+    <h3 class="font-semibold mb-3">Changes since ${diff.prev_date}</h3>
     <div class="grid sm:grid-cols-2 gap-4">
-      <div><div class="text-xs text-good mb-1.5">🆕 New (${added.length})</div>
+      <div><div class="text-xs text-good mb-1.5">New (${added.length})</div>
         <div>${added.length ? added.map(t => chip(t, "good")).join("") : '<span class="text-muted text-xs">none</span>'}</div></div>
-      <div><div class="text-xs text-bad mb-1.5">❌ Dropped (${dropped.length})</div>
+      <div><div class="text-xs text-bad mb-1.5">Dropped (${dropped.length})</div>
         <div>${dropped.length ? dropped.map(t => chip(t + (diff.prev_scores?.[t] ? ` ${diff.prev_scores[t]}` : ""), "bad")).join("") : '<span class="text-muted text-xs">none</span>'}</div></div>
     </div></section>`);
 }
@@ -853,8 +935,8 @@ function bareTable(rows, clickable) {
   const body = rows.map(r => {
     const rs = RATING_STYLE[r.rating] || RATING_STYLE["HOLD / WATCH"];
     const upC = r.upside == null ? "muted" : r.upside >= 0.15 ? "good" : r.upside >= 0 ? "warn" : "bad";
-    const capexMark = r.heavy_capex ? ` <span title="Heavy capex cycle — earnings/FCF distorted; value shown is capex-adjusted midpoint">🏗️</span>` : "";
-    const suspectMark = r.suspect ? ` <span title="Valuation flagged unreliable — excluded from buy candidates; verify the data">🚩</span>` : "";
+    const capexMark = r.heavy_capex ? ` <span title="Heavy capex cycle — earnings/FCF distorted; value shown is capex-adjusted midpoint"></span>` : "";
+    const suspectMark = r.suspect ? ` <span title="Valuation flagged unreliable — excluded from buy candidates; verify the data"></span>` : "";
     return `<tr class="${clickable ? "clickable" : ""} border-b border-line/40 text-sm ${r.suspect ? "opacity-60" : ""}" data-ticker="${r.ticker}">
       <td class="py-2.5 pr-3"><span class="font-semibold">${r.ticker}</span>${capexMark}${suspectMark}<div class="text-[11px] text-muted truncate max-w-[150px]">${r.name || ""}</div></td>
       <td class="text-right px-2"><span class="inline-block w-9 text-center font-bold text-${scoreColor(r.score)}">${r.score}</span></td>
@@ -910,7 +992,7 @@ function watchlistControl(d) {
       <div><label class="text-xs text-muted">Shares</label>
         <input id="wlShares" type="number" step="0.0001" placeholder="—" class="w-24 bg-ink/60 border border-line rounded-lg px-2 py-2 text-sm mt-1"></div>
       <label class="text-sm flex items-center gap-2 pb-2"><input id="wlOwned" type="checkbox" class="accent-brand w-4 h-4"> Owned</label>
-      <button id="wlSave" class="bg-brand hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition active:scale-95">⭐ Save to watchlist</button>
+      <button id="wlSave" class="bg-brand hover:bg-blue-500 text-white text-sm font-medium px-4 py-2 rounded-lg transition active:scale-95">Save to watchlist</button>
       <span id="wlMsg" class="text-xs text-good self-center"></span>
     </div>
     <p class="text-[11px] text-muted mt-2">The weekly job checks your watchlist and flags when a name drops into its buy-below zone. Your notes + the AI thesis are saved as a journal entry.</p>
@@ -945,13 +1027,13 @@ function renderWatchlist(d) {
   if (!d.rows.length) {
     el.append(h(`<section class="card rounded-2xl p-8 text-center text-muted">
       <p class="text-lg mb-1">Your watchlist is empty.</p>
-      <p class="text-sm">Analyze a stock, then hit <span class="text-brand">⭐ Save to watchlist</span> to track it here.</p></section>`));
+      <p class="text-sm">Analyze a stock, then hit <span class="text-brand">Save to watchlist</span> to track it here.</p></section>`));
     el.classList.remove("hidden"); return;
   }
   if (d.portfolio) el.append(portfolioCard(d.portfolio));
   const inZone = d.rows.filter(r => r.in_buy_zone).length;
   el.append(h(`<section class="card rounded-2xl p-5">
-    <div class="flex items-center justify-between"><h3 class="font-semibold">⭐ Watchlist (${d.count})</h3>
+    <div class="flex items-center justify-between"><h3 class="font-semibold">Watchlist (${d.count})</h3>
       <div class="text-right"><div class="text-2xl font-bold text-${inZone ? 'good' : 'muted'}">${inZone}</div><div class="text-xs text-muted">in buy zone</div></div></div>
     ${inZone ? `<p class="text-sm text-good mt-2">${inZone} name${inZone === 1 ? "" : "s"} trading at or below your buy-below price today.</p>` : `<p class="text-sm text-muted mt-2">Nothing in the buy zone yet — the weekly job will flag names as they drop in.</p>`}
   </section>`));
@@ -978,7 +1060,7 @@ function portfolioCard(p) {
       <div class="flex-1 h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-brand rounded-full" style="width:${(w * 100).toFixed(0)}%"></div></div>
       <div class="w-10 text-right">${fmtPct(w, 0)}</div></div>`).join("");
   return h(`<section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-4">📦 Portfolio ${p.value_weighted ? "" : `<span class="text-xs text-muted font-normal">· equal-weighted (add shares for $ values)</span>`}</h3>
+    <h3 class="font-semibold mb-4">Portfolio ${p.value_weighted ? "" : `<span class="text-xs text-muted font-normal">· equal-weighted (add shares for $ values)</span>`}</h3>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
       ${p.value_weighted ? cell("Market value", "$" + fmtMoney(p.total_value)) : cell("Positions", p.n_positions)}
       ${p.value_weighted ? cell("Cost basis", "$" + fmtMoney(p.total_cost)) : cell("Sectors", p.n_sectors)}
@@ -1019,7 +1101,7 @@ function watchlistRow(r) {
       ${r.buy_price ? `<div class="text-sm"><span class="text-muted text-xs">Your buy </span>${price(r.buy_price)}</div>` : ""}
       <button data-wl-remove="${r.ticker}" class="text-xs text-muted hover:text-bad ml-auto">Remove</button>
     </div>
-    ${r.notes ? `<p class="text-xs text-muted mt-2 border-t border-line/40 pt-2">📝 ${r.notes}</p>` : ""}
+    ${r.notes ? `<p class="text-xs text-muted mt-2 border-t border-line/40 pt-2">${r.notes}</p>` : ""}
   </section>`);
 }
 

@@ -53,6 +53,12 @@ recomputes live (no re-fetch, no re-call to Claude).
 - **Intrinsic value range** — conservative (FCF) → adjusted (owner-earnings) DCF; scores off the midpoint.
 - **Scenarios & reverse DCF** — bear/base/bull fair values, a discount-rate × growth **sensitivity grid**,
   and the growth rate the current price *implies* ("what does the market expect?").
+- **Monte-Carlo intrinsic value** — 2,000 simulations sampling growth, discount rate, terminal growth
+  and starting cash flow, reported as a P10–P90 fair-value range and the **probability the price is
+  below fair value** — the honest alternative to a single false-precision "worth $X".
+- **Forensic checks** — **Altman Z-score** (distance-to-bankruptcy) and **Beneish M-score** (earnings-
+  manipulation profile). A distress or manipulation flag docks the numeric score and blocks a Buy —
+  the failure modes a DCF and a quality score miss. Suppressed for financial firms (where they're invalid).
 - **Valuation multiples & capital efficiency** — P/E, forward P/E, PEG (trailing proxy when needed),
   P/B, P/FCF, P/S, EV/EBITDA·EBIT·Sales, FCF yield, **ROIC (NOPAT) vs WACC** value-creation spread,
   **Piotroski F-Score**, shareholder yield / payout, dilution, **valuation vs its own history**.
@@ -72,8 +78,9 @@ recomputes live (no re-fetch, no re-call to Claude).
 | `backend/data.py` | Source orchestration + Yahoo JSON fetch (via `curl_cffi`) + normalize; EDGAR/SimFin dispatch + fallback; bulk market-cap prefilter; free analyst/sentiment supplement |
 | `backend/edgar.py` | SEC EDGAR XBRL adapter — 10–19yr as-filed 10-K statements (default single-stock source), same normalized shape |
 | `backend/simfin.py` | SimFin v3 adapter — fallback for names EDGAR doesn't cover (~7yr statements) |
-| `backend/valuation.py` | Growth CAGRs, ROE/ROIC, margins, **DCF value range**, scenarios, reverse DCF, sensitivity grid, expected return |
+| `backend/valuation.py` | Growth CAGRs, ROE/ROIC, margins, **DCF value range**, scenarios, reverse DCF, sensitivity grid, **Monte-Carlo DCF**, expected return |
 | `backend/duediligence.py` | EV multiples, NOPAT-ROIC vs **WACC**, Piotroski, capital returns, dividend safety, valuation-vs-history, accruals |
+| `backend/forensics.py` | **Altman Z** (distress) + **Beneish M** (manipulation) forensic scores; suppressed for financials |
 | `backend/earnings_quality.py` | Capex-cycle / owner-earnings / cash-conversion analysis |
 | `backend/scoring.py` | 6-pillar composite score → Buy/Hold/Avoid with reasons + guardrail flags |
 | `backend/qualitative.py` | Claude's moat / management / risks / catalysts / thesis (optional) |
