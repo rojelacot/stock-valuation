@@ -461,6 +461,35 @@ function peersSection(d) {
   </section>`);
 }
 
+function benchmarkTable(subject, peers) {
+  const median = (arr) => {
+    const v = arr.filter(x => x != null).sort((a, b) => a - b);
+    if (!v.length) return null;
+    const m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  };
+  const metrics = [
+    { label: "Score", key: "score", higher: true, fmt: v => v == null ? "—" : v },
+    { label: "ROIC", key: "roic", higher: true, fmt: v => fmtPct(v, 0) },
+    { label: "Net margin", key: "net_margin", higher: true, fmt: v => fmtPct(v, 0) },
+    { label: "Revenue CAGR", key: "revenue_cagr", higher: true, fmt: v => fmtPct(v, 0) },
+    { label: "P/E", key: "trailing_pe", higher: false, fmt: v => fmtNum(v, 1) },
+  ];
+  const rows = metrics.map(m => {
+    const sv = subject[m.key], med = median(peers.map(p => p[m.key]));
+    const better = (sv != null && med != null) ? (m.higher ? sv >= med : sv <= med) : null;
+    return `<tr class="border-b border-line/40 text-sm">
+      <td class="py-1.5 text-muted">${m.label}</td>
+      <td class="text-right px-3 font-semibold">${m.fmt(sv)}</td>
+      <td class="text-right px-3 text-muted">${m.fmt(med)}</td>
+      <td class="text-right pl-3 text-${better == null ? "muted" : better ? "good" : "bad"}">${better == null ? "—" : better ? "▲ better" : "▼ worse"}</td></tr>`;
+  }).join("");
+  return h(`<div class="mb-4">
+    <div class="text-sm font-medium mb-1">${subject.ticker} vs sector median <span class="text-muted font-normal">(${peers.length} peers)</span></div>
+    <table class="w-full"><tr class="text-xs text-muted border-b border-line"><th class="text-left py-1">Metric</th><th class="text-right px-3">${subject.ticker}</th><th class="text-right px-3">Sector median</th><th class="text-right pl-3">vs peers</th></tr>${rows}</table>
+  </div>`);
+}
+
 function wirePeers() {
   const btn = $("loadPeers");
   if (!btn) return;
@@ -472,6 +501,9 @@ function wirePeers() {
       const r = await getJSON(`/api/peers?ticker=${encodeURIComponent(btn.dataset.ticker)}`);
       if (!r.rows.length) { body.innerHTML = `<span class="text-muted">${r.note || "No curated peers found."}</span>`; return; }
       body.innerHTML = "";
+      const subject = r.rows.find(x => x.ticker === r.peers_of);
+      const peers = r.rows.filter(x => x.ticker !== r.peers_of);
+      if (subject && peers.length) body.appendChild(benchmarkTable(subject, peers));
       body.appendChild(bareTable(r.rows, true));
       body.querySelectorAll("tr[data-ticker]").forEach(tr => tr.addEventListener("click", () => {
         const t = tr.dataset.ticker; switchMode("analyze"); $("ticker").value = t; analyze(t); window.scrollTo({ top: 0, behavior: "smooth" });
