@@ -17,6 +17,9 @@ function fmtMoney(x) {
 }
 const price = (x, cur = "$") => (x == null ? "—" : cur + Number(x).toFixed(2));
 const signPct = (x) => (x == null ? "—" : (x >= 0 ? "+" : "") + (x * 100).toFixed(0) + "%");
+// Chart-axis money formatter: always rounds (kills floating-point tick labels
+// like "$-0.4000000000000001") and keeps the sign in front of the currency.
+const axisMoney = (v, cur = "$") => (v == null ? "" : (v < 0 ? "-" : "") + cur + fmtMoney(Math.abs(v)));
 
 const RATING_STYLE = {
   "BUY": { c: "good", bg: "bg-good/15", br: "border-good/50", ring: "#22c55e" },
@@ -736,7 +739,11 @@ function drawCharts(d, cur) {
   Object.values(charts).forEach(c => c && c.destroy());
   const grid = "#1f2b3e", tick = "#8ba0bd";
   const baseOpts = (fmt) => ({
-    responsive: true, plugins: { legend: { display: false } },
+    responsive: true,
+    plugins: {
+      legend: { display: false },
+      tooltip: { callbacks: { label: (c) => (c.dataset.label ? c.dataset.label + ": " : "") + fmt(c.parsed.y) } },  // same clean format as the axis
+    },
     scales: { x: { grid: { color: grid }, ticks: { color: tick, maxTicksLimit: 8, font: { size: 10 } } },
       y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: fmt } } },
   });
@@ -749,10 +756,10 @@ function drawCharts(d, cur) {
   const pctx = document.getElementById("c_price");
   if (pctx) charts.c_price = new Chart(pctx, { type: "line",
     data: { labels: ph.map(p => p.date.slice(0, 7)), datasets: [{ data: ph.map(p => p.close), borderColor: "#4f9dff", backgroundColor: "rgba(79,157,255,.12)", fill: true, pointRadius: 0, borderWidth: 2, tension: .25 }] },
-    options: baseOpts(v => cur + v) });
+    options: baseOpts(v => axisMoney(v, cur)) });
   const s = d.metrics.series;
-  bar("c_rev", s.revenue.map(x => x.year), s.revenue.map(x => x.value), "#4f9dff", v => fmtMoney(v));
-  bar("c_fcf", s.fcf.map(x => x.year), s.fcf.map(x => x.value), s.fcf.map(x => x.value < 0 ? "#ef4444" : "#22c55e"), v => fmtMoney(v));
+  bar("c_rev", s.revenue.map(x => x.year), s.revenue.map(x => x.value), "#4f9dff", v => axisMoney(v, cur));
+  bar("c_fcf", s.fcf.map(x => x.year), s.fcf.map(x => x.value), s.fcf.map(x => x.value < 0 ? "#ef4444" : "#22c55e"), v => axisMoney(v, cur));
   const epsCtx = document.getElementById("c_eps");
   if (epsCtx) {
     const years = s.eps.map(x => x.year);
@@ -761,9 +768,13 @@ function drawCharts(d, cur) {
       data: { labels: years, datasets: [
         { type: "bar", data: s.eps.map(x => x.value), backgroundColor: "#4f9dff", borderRadius: 4, yAxisID: "y" },
         { type: "line", data: years.map(y => roeMap[y] ?? null), borderColor: "#22c55e", borderWidth: 2, pointRadius: 0, tension: .25, yAxisID: "y1" }] },
-      options: { responsive: true, plugins: { legend: { display: false } },
+      options: { responsive: true,
+        plugins: { legend: { display: false },
+          tooltip: { callbacks: { label: (c) => c.dataset.yAxisID === "y1"
+            ? "ROE " + (c.parsed.y * 100).toFixed(1) + "%"
+            : "EPS " + axisMoney(c.parsed.y, cur) } } },
         scales: { x: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 } } },
-          y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: v => cur + v } },
+          y: { grid: { color: grid }, ticks: { color: tick, font: { size: 10 }, callback: v => axisMoney(v, cur) } },
           y1: { position: "right", grid: { drawOnChartArea: false }, ticks: { color: "#22c55e", font: { size: 10 }, callback: v => (v * 100).toFixed(0) + "%" } } } },
     });
   }
