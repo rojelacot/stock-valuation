@@ -74,14 +74,15 @@ def _enrich(stock: dict) -> None:
             info[k] = supp[k]
 
 
-def _get_stock(ticker: str, refresh: bool = False, use_simfin: bool = False) -> dict:
+def _get_stock(ticker: str, refresh: bool = False, use_simfin: bool = False,
+               use_edgar: bool = True) -> dict:
     ticker = ticker.strip().upper()
     if not ticker or len(ticker) > 12:
         raise HTTPException(status_code=400, detail="Invalid ticker.")
-    ckey = f"{ticker}:{'sf' if use_simfin else 'yh'}"
+    ckey = f"{ticker}:{'sf' if use_simfin else 'yh'}:{'e' if use_edgar else 'n'}"
     if not refresh and ckey in _STOCK_CACHE:
         return _STOCK_CACHE[ckey]
-    stock = fetch_stock(ticker, use_simfin=use_simfin)
+    stock = fetch_stock(ticker, use_simfin=use_simfin, use_edgar=use_edgar)
     if stock.get("error"):
         raise HTTPException(status_code=404, detail=stock["error"])
     # Belt-and-suspenders: reject empty payloads (no price and no statements).
@@ -105,8 +106,9 @@ def _assumptions_from_query(discount_rate, terminal_growth, projection_years,
 
 
 def _analyze_one(ticker: str, assumptions: dict[str, Any], use_ai: bool,
-                 refresh: bool = False, use_simfin: bool = False) -> dict:
-    stock = _get_stock(ticker, refresh=refresh, use_simfin=use_simfin)
+                 refresh: bool = False, use_simfin: bool = False,
+                 use_edgar: bool = True) -> dict:
+    stock = _get_stock(ticker, refresh=refresh, use_simfin=use_simfin, use_edgar=use_edgar)
     # Single-stock view (use_simfin=True) is enriched with free Yahoo estimates +
     # sentiment; bulk paths skip it to avoid extra calls.
     if use_simfin:
@@ -161,8 +163,13 @@ CURATED_UNIVERSE = _universe.CORE
 
 
 def _summary_row(sym: str, a: dict[str, Any]) -> dict[str, Any]:
-    """Compact one-line summary of a ticker under assumptions `a` (no AI)."""
-    r = _analyze_one(sym, a, use_ai=False)
+    """Compact one-line summary of a ticker under assumptions `a` (no AI).
+
+    Bulk path: Yahoo-only (use_edgar=False). A per-name SEC EDGAR fetch across a
+    hundreds-to-thousand-name universe would take an hour and hammer SEC — the
+    screener is meant to be fast; deep EDGAR history is for the single-stock view.
+    """
+    r = _analyze_one(sym, a, use_ai=False, use_edgar=False)
     m, v, info = r["metrics"], r["verdict"], r["info"]
     val = m.get("valuation", {})
     eq = m.get("earnings_quality", {})
