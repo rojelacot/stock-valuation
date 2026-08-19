@@ -42,6 +42,9 @@ CAPABILITIES = [
          "Weighs cheapness, business quality (returns on capital), growth, "
          "balance-sheet strength, whether it beats inflation over 10-15 years, and "
          "margins — each with the reasoning shown in plain English.",
+         "Sector-relative: nudges the score by how the name stacks up against its "
+         "own sector's medians (a 13% ROIC is elite for a utility, mediocre for "
+         "software) and flags the 'cheap vs the market but not vs its sector' trap.",
      ]},
     {"title": "Forensic safety checks (avoid getting burned)",
      "items": [

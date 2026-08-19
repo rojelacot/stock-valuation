@@ -497,6 +497,21 @@ def compute_metrics(stock: dict[str, Any],
     import forensics  # lazy: forensics imports this module (needs_earnings_valuation)
     forensic_scores = forensics.analyze(st, info)
 
+    # ---- Sector-relative context (is this good *for this sector*?) ----
+    import sector_benchmarks as _sb
+    _sector = info.get("sector")
+    _sr = {}
+    for _k, _v in (("roic", returns.get("roic_avg") or returns.get("roic_latest")),
+                   ("net_margin", net_margin.get("avg")),
+                   ("revenue_cagr", growth.get("revenue_cagr")),
+                   ("trailing_pe", multiples.get("trailing_pe")),
+                   ("price_to_fcf", multiples.get("price_to_fcf"))):
+        _c = _sb.compare(_sector, _k, _v)
+        if _c:
+            _sr[_k] = _c
+    sector_relative = {"sector": _sector, "metrics": _sr,
+                       "covered": bool(_sb.sector_median(_sector, "roic"))}
+
     return {
         "assumptions_used": A,
         "risk_premium": rp,
@@ -508,6 +523,7 @@ def compute_metrics(stock: dict[str, Any],
         "sensitivity": sensitivity,
         "monte_carlo": monte_carlo,
         "forensics": forensic_scores,
+        "sector_relative": sector_relative,
         # Confidence gate: CAGRs, medians and the DCF need a few years to be
         # stable. Thin history (foreign filers on Yahoo, recent IPOs) is flagged
         # so a sparse-data score isn't over-trusted.

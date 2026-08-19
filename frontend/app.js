@@ -209,7 +209,7 @@ function renderAnalysis(d) {
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
     ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur),
-    returnSection(d), pillarsSection(d), flagsSection(d),
+    returnSection(d), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
     summarySection(d), linksSection(d),
   );
@@ -815,6 +815,7 @@ function pillarsSection(d) {
   const raw = pillars.reduce((s, p) => s + p.points, 0);
   const maxTotal = pillars.reduce((s, p) => s + p.max, 0) || 100;
   const penalty = v.forensic_penalty || 0;
+  const secAdj = v.sector_adjustment || 0;
   const final = v.score;
   const rc = { "BUY": "good", "HOLD / WATCH": "warn", "AVOID": "bad" }[v.rating] || "warn";
 
@@ -849,9 +850,10 @@ function pillarsSection(d) {
     </div>
     <p class="text-xs text-muted mb-4">Six weighted pillars sum to a raw score; forensic red flags (distress / manipulation) dock it. Each pillar shows exactly what it credited and why.</p>
     ${band}
-    <div class="grid grid-cols-3 gap-2 mb-5 text-center">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 text-center">
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Pillar points</div><div class="text-lg font-bold">${raw}<span class="text-muted text-sm">/${maxTotal}</span></div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Forensic penalty</div><div class="text-lg font-bold ${penalty > 0 ? "text-bad" : "text-muted"}">${penalty > 0 ? "−" + penalty : "0"}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Sector adj.</div><div class="text-lg font-bold ${secAdj > 0 ? "text-good" : secAdj < 0 ? "text-bad" : "text-muted"}">${secAdj > 0 ? "+" + secAdj : secAdj}</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5 border border-${rc}/40"><div class="text-[11px] text-muted">Final score</div><div class="text-lg font-bold text-${rc}">${final}</div></div>
     </div>
     ${rows}
@@ -871,6 +873,34 @@ function flagsSection(d) {
   return h(`<section class="grid md:grid-cols-2 gap-6">
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-good">✓ Strengths</h3>${list(g, "good", "✓")}</div>
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-bad">Watch-outs</h3>${list(r, "bad", "")}</div></section>`);
+}
+
+// How the name stacks up against its own sector's medians — because a metric
+// that's elite for a utility is mediocre for software.
+function sectorRelativeSection(d) {
+  const sr = d.metrics.sector_relative;
+  if (!sr || !sr.covered || !Object.keys(sr.metrics || {}).length) return h(`<div class="hidden"></div>`);
+  const labels = { roic: "ROIC", net_margin: "Net margin", revenue_cagr: "Revenue growth", trailing_pe: "P/E", price_to_fcf: "P/FCF" };
+  const isMult = (k) => k === "trailing_pe" || k === "price_to_fcf";
+  const vcolor = { well_above: "good", above: "good", inline: "muted", below: "warn", well_below: "bad" };
+  const qLabel = { well_above: "well above", above: "above", inline: "in line", below: "below", well_below: "well below" };
+  const mLabel = { well_above: "much cheaper", above: "cheaper", inline: "in line", below: "pricier", well_below: "much pricier" };
+  const fmtv = (k, x) => isMult(k) ? fmtNum(x, 1) + "×" : fmtPct(x, 1);
+  const rows = Object.entries(sr.metrics).map(([k, c]) => `
+    <div class="flex items-center justify-between bg-ink/40 rounded-lg px-3 py-2 text-sm">
+      <span>${labels[k] || k}</span>
+      <span class="flex items-center gap-3">
+        <span class="text-slate-300">${fmtv(k, c.value)}</span>
+        <span class="text-[11px] text-muted">sector ${fmtv(k, c.median)}</span>
+        <span class="text-[10px] px-2 py-0.5 rounded bg-${vcolor[c.verdict]}/15 text-${vcolor[c.verdict]} w-[76px] text-center">${(isMult(k) ? mLabel : qLabel)[c.verdict]}</span>
+      </span></div>`).join("");
+  const adj = d.verdict.sector_adjustment || 0;
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">Versus its sector <span class="text-xs text-muted font-normal">· ${sr.sector}</span></h3>
+    <p class="text-xs text-muted mb-4">Each metric against the median ${sr.sector} company — a 13% ROIC is elite for a utility, mediocre for software. ${adj !== 0 ? `This ${adj > 0 ? "added" : "docked"} <span class="text-${adj > 0 ? "good" : "bad"} font-medium">${adj > 0 ? "+" : ""}${adj}</span> to the score.` : ""}</p>
+    <div class="space-y-2">${rows}</div>
+  </section>`);
 }
 
 // Synthesized "Bottom line" — composes the key model outputs into one readable
