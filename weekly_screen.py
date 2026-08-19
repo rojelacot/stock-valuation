@@ -260,8 +260,11 @@ def main():
 
     print(f"Scanning {len(symbols)} names (buy bar ≥ {args.min_score})…\n")
     rows, errors = scan(symbols, assumptions, signature=signature)
+    # Candidates must clear the score bar AND be rated BUY (a high score a
+    # guardrail downgraded — overvalued / suspect / distressed — is not a buy).
     candidates = [r for r in rows
-                  if (r["score"] or 0) >= args.min_score and not r.get("suspect")]
+                  if (r["score"] or 0) >= args.min_score
+                  and r.get("rating") == "BUY" and not r.get("suspect")]
 
     # ---- Week-over-week diff (shared with the app, keyed by scope) ----
     scope_key = "custom" if args.tickers else args.scope

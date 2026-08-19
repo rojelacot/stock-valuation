@@ -277,7 +277,10 @@ def screen_universe(
     pace = 0.15 if len(symbols) > 80 else 0.0
     rows, errors = _scan(symbols, a, pace=pace)
     # Candidates must clear the bar AND not be flagged suspect (guardrails).
-    candidates = [r for r in rows if (r["score"] or 0) >= min_score and not r.get("suspect")]
+    # A candidate must clear the score bar AND actually be rated BUY — a high
+    # score that a guardrail downgraded (overvalued, suspect, distress) is not a buy.
+    candidates = [r for r in rows if (r["score"] or 0) >= min_score
+                  and r.get("rating") == "BUY" and not r.get("suspect")]
 
     # Week-over-week diff vs the last scan of this universe (skip for custom lists).
     diff = None
@@ -377,7 +380,8 @@ def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
 
     with _SCAN_LOCK:
         rows = sorted(job["rows"], key=lambda x: (x["score"] is None, -(x["score"] or 0)))
-        candidates = [r for r in rows if (r["score"] or 0) >= min_score and not r.get("suspect")]
+        candidates = [r for r in rows if (r["score"] or 0) >= min_score
+                      and r.get("rating") == "BUY" and not r.get("suspect")]
         diff = None
         if not is_custom and not job.get("cancelled"):
             try:
