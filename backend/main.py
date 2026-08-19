@@ -112,11 +112,14 @@ def _assumptions_from_query(discount_rate, terminal_growth, projection_years,
 
 def _analyze_one(ticker: str, assumptions: dict[str, Any], use_ai: bool,
                  refresh: bool = False, use_simfin: bool = False,
-                 use_edgar: bool = True) -> dict:
+                 use_edgar: bool = True, enrich: Optional[bool] = None) -> dict:
     stock = _get_stock(ticker, refresh=refresh, use_simfin=use_simfin, use_edgar=use_edgar)
-    # Single-stock view (use_simfin=True) is enriched with free Yahoo estimates +
-    # sentiment; bulk paths skip it to avoid extra calls.
-    if use_simfin:
+    # Enrich with free Yahoo estimates + sentiment (single-stock view only).
+    # Defaults to the SimFin flag, but the screener's deep pass opts out
+    # (enrich=False) — it wants SimFin's cross-check, not the extra display calls.
+    if enrich is None:
+        enrich = use_simfin
+    if enrich:
         _enrich(stock)
     try:
         metrics = compute_metrics(stock, assumptions)
@@ -177,7 +180,13 @@ def _summary_row(sym: str, a: dict[str, Any], use_edgar: bool = False) -> dict[s
     just the near-and-above-the-bar names with use_edgar=True so the final
     candidates rest on the same 10-19yr history the single-stock view uses.
     """
-    r = _analyze_one(sym, a, use_ai=False, use_edgar=use_edgar)
+    # Deep pass also flips on SimFin so foreign filers EDGAR can't cover get the
+    # SimFin-vs-Yahoo cross-check — a material divergence downgrades the row's BUY
+    # and keeps unreliable names (e.g. DLocal) out of the candidate list. EDGAR
+    # names are unaffected (EDGAR wins first). Skip enrichment — screen rows don't
+    # display analyst estimates.
+    r = _analyze_one(sym, a, use_ai=False, use_edgar=use_edgar,
+                     use_simfin=use_edgar, enrich=False)
     m, v, info = r["metrics"], r["verdict"], r["info"]
     val = m.get("valuation", {})
     eq = m.get("earnings_quality", {})
