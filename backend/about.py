@@ -62,6 +62,9 @@ CAPABILITIES = [
          "DuPont ROE decomposition — splits return on equity into profitability x "
          "asset efficiency x leverage, so you can see whether a high ROE is earned "
          "or just juiced by debt.",
+         "Segment breakdown — revenue and (when disclosed) operating income by "
+         "reportable segment and by product, parsed from the 10-K's XBRL, so you "
+         "can see where the money and the profit actually come from.",
      ]},
     {"title": "AI second opinion (optional)",
      "items": [

@@ -442,6 +442,20 @@ def screen_cancel(job_id: str):
     return {"ok": True}
 
 
+_SEGMENT_CACHE: dict[str, dict] = {}
+
+
+@app.get("/api/segments")
+def segments_endpoint(ticker: str):
+    """Revenue (and operating income) by segment from the latest 10-K's XBRL.
+    Lazy + cached: it's a heavy per-filing fetch, so the UI loads it on demand."""
+    t = ticker.strip().upper()
+    if t not in _SEGMENT_CACHE:
+        import segments as _seg
+        _SEGMENT_CACHE[t] = _seg.fetch_segments(t)
+    return _SEGMENT_CACHE[t]
+
+
 @app.get("/api/peers")
 def peers(ticker: str):
     """Same-sector peers (from the curated universe) ranked side-by-side."""

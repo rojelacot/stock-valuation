@@ -210,7 +210,7 @@ function renderAnalysis(d) {
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
     ddSection(d, cur), divSafetySection(d, cur),
-    analystSection(d, cur), earningsQualitySection(d, cur),
+    analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
     summarySection(d), linksSection(d),
@@ -219,6 +219,7 @@ function renderAnalysis(d) {
   drawCharts(d, cur);
   wireWatchlistControl(d);
   wirePeers();
+  loadSegments(d.ticker);
 }
 
 function h(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
@@ -647,6 +648,53 @@ function divSafetySection(d, cur) {
       ${cell("FCF coverage", cov != null ? fmtNum(cov, 1) + "×" : "—", "FCF ÷ dividends", cov != null && cov < 1.2 ? "text-warn" : "")}
       ${cell("Payout ratio", fmtPct(pay, 0), "dividends ÷ earnings", pay != null && pay > 0.8 ? "text-warn" : "")}
     </div></section>`);
+}
+
+// Revenue (and, when disclosed, operating income) by segment — parsed live from
+// the latest 10-K's XBRL. Auto-loaded because it's a heavy per-filing fetch.
+function segmentsSection(d) {
+  return h(`<section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">Revenue &amp; profit by segment <span class="text-xs text-muted font-normal">· from the latest 10-K</span></h3>
+    <p class="text-xs text-muted mb-4">Where the money actually comes from — and, when the filing discloses it, where the <em>profit</em> comes from (often a very different picture).</p>
+    <div id="segmentsBody" class="text-sm text-muted">Loading segment breakdown from the latest 10-K…</div>
+  </section>`);
+}
+
+async function loadSegments(ticker) {
+  const body = $("segmentsBody");
+  if (!body) return;
+  let r;
+  try { r = await getJSON(`/api/segments?ticker=${encodeURIComponent(ticker)}`); }
+  catch (e) { body.innerHTML = `<span class="text-muted">Segment data unavailable for this name.</span>`; return; }
+  if (!r || r.error || !r.breakdowns || !r.breakdowns.length) {
+    body.innerHTML = `<span class="text-muted">No segment disclosure found in the filing — the company reports as a single segment, or isn't a US 10-K filer.</span>`;
+    return;
+  }
+  const money = (x) => x == null ? "—" : "$" + fmtMoney(x);
+  const parts = r.breakdowns.map(b => {
+    const totalOI = b.has_oi ? b.segments.reduce((s, x) => s + (x.operating_income || 0), 0) : 0;
+    const rows = b.segments.map(s => {
+      const pct = Math.round(s.revenue_pct * 100);
+      const om = (s.operating_income != null && s.revenue) ? s.operating_income / s.revenue : null;
+      return `<div class="mb-2.5">
+        <div class="flex justify-between items-baseline text-sm mb-1 gap-3">
+          <span class="truncate">${s.name}</span>
+          <span class="text-slate-300 shrink-0 text-right">${money(s.revenue)} <span class="text-muted text-xs">${pct}%</span>${b.has_oi && s.operating_income != null ? ` · <span class="text-${om != null && om >= 0 ? "good" : "bad"}">op ${money(s.operating_income)}${om != null ? ` @ ${fmtPct(om, 0)}` : ""}</span>` : ""}</span>
+        </div>
+        <div class="h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-brand rounded-full" style="width:${pct}%"></div></div>
+      </div>`;
+    }).join("");
+    let insight = "";
+    if (b.has_oi && totalOI > 0) {
+      const top = b.segments.filter(s => s.operating_income != null).sort((a, c) => c.operating_income - a.operating_income)[0];
+      if (top) {
+        const ps = Math.round(top.operating_income / totalOI * 100), rs = Math.round(top.revenue_pct * 100);
+        if (ps - rs >= 10) insight = `<p class="text-[11px] text-warn mt-1"><strong>${top.name}</strong> is only ${rs}% of revenue but ~${ps}% of segment operating profit — the profit engine.</p>`;
+      }
+    }
+    return `<div class="mb-5"><div class="text-sm font-medium mb-2">${b.label}${b.has_oi ? "" : ' <span class="text-[11px] text-muted font-normal">(revenue only — segment profit not disclosed)</span>'}</div>${rows}${insight}</div>`;
+  }).join("");
+  body.innerHTML = `<div class="text-[11px] text-muted mb-4">FY${r.fiscal_year} · parsed from ${r.ticker}'s 10-K filing</div>${parts}`;
 }
 
 function peersSection(d) {
