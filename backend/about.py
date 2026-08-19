@@ -59,6 +59,9 @@ CAPABILITIES = [
          "creation (returns vs cost of capital), dividend safety, dilution / "
          "buybacks, insider & institutional ownership, analyst targets, and today's "
          "valuation vs the stock's own history.",
+         "DuPont ROE decomposition — splits return on equity into profitability x "
+         "asset efficiency x leverage, so you can see whether a high ROE is earned "
+         "or just juiced by debt.",
      ]},
     {"title": "AI second opinion (optional)",
      "items": [

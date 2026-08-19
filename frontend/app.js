@@ -211,7 +211,7 @@ function renderAnalysis(d) {
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
     ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur),
-    returnSection(d), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
+    returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
     summarySection(d), linksSection(d),
   );
@@ -873,6 +873,48 @@ function flagsSection(d) {
   return h(`<section class="grid md:grid-cols-2 gap-6">
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-good">✓ Strengths</h3>${list(g, "good", "✓")}</div>
     <div class="card rounded-2xl p-6"><h3 class="font-semibold mb-3 text-bad">Watch-outs</h3>${list(r, "bad", "")}</div></section>`);
+}
+
+// DuPont — decomposes ROE into profitability x efficiency x leverage, so you can
+// see whether a high return is earned (margins/efficiency) or juiced by debt.
+function dupontSection(d, cur) {
+  const dp = (d.metrics.due_diligence || {}).dupont;
+  if (!dp || !dp.latest) return h(`<div class="hidden"></div>`);
+  const L = dp.latest, drv = dp.driver;
+  const box = (label, sub, val, color) => `
+    <div class="bg-ink/40 rounded-xl px-3 py-3 border border-line/60 text-center min-w-[92px]">
+      <div class="text-[10px] text-muted">${label}</div>
+      <div class="text-lg font-bold ${color || ""}">${val}</div>
+      <div class="text-[9px] text-muted mt-0.5">${sub}</div></div>`;
+  const op = (s) => `<div class="text-muted text-lg font-semibold px-0.5">${s}</div>`;
+  const x = (v) => fmtNum(v, 2) + "×";
+  const driverNote = drv ? `Over ${L.year - drv.prior_year} years ROE went ${drv.prior_roe < L.roe ? "up" : "down"} from ${fmtPct(drv.prior_roe, 1)} (${drv.prior_year}) to ${fmtPct(L.roe, 1)}, driven mainly by <span class="text-slate-200">${drv.direction} ${drv.factor}</span>.` : "";
+  const leverageWarn = L.equity_multiplier >= 3
+    ? `<p class="text-[11px] text-warn mt-2">Leverage (${x(L.equity_multiplier)}) is doing a lot of the work here — a high ROE built on debt is lower-quality than one built on margins or efficiency.</p>` : "";
+  const fivePart = L.operating_margin != null ? `
+    <details class="text-xs mt-4">
+      <summary class="cursor-pointer text-muted hover:text-brand">5-factor breakdown (splits the margin into tax, interest &amp; operating)</summary>
+      <div class="flex flex-wrap items-center justify-center gap-2 mt-3">
+        ${box("Tax burden", "NI/pretax", fmtNum(L.tax_burden, 2))}${op("×")}
+        ${box("Interest burden", "pretax/EBIT", fmtNum(L.interest_burden, 2))}${op("×")}
+        ${box("Op. margin", "EBIT/rev", fmtPct(L.operating_margin, 1))}${op("×")}
+        ${box("Asset turnover", "rev/assets", x(L.asset_turnover))}${op("×")}
+        ${box("Equity mult.", "assets/equity", x(L.equity_multiplier))}
+      </div></details>` : "";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-1">DuPont — what drives the ROE</h3>
+    <p class="text-xs text-muted mb-4">Return on equity split into its three levers: how profitable, how hard the assets work, and how much leverage. A high ROE from margins or efficiency is higher quality than one juiced by debt.</p>
+    <div class="flex flex-wrap items-center justify-center gap-2">
+      ${box("ROE", L.year, fmtPct(L.roe, 1), "text-brand")}${op("=")}
+      ${box("Net margin", "profitability", fmtPct(L.net_margin, 1))}${op("×")}
+      ${box("Asset turnover", "efficiency", x(L.asset_turnover))}${op("×")}
+      ${box("Equity mult.", "leverage", x(L.equity_multiplier))}
+    </div>
+    ${driverNote ? `<p class="text-xs text-muted mt-4">${driverNote}</p>` : ""}
+    ${leverageWarn}
+    ${fivePart}
+  </section>`);
 }
 
 // How the name stacks up against its own sector's medians — because a metric

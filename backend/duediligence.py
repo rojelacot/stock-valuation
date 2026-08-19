@@ -4,6 +4,7 @@ FCF-per-share, share dilution, and accruals (receivables/inventory vs revenue).
 """
 from __future__ import annotations
 
+import math
 from typing import Any, Optional
 
 DEFAULT_TAX = 0.21
@@ -128,6 +129,54 @@ def piotroski_score(statements: dict[str, Any]) -> Optional[dict[str, Any]]:
                                        and (rev[y] / assets[y]) > (rev[p] / assets[p]))
     score = sum(1 for v in checks.values() if v)
     return {"score": score, "max": 9, "checks": checks}
+
+
+def dupont(statements: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """DuPont decomposition — ROE = net margin x asset turnover x equity multiplier.
+
+    Splits *why* the return on equity is what it is: profitability, how hard the
+    assets work, and how much leverage. A 20% ROE from margins is far higher
+    quality than a 20% ROE juiced by debt. The 5-factor form further splits the
+    margin into tax burden x interest burden x operating margin.
+    """
+    def s(k):
+        return dict(_series(statements.get(k)))
+    ni, rev, assets, equity = s("net_income"), s("revenue"), s("total_assets"), s("total_equity")
+    pretax, ebit = s("pretax_income"), s("operating_income")
+    years = sorted(set(ni) & set(rev) & set(assets) & set(equity))
+    series = []
+    for y in years:
+        n, r, a, e = ni[y], rev[y], assets[y], equity[y]
+        if not (r and a and a > 0 and e and e > 0):
+            continue
+        rec = {"year": y, "roe": n / e, "net_margin": n / r,
+               "asset_turnover": r / a, "equity_multiplier": a / e}
+        pt, eb = pretax.get(y), ebit.get(y)
+        if pt and eb and eb != 0 and pt != 0:
+            rec.update({"tax_burden": n / pt, "interest_burden": pt / eb,
+                        "operating_margin": eb / r})
+        series.append(rec)
+    if not series:
+        return None
+    latest = series[-1]
+    prior = series[0] if len(series) < 6 else series[-6]
+
+    # Which lever moved ROE the most since `prior` (log-additive decomposition:
+    # Δln ROE = Δln margin + Δln turnover + Δln leverage).
+    driver = None
+    if prior is not latest:
+        comps = {}
+        for k, label in (("net_margin", "profit margins"),
+                         ("asset_turnover", "asset efficiency"),
+                         ("equity_multiplier", "leverage")):
+            pv, lv = prior.get(k), latest.get(k)
+            if pv and lv and pv > 0 and lv > 0:
+                comps[label] = math.log(lv / pv)
+        if comps:
+            factor = max(comps, key=lambda k: abs(comps[k]))
+            driver = {"factor": factor, "direction": "higher" if comps[factor] > 0 else "lower",
+                      "prior_year": prior["year"], "prior_roe": prior["roe"]}
+    return {"latest": latest, "prior": prior, "driver": driver, "series": series}
 
 
 def analyze(statements: dict[str, Any], info: dict[str, Any],
@@ -264,6 +313,7 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
         "return_on_assets": _div(ni_l, assets_l),
         "capital_returns": capital_returns,
         "piotroski": piotroski_score(statements),
+        "dupont": dupont(statements),
         "dividend_safety": dividend_safety,
         "enterprise_value": ev,
         "ev_to_ebitda": info.get("ev_to_ebitda") or _div(ev, ebitda_l),
