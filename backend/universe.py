@@ -89,10 +89,15 @@ def peers_of(ticker: str, limit: int = 8) -> list[str]:
 
 
 def get(scope: str = "full") -> list[str]:
-    """Return a universe by name: 'core' (~57), 'full' (~207), or 'large' (~900)."""
+    """Return a universe by name: 'core' (~57), 'full' (~207), 'large' (~900), or
+    'all' (~5,000 raw US-listed — meant to be passed through a market-cap floor
+    before scanning)."""
     scope = (scope or "").lower()
     if scope == "core":
         return list(CORE)
     if scope == "large":
         return list(LARGE)
+    if scope == "all":
+        import all_us_symbols
+        return list(all_us_symbols.ALL_US)
     return list(FULL)

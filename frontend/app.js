@@ -1234,19 +1234,22 @@ function showScreenProgress() {
   if (!screenState) return;
   const { done, total, scope, phase, deepDone, deepTotal } = screenState;
   const verifying = phase === "verifying";
+  const prefiltering = phase === "prefiltering";
   const [d, t] = verifying ? [deepDone || 0, deepTotal || 0] : [done, total];
-  const pct = t ? Math.round((d / t) * 100) : 0;
-  const label = verifying
-    ? `Deep-verifying top candidates on 10–19yr EDGAR data…`
-    : `Scanning <span class="text-slate-200">${scope}</span> universe (fast pass)…`;
+  const pct = prefiltering ? 0 : (t ? Math.round((d / t) * 100) : 0);
+  const label = prefiltering
+    ? `Filtering ~5,000 US-listed names by market cap…`
+    : verifying
+      ? `Deep-verifying top candidates on 10–19yr EDGAR data…`
+      : `Scanning <span class="text-slate-200">${scope}</span> universe (fast pass)…`;
   $("results").classList.add("hidden");
   $("error").classList.add("hidden");
   $("hint")?.classList.add("hidden");
   $("loadingMsg").innerHTML = `
     <div class="max-w-md mx-auto text-left">
-      <div class="flex justify-between text-sm mb-2"><span>${label}</span><span class="text-brand font-medium">${d} / ${t} (${pct}%)</span></div>
-      <div class="h-2.5 bg-ink/60 rounded-full overflow-hidden border border-line/60"><div class="h-full bg-${verifying ? "good" : "brand"} rounded-full" style="width:${pct}%;transition:width .4s"></div></div>
-      <div class="text-xs text-muted mt-3">${verifying ? "Re-scoring the plausible candidates on deep history so the final list matches the single-stock view." : "Runs in the background — you can switch tabs or keep using the app; the scan keeps going and you can come back to it."}</div>
+      <div class="flex justify-between text-sm mb-2"><span>${label}</span>${prefiltering ? `<span class="text-brand font-medium">…</span>` : `<span class="text-brand font-medium">${d} / ${t} (${pct}%)</span>`}</div>
+      <div class="h-2.5 bg-ink/60 rounded-full overflow-hidden border border-line/60"><div class="h-full bg-${verifying ? "good" : "brand"} rounded-full ${prefiltering ? "animate-pulse w-1/3" : ""}" style="${prefiltering ? "" : `width:${pct}%;`}transition:width .4s"></div></div>
+      <div class="text-xs text-muted mt-3">${prefiltering ? "Trimming the ~5,000 US-listed names to the investable ~2,000 (market cap ≥ $2B, price ≥ $5) before the full scan." : verifying ? "Re-scoring the plausible candidates on deep history so the final list matches the single-stock view." : "Runs in the background — you can switch tabs or keep using the app; the scan keeps going and you can come back to it."}</div>
       <button id="cancelScreen" class="mt-3 text-xs text-muted hover:text-bad underline decoration-dotted">Stop scan (keep results so far)</button>
     </div>`;
   $("loading").classList.remove("hidden");

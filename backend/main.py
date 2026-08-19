@@ -308,9 +308,22 @@ def _prune_jobs() -> None:
 
 
 def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
-                  min_score: int, scope: str, is_custom: bool) -> None:
+                  min_score: int, scope: str, is_custom: bool,
+                  prefilter: bool = False) -> None:
     """Worker thread: scan each symbol, updating progress; finalize on completion."""
     job = _SCAN_JOBS[job_id]
+    # 'all' scope: first trim the ~5,000 raw symbols to the investable ~2,000 with
+    # a cheap batched market-cap/price floor (penny stocks / dead tickers are noise).
+    if prefilter and not job.get("cancelled"):
+        from data import prefilter_by_size
+        try:
+            survivors = prefilter_by_size(symbols)
+        except Exception:  # noqa: BLE001
+            survivors = symbols
+        with _SCAN_LOCK:
+            symbols = survivors or symbols
+            job["total"] = len(symbols)
+            job["phase"] = "scanning"
     pace = 0.15 if len(symbols) > 80 else 0.0
     for i, sym in enumerate(symbols, 1):
         if job.get("cancelled"):
@@ -389,23 +402,28 @@ def screen_start(min_score: int = 80, universe: Optional[str] = None,
     _prune_jobs()
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
                                 inflation_hurdle, margin_of_safety, margin_normalization)
+    # 'all' = the full ~5,000 US-listed universe; it gets a market-cap/price floor
+    # (in the worker) to trim to the ~2,000 investable names before scanning.
+    prefilter = (scope == "all") and not universe
+    cap = 5200 if prefilter else 1100
     if universe:
         symbols = [t.strip().upper() for t in universe.replace(",", " ").split() if t.strip()]
     else:
         symbols = _universe.get(scope)
-    symbols = list(dict.fromkeys(symbols))[:1100]
+    symbols = list(dict.fromkeys(symbols))[:cap]
     if not symbols:
         raise HTTPException(status_code=400, detail="No tickers to scan.")
     job_id = uuid.uuid4().hex[:12]
     _SCAN_JOBS[job_id] = {
         "status": "running", "total": len(symbols), "done": 0,
-        "phase": "scanning", "deep_total": 0, "deep_done": 0,
+        "phase": "prefiltering" if prefilter else "scanning", "deep_total": 0, "deep_done": 0,
         "rows": [], "errors": [], "candidates": None, "diff": None,
         "min_score": min_score, "scope": scope, "assumptions": a,
-        "is_custom": bool(universe), "started": time.time(), "finished": None,
+        "is_custom": bool(universe), "prefilter": prefilter,
+        "started": time.time(), "finished": None,
     }
     threading.Thread(target=_run_scan_job,
-                     args=(job_id, symbols, a, min_score, scope, bool(universe)),
+                     args=(job_id, symbols, a, min_score, scope, bool(universe), prefilter),
                      daemon=True).start()
     return {"job_id": job_id, "total": len(symbols)}
 
