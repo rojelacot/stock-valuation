@@ -167,14 +167,15 @@ import universe as _universe
 CURATED_UNIVERSE = _universe.CORE
 
 
-def _summary_row(sym: str, a: dict[str, Any]) -> dict[str, Any]:
+def _summary_row(sym: str, a: dict[str, Any], use_edgar: bool = False) -> dict[str, Any]:
     """Compact one-line summary of a ticker under assumptions `a` (no AI).
 
-    Bulk path: Yahoo-only (use_edgar=False). A per-name SEC EDGAR fetch across a
-    hundreds-to-thousand-name universe would take an hour and hammer SEC — the
-    screener is meant to be fast; deep EDGAR history is for the single-stock view.
+    Bulk first pass: Yahoo-only (use_edgar=False) — a per-name SEC EDGAR fetch
+    across a thousand names would take an hour. The screener's SECOND pass re-runs
+    just the near-and-above-the-bar names with use_edgar=True so the final
+    candidates rest on the same 10-19yr history the single-stock view uses.
     """
-    r = _analyze_one(sym, a, use_ai=False, use_edgar=False)
+    r = _analyze_one(sym, a, use_ai=False, use_edgar=use_edgar)
     m, v, info = r["metrics"], r["verdict"], r["info"]
     val = m.get("valuation", {})
     eq = m.get("earnings_quality", {})
@@ -204,6 +205,7 @@ def _summary_row(sym: str, a: dict[str, Any]) -> dict[str, Any]:
         "years_of_data": m["growth"].get("years_of_data"),
         "green_flags": v.get("green_flags", []),
         "red_flags": v.get("red_flags", []),
+        "deep_verified": use_edgar,
     }
 
 
@@ -327,6 +329,35 @@ def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
             job["done"] = i
         if pace:
             time.sleep(pace)
+
+    # ---- Second pass: deep-verify the plausible candidates on EDGAR ----
+    # The fast pass runs on Yahoo's shallow ~4yr data. Re-score every name within
+    # 10 points of the bar on 10-19yr EDGAR history, so the final candidate list
+    # rests on the same deep data the single-stock Analyze view uses (no more
+    # "screen says 89, deep-dive says 60"). Capped to bound the extra time.
+    if not is_custom and not job.get("cancelled"):
+        with _SCAN_LOCK:
+            # Re-score the most promising names by fast-pass score. The fast pass
+            # tends to *under*-score on shallow data, so we can't use a tight
+            # threshold — take the top ~60 (floored at 45 to skip clear junk).
+            to_verify = sorted([r for r in job["rows"] if (r.get("score") or 0) >= 45],
+                               key=lambda r: -(r["score"] or 0))[:60]
+            job["phase"] = "verifying"
+            job["deep_total"] = len(to_verify)
+        deep_by_ticker: dict[str, dict] = {}
+        for j, r in enumerate(to_verify, 1):
+            if job.get("cancelled"):
+                break
+            try:
+                deep_by_ticker[r["ticker"]] = _summary_row(r["ticker"], a, use_edgar=True)
+            except Exception:  # noqa: BLE001
+                pass
+            with _SCAN_LOCK:
+                job["deep_done"] = j
+            time.sleep(0.1)
+        with _SCAN_LOCK:
+            job["rows"] = [deep_by_ticker.get(r["ticker"], r) for r in job["rows"]]
+
     with _SCAN_LOCK:
         rows = sorted(job["rows"], key=lambda x: (x["score"] is None, -(x["score"] or 0)))
         candidates = [r for r in rows if (r["score"] or 0) >= min_score and not r.get("suspect")]
@@ -368,6 +399,7 @@ def screen_start(min_score: int = 80, universe: Optional[str] = None,
     job_id = uuid.uuid4().hex[:12]
     _SCAN_JOBS[job_id] = {
         "status": "running", "total": len(symbols), "done": 0,
+        "phase": "scanning", "deep_total": 0, "deep_done": 0,
         "rows": [], "errors": [], "candidates": None, "diff": None,
         "min_score": min_score, "scope": scope, "assumptions": a,
         "is_custom": bool(universe), "started": time.time(), "finished": None,
@@ -387,6 +419,8 @@ def screen_status(job_id: str):
                             detail="Scan job not found — it may have expired. Start a new scan.")
     with _SCAN_LOCK:
         out = {"status": job["status"], "total": job["total"], "done": job["done"],
+               "phase": job.get("phase", "scanning"),
+               "deep_total": job.get("deep_total", 0), "deep_done": job.get("deep_done", 0),
                "min_score": job["min_score"], "scope": job["scope"],
                "ai_enabled": bool(os.environ.get("ANTHROPIC_API_KEY"))}
         if job["status"] in ("done", "cancelled"):

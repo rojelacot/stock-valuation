@@ -33,6 +33,9 @@ CAPABILITIES = [
          "Banks, insurers and brokers are valued the way analysts actually value "
          "them — the justified price-to-book model (book value x through-cycle ROE) "
          "instead of a cash-flow DCF that doesn't fit them.",
+         "REITs are valued on FFO (funds from operations = net income + real-estate "
+         "depreciation) and P/FFO — not GAAP earnings or book value, both of which "
+         "mislead for property companies.",
      ]},
     {"title": "Scores the business 0-100 -> Buy / Hold / Avoid",
      "items": [

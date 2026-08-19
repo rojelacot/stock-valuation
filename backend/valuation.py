@@ -357,8 +357,46 @@ def compute_metrics(stock: dict[str, Any],
     # the method that actually fits them. Through-cycle average ROE keeps a
     # cyclical peak from inflating the value.
     fin_valuation = None
+    reit_valuation = None
     price = info.get("current_price")
-    if is_fin:
+    is_reit = needs_ffo_valuation(info)
+
+    # REITs: value on FFO (net income + real-estate depreciation), discounted as
+    # an equity-level stream (no net-cash add-back — FFO is already post-interest).
+    if is_reit:
+        dep_map = {p["year"]: p["value"] for p in eq.get("series", {}).get("depreciation", [])}
+        ffo = sorted((y, ni + dep_map[y]) for y, ni in net_income if dep_map.get(y) is not None)
+        base_ffo = _normalized_base_fcf(ffo, None)
+        reit_shares = (info.get("shares_outstanding")
+                       or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
+        if base_ffo and base_ffo > 0 and reit_shares:
+            ffo_g = cagr(ffo)
+            reit_growth = max(min(ffo_g if ffo_g is not None else 0.03, 0.08), 0.0)
+            rdcf = discounted_cash_flow(base_ffo, info, ffo_g, ffo_g, eff_discount,
+                                        A["terminal_growth"], A["projection_years"],
+                                        A["margin_of_safety"], growth_estimate=reit_growth,
+                                        max_stage1_growth=0.08, add_net_cash=False)
+            iv = rdcf.get("intrinsic_value_per_share") if rdcf.get("ok") else None
+            if iv and iv > 0:
+                ffo_ps = base_ffo / reit_shares
+                up = ((iv - price) / price) if price else None
+                suspect = up is not None and up > 1.0
+                reit_valuation = {
+                    "ok": True, "method": "ffo", "is_financial": True,
+                    "low": iv, "high": iv, "mid": iv, "spread": 0.0,
+                    "conservative_iv": iv, "adjusted_iv": iv, "current_price": price,
+                    "upside_low": up, "upside_high": up, "upside_mid": up,
+                    "buy_below": iv * (1 - A["margin_of_safety"]),
+                    "margin_of_safety": A["margin_of_safety"], "suspect": bool(suspect),
+                    "suspect_reason": (f"Implied upside ~{up*100:.0f}% is implausibly high — verify the FFO inputs." if suspect else None),
+                    "ffo_per_share": ffo_ps, "ffo_total": base_ffo,
+                    "current_pffo": (price / ffo_ps) if (price and ffo_ps) else None,
+                    "fair_pffo": (iv / ffo_ps) if ffo_ps else None,
+                    "ffo_growth": rdcf.get("assumptions", {}).get("stage1_growth"),
+                }
+                valuation = reit_valuation
+
+    if is_fin and not is_reit:
         import financials
         fin_shares = (info.get("shares_outstanding")
                       or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
@@ -422,6 +460,18 @@ def compute_metrics(stock: dict[str, Any],
                                    A["terminal_growth"], A["projection_years"])
     monte_carlo = monte_carlo_dcf(val_base_cf, info, base_growth, eff_discount,
                                   A["terminal_growth"], A["projection_years"])
+
+    # REITs: run scenarios / Monte-Carlo / reverse on FFO, equity-level (no net cash).
+    if reit_valuation:
+        _ffo, _g = reit_valuation["ffo_total"], (reit_valuation["ffo_growth"] or 0.04)
+        scenarios = scenario_values(_ffo, info, _g, eff_discount, A["terminal_growth"],
+                                    A["projection_years"], A["margin_of_safety"], add_net_cash=False)
+        reverse = reverse_dcf(_ffo, info, eff_discount, A["terminal_growth"],
+                              A["projection_years"], add_net_cash=False)
+        sensitivity = sensitivity_grid(_ffo, info, _g, eff_discount, A["terminal_growth"],
+                                       A["projection_years"], add_net_cash=False)
+        monte_carlo = monte_carlo_dcf(_ffo, info, _g, eff_discount, A["terminal_growth"],
+                                      A["projection_years"], add_net_cash=False)
 
     # Financials: flex ROE & required return (not cash-flow growth) for scenarios
     # and Monte-Carlo, and report the ROE the price implies instead of a growth rate.
@@ -495,6 +545,7 @@ def discounted_cash_flow(
     margin_of_safety: float = MARGIN_OF_SAFETY,
     growth_estimate: Optional[float] = None,
     max_stage1_growth: float = 0.12,
+    add_net_cash: bool = True,
 ) -> dict[str, Any]:
     """A two-stage cash-flow-to-equity DCF.
 
@@ -540,7 +591,9 @@ def discounted_cash_flow(
     pv_terminal = terminal_value / ((1 + discount_rate) ** years)
 
     enterprise_value = pv_sum + pv_terminal
-    net_cash = (info.get("total_cash") or 0) - (info.get("total_debt") or 0)
+    # FFO/owner-earnings that are already equity-level (post-interest) must NOT
+    # get the debt subtracted again — REITs pass add_net_cash=False.
+    net_cash = ((info.get("total_cash") or 0) - (info.get("total_debt") or 0)) if add_net_cash else 0.0
     equity_value = enterprise_value + net_cash
 
     shares = info.get("shares_outstanding")
@@ -590,6 +643,16 @@ def needs_earnings_valuation(info: dict[str, Any]) -> bool:
     if "financial" in sec or "real estate" in sec:
         return True
     return any(w in ind for w in FINANCIAL_INDUSTRY_WORDS)
+
+
+def needs_ffo_valuation(info: dict[str, Any]) -> bool:
+    """REITs: GAAP earnings are crushed by real-estate depreciation and book value
+    understates the property, so both a cash-flow DCF and a price-to-book model
+    mislead. The right measure is FFO (funds from operations = net income + real-
+    estate D&A) and a P/FFO / FFO-discount valuation."""
+    sec = (info.get("sector") or "").lower()
+    ind = (info.get("industry") or "").lower()
+    return "real estate" in sec or "reit" in ind
 
 
 # Above this implied upside, a DCF is almost always a data/extrapolation artifact
@@ -663,7 +726,8 @@ def build_valuation_range(dcf: dict[str, Any], dcf_owner: dict[str, Any],
 
 
 def reverse_dcf(base_cf: Optional[float], info: dict[str, Any],
-                discount_rate: float, terminal_growth: float, years: int) -> dict[str, Any]:
+                discount_rate: float, terminal_growth: float, years: int,
+                add_net_cash: bool = True) -> dict[str, Any]:
     """Solve for the stage-1 growth rate the *current price* implies, so you can
     ask 'what does the market already expect?' (checklist #15)."""
     price = info.get("current_price")
@@ -673,7 +737,7 @@ def reverse_dcf(base_cf: Optional[float], info: dict[str, Any],
     def iv(g):
         d = discounted_cash_flow(base_cf, info, None, None, discount_rate,
                                  terminal_growth, years, growth_estimate=g,
-                                 max_stage1_growth=1.0)
+                                 max_stage1_growth=1.0, add_net_cash=add_net_cash)
         return d.get("intrinsic_value_per_share") if d.get("ok") else None
 
     lo, hi = 0.0, 0.40
@@ -695,7 +759,8 @@ def reverse_dcf(base_cf: Optional[float], info: dict[str, Any],
 
 def scenario_values(base_cf: Optional[float], info: dict[str, Any],
                     base_growth: float, discount_rate: float, terminal_growth: float,
-                    years: int, margin_of_safety: float) -> dict[str, Any]:
+                    years: int, margin_of_safety: float,
+                    add_net_cash: bool = True) -> dict[str, Any]:
     """Bear / base / bull fair values by flexing growth, discount and terminal
     (checklist #14, #17)."""
     price = info.get("current_price")
@@ -707,7 +772,7 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
             terminal_growth=max(min(terminal_growth + tdelta, 0.04), 0.0),
             years=years, margin_of_safety=margin_of_safety,
             growth_estimate=max(base_growth * gmult, -0.02),
-            max_stage1_growth=0.25)
+            max_stage1_growth=0.25, add_net_cash=add_net_cash)
         iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
         return {"fair_value": iv, "upside": ((iv - price) / price) if (iv and price) else None}
 
@@ -720,7 +785,8 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
 
 
 def sensitivity_grid(base_cf: Optional[float], info: dict[str, Any], base_growth: float,
-                     discount_rate: float, terminal_growth: float, years: int) -> dict[str, Any]:
+                     discount_rate: float, terminal_growth: float, years: int,
+                     add_net_cash: bool = True) -> dict[str, Any]:
     """Fair value across a discount-rate × stage-1-growth matrix, so the DCF's
     assumption-sensitivity is visible at a glance (checklist #14)."""
     price = info.get("current_price")
@@ -735,7 +801,8 @@ def sensitivity_grid(base_cf: Optional[float], info: dict[str, Any], base_growth
         for g in g_axis:
             d = discounted_cash_flow(base_cf, info, None, None, discount_rate=dr,
                                      terminal_growth=terminal_growth, years=years,
-                                     growth_estimate=g, max_stage1_growth=0.30)
+                                     growth_estimate=g, max_stage1_growth=0.30,
+                                     add_net_cash=add_net_cash)
             iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
             row.append({"iv": iv, "upside": ((iv - price) / price) if iv else None})
         cells.append(row)
@@ -749,7 +816,7 @@ MC_ITERATIONS = 2000  # Monte-Carlo simulation count (Guide tab reads this)
 
 def monte_carlo_dcf(base_cf: Optional[float], info: dict[str, Any], base_growth: float,
                     discount_rate: float, terminal_growth: float, years: int,
-                    iterations: int = MC_ITERATIONS) -> dict[str, Any]:
+                    iterations: int = MC_ITERATIONS, add_net_cash: bool = True) -> dict[str, Any]:
     """Monte-Carlo intrinsic value.
 
     A single-point DCF is false precision — its answer is only as good as four
@@ -778,7 +845,8 @@ def monte_carlo_dcf(base_cf: Optional[float], info: dict[str, Any], base_growth:
             continue
         d = discounted_cash_flow(cf, info, None, None, discount_rate=dr,
                                  terminal_growth=tg, years=years,
-                                 growth_estimate=g, max_stage1_growth=0.25)
+                                 growth_estimate=g, max_stage1_growth=0.25,
+                                 add_net_cash=add_net_cash)
         iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
         if iv is not None and iv > 0:
             ivs.append(iv)

@@ -306,7 +306,9 @@ function dcfSection(d, cur) {
   // bar scaled to max of (high value, price)
   const barMax = Math.max(hi || 0, px || 0) * 1.1 || 1;
   const pos = (x) => Math.min(100, Math.max(0, ((x || 0) / barMax) * 100));
-  const methodNote = val.method === "book-value"
+  const methodNote = val.method === "ffo"
+    ? "Valued on <span class='text-slate-300'>funds from operations (FFO)</span> — the REIT standard. GAAP earnings are crushed by real-estate depreciation and book value understates the property, so FFO (net income + real-estate D&amp;A) is discounted as an equity-level stream. The debt isn't subtracted again — FFO is already after interest."
+    : val.method === "book-value"
     ? "Valued on the <span class='text-slate-300'>justified price-to-book</span> model — the tool bank &amp; insurance analysts actually use: fair P/B = (ROE − g) / (r − g), applied to book value per share. A financial is worth a premium to book only insofar as its return on equity beats the return you require. Uses through-cycle (7-yr median) ROE so a cyclical peak doesn't inflate it."
     : val.method === "earnings"
     ? "Valued on <span class='text-slate-300'>earnings power</span> — a free-cash-flow DCF doesn't fit banks / insurers / REITs."
@@ -315,11 +317,21 @@ function dcfSection(d, cur) {
   const mnBanner = mn.applied ? `<div class="text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 my-2 leading-relaxed"><strong>Stress test active:</strong> earnings normalized to a ${fmtPct(mn.target_margin, 1)} net margin (${Math.round(mn.factor * 100)}% of the way from the current ${fmtPct(mn.latest_margin, 1)} toward the ${fmtPct(mn.avg_margin, 1)} long-run average). The earnings base is scaled ${mn.ratio.toFixed(2)}×, so this valuation and the score below reflect that assumption — not as-reported earnings.</div>` : "";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
+    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "ffo" ? "(funds from operations)" : val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
     ${mnBanner}
     ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed"><strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
     <p class="text-xs text-muted mb-4">${methodNote}</p>
-    ${val.method === "book-value" ? `
+    ${val.method === "ffo" ? `
+    <div class="grid md:grid-cols-3 gap-3 mb-4">
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (FFO-based)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">FFO / share</div><div class="text-2xl font-bold text-slate-300">${price(val.ffo_per_share, cur)}</div></div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-4">
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Current P/FFO</div><div class="text-sm font-semibold">${fmtNum(val.current_pffo, 1)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Fair P/FFO (implied)</div><div class="text-sm font-semibold text-brand">${fmtNum(val.fair_pffo, 1)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">FFO growth used</div><div class="text-sm font-semibold">${fmtPct(val.ffo_growth, 1)}</div></div>
+    </div>` : val.method === "book-value" ? `
     <div class="grid md:grid-cols-3 gap-3 mb-4">
       <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (justified P/B)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
       <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
@@ -868,7 +880,8 @@ function summarySection(d) {
   const rc = { "BUY": "good", "HOLD / WATCH": "warn", "AVOID": "bad" }[v.rating] || "warn";
   const name = d.info.name || d.ticker;
 
-  const methodWord = val.method === "book-value" ? "on book value &amp; through-cycle ROE"
+  const methodWord = val.method === "ffo" ? "on funds from operations (FFO)"
+    : val.method === "book-value" ? "on book value &amp; through-cycle ROE"
     : val.method === "earnings" ? "on earnings power" : "on discounted cash flow";
   const up = val.upside_mid;
   let valSentence;
@@ -1082,7 +1095,7 @@ async function pollScreen() {
   let st;
   try { st = await getJSON(`/api/screen/status?job_id=${screenJob}`); }
   catch (e) { stopScreenPoll(); if (currentMode === "screen") showError(e.message); return; }
-  screenState = { done: st.done, total: st.total, scope: st.scope };
+  screenState = { done: st.done, total: st.total, scope: st.scope, phase: st.phase, deepDone: st.deep_done, deepTotal: st.deep_total };
   if (st.status === "running") {
     if (currentMode === "screen") showScreenProgress();
     return;
@@ -1096,16 +1109,21 @@ async function pollScreen() {
 
 function showScreenProgress() {
   if (!screenState) return;
-  const { done, total, scope } = screenState;
-  const pct = total ? Math.round((done / total) * 100) : 0;
+  const { done, total, scope, phase, deepDone, deepTotal } = screenState;
+  const verifying = phase === "verifying";
+  const [d, t] = verifying ? [deepDone || 0, deepTotal || 0] : [done, total];
+  const pct = t ? Math.round((d / t) * 100) : 0;
+  const label = verifying
+    ? `Deep-verifying top candidates on 10–19yr EDGAR data…`
+    : `Scanning <span class="text-slate-200">${scope}</span> universe (fast pass)…`;
   $("results").classList.add("hidden");
   $("error").classList.add("hidden");
   $("hint")?.classList.add("hidden");
   $("loadingMsg").innerHTML = `
     <div class="max-w-md mx-auto text-left">
-      <div class="flex justify-between text-sm mb-2"><span>Scanning <span class="text-slate-200">${scope}</span> universe…</span><span class="text-brand font-medium">${done} / ${total} (${pct}%)</span></div>
-      <div class="h-2.5 bg-ink/60 rounded-full overflow-hidden border border-line/60"><div class="h-full bg-brand rounded-full" style="width:${pct}%;transition:width .4s"></div></div>
-      <div class="text-xs text-muted mt-3">Runs in the background — you can switch tabs or keep using the app; the scan keeps going and you can come back to it.</div>
+      <div class="flex justify-between text-sm mb-2"><span>${label}</span><span class="text-brand font-medium">${d} / ${t} (${pct}%)</span></div>
+      <div class="h-2.5 bg-ink/60 rounded-full overflow-hidden border border-line/60"><div class="h-full bg-${verifying ? "good" : "brand"} rounded-full" style="width:${pct}%;transition:width .4s"></div></div>
+      <div class="text-xs text-muted mt-3">${verifying ? "Re-scoring the plausible candidates on deep history so the final list matches the single-stock view." : "Runs in the background — you can switch tabs or keep using the app; the scan keeps going and you can come back to it."}</div>
       <button id="cancelScreen" class="mt-3 text-xs text-muted hover:text-bad underline decoration-dotted">Stop scan (keep results so far)</button>
     </div>`;
   $("loading").classList.remove("hidden");
@@ -1129,7 +1147,7 @@ function renderScreen(d) {
     <section class="card rounded-2xl p-6">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div><h3 class="text-lg font-semibold">Weekly buy screen</h3>
-          <p class="text-muted text-sm mt-1">Scanned ${d.scanned}/${d.universe_size} names · buy bar = score ≥ ${d.min_score}</p></div>
+          <p class="text-muted text-sm mt-1">Scanned ${d.scanned}/${d.universe_size} names · buy bar = score ≥ ${d.min_score}${(d.candidates || []).some(c => c.deep_verified) ? ' · candidates re-scored on 10–19yr EDGAR data' : ''}</p></div>
         <div class="text-right"><div class="text-3xl font-bold text-${cands.length ? 'good' : 'muted'}">${cands.length}</div><div class="text-xs text-muted">candidate${cands.length === 1 ? "" : "s"}</div></div>
       </div>
       ${cands.length === 0 ? `<p class="text-sm text-muted mt-4 bg-ink/40 border border-line/60 rounded-lg p-3">Nothing clears the bar right now — that's normal for a strict margin-of-safety screen in a richly-priced market. The patient move is to wait (or loosen your assumptions in the panel above). The full ranked list is below; the highest scorers are the closest to a buy.</p>` : `<p class="text-sm text-good mt-4">These names clear your buy bar today. Click any row for the full analysis before acting.</p>`}
