@@ -254,6 +254,7 @@ function verdictCard(d, rs, cur) {
         </div>
       </div>
     </div>
+    ${(d.metrics.data_confidence && d.metrics.data_confidence.low) ? `<div class="mt-4 text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 leading-relaxed"><strong>Low confidence</strong> — only ${d.metrics.data_confidence.years} year${d.metrics.data_confidence.years === 1 ? "" : "s"} of financial history available (a recent listing, or a foreign filer on shallow data). Growth rates, through-cycle medians and the DCF are all less reliable with this little history, so weight the score accordingly.</div>` : ""}
   </section>`);
 }
 
@@ -375,7 +376,8 @@ function dcfSection(d, cur) {
         <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Discount rate</div><div>${fmtPct(a.discount_rate)}</div></div>
         <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Years</div><div>${a.years}</div></div>
       </div>
-      ${(d.metrics.risk_premium && d.metrics.risk_premium.premium > 0) ? `<p class="text-[11px] text-muted mt-2">Discount rate is risk-adjusted: base ${fmtPct((d.metrics.assumptions_used||{}).discount_rate)} + ${fmtPct(d.metrics.risk_premium.premium)} risk premium (${d.metrics.risk_premium.reasons.join(", ")}).</p>` : ""}
+      ${(d.metrics.risk_premium && Math.abs(d.metrics.risk_premium.premium) >= 0.001) ? `<p class="text-[11px] text-muted mt-2">Discount rate is risk-adjusted per stock (CAPM): base ${fmtPct((d.metrics.assumptions_used || {}).discount_rate, 0)} ${d.metrics.risk_premium.premium >= 0 ? "+" : "−"} ${fmtPct(Math.abs(d.metrics.risk_premium.premium), 1)} (${d.metrics.risk_premium.reasons.join(", ")}) = ${fmtPct(d.metrics.effective_discount_rate, 1)}.</p>` : ""}
+      ${(dcf.ok && dcf.terminal_pct != null) ? `<p class="text-[11px] ${dcf.terminal_pct >= 0.7 ? "text-warn" : "text-muted"} mt-1"><span class="font-medium">${fmtPct(dcf.terminal_pct, 0)}</span> of the estimate comes from the terminal value${dcf.terminal_pct >= 0.7 ? " — most of the value sits beyond the projection window, so it's highly sensitive to the terminal-growth and discount-rate assumptions." : " (the rest from the explicitly projected years)."}</p>` : ""}
     </details>
   </section>`);
 }
@@ -908,6 +910,8 @@ function summarySection(d) {
   let crux;
   if (val.suspect) {
     crux = "Verify the underlying data before acting — the model doesn't fit this name cleanly.";
+  } else if (m.data_confidence && m.data_confidence.low) {
+    crux = `Only ${m.data_confidence.years} years of financial history — treat the score as tentative, lean on the qualitative read, and wait for more of a track record before a decade-plus commitment.`;
   } else if (m.cyclical_peak && m.cyclical_peak.peak && v.rating !== "AVOID") {
     crux = "The upside leans on currently-elevated profitability. Use the margin-normalization slider above to see whether the case survives margins reverting to their long-run average.";
   } else if (v.rating === "BUY") {

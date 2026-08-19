@@ -119,31 +119,38 @@ DEVELOPED = {"United States", "Canada", "United Kingdom", "Germany", "France",
              "Singapore", "Hong Kong", "New Zealand", "Israel", "Italy", "Spain"}
 
 
-def risk_premium(info: dict[str, Any]) -> dict[str, Any]:
-    """Extra discount-rate demanded for company-specific risk (guardrail 4).
+EQUITY_RISK_PREMIUM = 0.05  # long-run equity premium (for the CAPM beta term)
 
-    Riskier businesses should have to clear a higher bar (bigger margin of
-    safety), so we add premiums for small size, high volatility, leverage, and
-    emerging-market domicile. Capped at +5%."""
+
+def risk_premium(info: dict[str, Any]) -> dict[str, Any]:
+    """Signed adjustment to the discount rate for company-specific risk.
+
+    The user's discount rate is the required return for an *average-risk* (beta=1)
+    business. From there we adjust smoothly per-stock via CAPM — (beta − 1) × the
+    equity risk premium — so a defensive low-beta name is discounted *less* (a
+    negative premium) and a volatile one more. On top of that we add premiums for
+    small size, high leverage, and emerging-market domicile that beta alone misses.
+    Net premium is bounded to [−3%, +5%]."""
     prem, reasons = 0.0, []
+    # CAPM beta term (can be negative for defensive names).
+    beta = info.get("beta")
+    if beta is not None:
+        badj = min(max((beta - 1.0) * EQUITY_RISK_PREMIUM, -0.03), 0.05)
+        prem += badj
+        if abs(badj) >= 0.005:
+            reasons.append(f"beta {beta:.2f}" + (" (defensive)" if badj < 0 else " (volatile)"))
     mc = info.get("market_cap") or 0
     if 0 < mc < 3e9:
         prem += 0.02; reasons.append("small cap")
     elif 0 < mc < 10e9:
         prem += 0.01; reasons.append("mid cap")
-    beta = info.get("beta")
-    if beta is not None:
-        if beta >= 1.8:
-            prem += 0.02; reasons.append("high volatility")
-        elif beta >= 1.3:
-            prem += 0.01; reasons.append("elevated volatility")
     net_debt = (info.get("total_debt") or 0) - (info.get("total_cash") or 0)
     if mc and net_debt > 0.5 * mc:
         prem += 0.01; reasons.append("high leverage")
     country = info.get("country")
     if country and country not in DEVELOPED:
         prem += 0.02; reasons.append("emerging market")
-    return {"premium": min(prem, 0.05), "reasons": reasons}
+    return {"premium": min(max(prem, -0.03), 0.05), "reasons": reasons}
 
 
 def cyclical_peak_check(margins: dict[str, Any], returns: dict[str, Any]) -> dict[str, Any]:
@@ -306,7 +313,9 @@ def compute_metrics(stock: dict[str, Any],
 
     # Guardrail 4: risk-adjust the discount rate so riskier names clear a higher bar.
     rp = risk_premium(info)
-    eff_discount = min(A["discount_rate"] + rp["premium"], 0.25)
+    # Risk-adjusted discount rate, floored at 6% (a defensive name still can't be
+    # discounted below a sane minimum) and capped at 25%.
+    eff_discount = min(max(A["discount_rate"] + rp["premium"], 0.06), 0.25)
 
     # ---- DCF #1: conservative, on free cash flow (penalizes all capex) ----
     dcf = discounted_cash_flow(
@@ -499,6 +508,13 @@ def compute_metrics(stock: dict[str, Any],
         "sensitivity": sensitivity,
         "monte_carlo": monte_carlo,
         "forensics": forensic_scores,
+        # Confidence gate: CAGRs, medians and the DCF need a few years to be
+        # stable. Thin history (foreign filers on Yahoo, recent IPOs) is flagged
+        # so a sparse-data score isn't over-trusted.
+        "data_confidence": {
+            "years": growth.get("years_of_data"),
+            "low": (growth.get("years_of_data") or 0) < 6,
+        },
         "margin_normalization": {
             "factor": mn, "ratio": margin_ratio, "applied": margin_ratio != 1.0,
             "latest_margin": nm_latest, "avg_margin": nm_avg,
@@ -621,6 +637,9 @@ def discounted_cash_flow(
         },
         "pv_of_cashflows": pv_sum,
         "pv_of_terminal": pv_terminal,
+        # How much of the value rests on the (most assumption-sensitive) terminal
+        # value vs the explicitly-projected years.
+        "terminal_pct": (pv_terminal / enterprise_value) if enterprise_value else None,
         "enterprise_value": enterprise_value,
         "equity_value": equity_value,
         "intrinsic_value_per_share": iv_per_share,
