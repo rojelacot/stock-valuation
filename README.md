@@ -203,17 +203,23 @@ concentration/diversification read. The weekly job also flags watchlist names in
 State lives in `reports/watchlist.json`.
 
 ## Backtest / validation
-`backtest.py` rebuilds each name's score **as of ~N years ago** (statements truncated to that year,
-price then, look-ahead fields blanked) and measures the actual forward return, bucketed by score.
-It leads with the **median** (outlier-robust) and reports whether higher scores earned higher returns.
+`backtest.py` rebuilds each name's score **as of several past start-years** (statements truncated to
+that year, price then, look-ahead fields blanked) and measures the actual forward **total return**
+(price change **+ dividends received**) over the horizon, bucketed by score. Pooling multiple
+regime-diverse windows and counting dividends avoids the two biases of a naive test — one lucky
+5-year stretch, and denying the high-yield financials/REITs the dividends they actually pay. It
+leads with the **median** (outlier-robust) and reports the edge both pooled and per-window.
 ```bash
-.venv/bin/python backtest.py --years 2                 # core universe, Yahoo
-.venv/bin/python backtest.py --years 3 --scope full    # deeper lookback
-.venv/bin/python backtest.py --years 5 --edgar         # SEC EDGAR's 10–19yr (free, deepest)
-.venv/bin/python backtest.py --years 3 --simfin        # SimFin's 7yr (spends credits)
+.venv/bin/python backtest.py --scope large --edgar                      # 3 windows, total return
+.venv/bin/python backtest.py --scope large --edgar --windows 2016,2018,2020 --years 5
+.venv/bin/python backtest.py --scope core --edgar                       # quick, small sample
 ```
-Directional only (restated statements, no dividends), but across runs it consistently shows the
-score sorts stocks by typical forward return.
+Honest read (large universe, 3 windows 2016/2018/2020, total return): the **top bucket (score ≥80,
+the buy bar) is consistently the best (~+106% median vs ~+77% for &lt;50)**, but the aggregate
+≥70-vs-&lt;50 edge is **modest (~+5 pts) and regime-dependent** — negative in the 2016→2021 growth run,
+positive in 2018→2023 and 2020→2025. The signal is real and concentrated at the high-conviction end,
+not a blanket "higher score = higher return" across every bucket. Directional (restated statements,
+not point-in-time), not an academic backtest.
 
 ## Tests
 `python tests/smoke.py` runs offline robustness checks — the valuation/scoring pipeline must survive
