@@ -42,9 +42,9 @@ CAPABILITIES = [
          "Weighs cheapness, business quality (returns on capital), growth, "
          "balance-sheet strength, whether it beats inflation over 10-15 years, and "
          "margins — each with the reasoning shown in plain English.",
-         "Sector-relative: nudges the score by how the name stacks up against its "
-         "own sector's medians (a 13% ROIC is elite for a utility, mediocre for "
-         "software) and flags the 'cheap vs the market but not vs its sector' trap.",
+         "Sector-relative context: shows how the name stacks up against its own "
+         "sector's medians (a 13% ROIC is elite for a utility, mediocre for "
+         "software). Informational — it doesn't move the score.",
      ]},
     {"title": "Forensic safety checks (avoid getting burned)",
      "items": [
@@ -75,6 +75,56 @@ CAPABILITIES = [
          "Trend charts (price, revenue, cash flow, EPS, margins, returns) and "
          "tunable assumptions that instantly re-run everything.",
      ]},
+]
+
+THESIS = [
+    {"title": "Hold 10–15 years",
+     "items": ["Durability and returns on capital matter far more than this "
+               "quarter. We want businesses you could own for a decade without "
+               "watching the ticker."]},
+    {"title": "Beat inflation — not an index",
+     "items": ["The benchmark is inflation (~3%), not the S&P. The goal is a real "
+               "return on a concentrated set of understandable, high-quality "
+               "businesses — deliberately NOT hugging an index."]},
+    {"title": "Quality at a fair price",
+     "items": ["A wonderful business at a fair price beats a fair business at a "
+               "wonderful price. High returns on capital, a durable moat, a strong "
+               "balance sheet — bought with a margin of safety."]},
+    {"title": "Margin of safety",
+     "items": ["Prefer paying ≤ 75% of estimated intrinsic value, so the thesis "
+               "can be somewhat wrong and still work out. Price is what you pay; "
+               "value is what you get."]},
+]
+
+GUARDRAILS = [
+    {"title": "The right model for each business",
+     "items": ["Operating companies: free-cash-flow / owner-earnings DCF. Banks, "
+               "insurers, brokers: justified price-to-book on through-cycle ROE. "
+               "REITs: FFO (funds from operations). A one-size DCF misprices the "
+               "last two badly, so it's never used on them."]},
+    {"title": "Forensic gate (avoid blow-ups & frauds)",
+     "items": ["Altman Z-score (bankruptcy risk) and Beneish M-score (earnings-"
+               "manipulation profile) dock the score and block a Buy, however "
+               "cheap the stock looks."]},
+    {"title": "Don't trust a too-good number",
+     "items": ["An implausible implied upside (>100%), an unresolved foreign "
+               "currency, or physically impossible fundamentals (e.g. a broken "
+               "revenue line giving a >100% net margin) are flagged and excluded "
+               "from buy candidates rather than shown as a bargain."]},
+    {"title": "Peak-earnings & capex-cycle checks",
+     "items": ["Flags when margins/ROE are well above the company's own average "
+               "(cyclical peak). Heavy-capex names get an owner-earnings value "
+               "range, not a single flattered-or-depressed number — and you can "
+               "stress margins back to normal with the normalization slider."]},
+    {"title": "Honest cash flow & risk",
+     "items": ["Stock-based comp is subtracted from cash flow (no flattered FCF). "
+               "The discount rate is risk-adjusted per stock (CAPM: volatile / "
+               "small / levered / emerging-market names must clear a higher bar). "
+               "ADR reporting currencies are converted to the trading currency."]},
+    {"title": "Know when to distrust the score",
+     "items": ["Thin history (<6 years) is flagged as low-confidence. The reverse-"
+               "DCF shows the growth the current price already assumes. Sector "
+               "context shows whether a metric is actually good for its sector."]},
 ]
 
 LIMITATIONS = [
@@ -190,6 +240,8 @@ def build() -> dict[str, Any]:
 
     A = valuation.DEFAULT_ASSUMPTIONS
     return {
+        "thesis": THESIS,
+        "guardrails": GUARDRAILS,
         "capabilities": CAPABILITIES,
         "limitations": LIMITATIONS,
         "live": {

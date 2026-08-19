@@ -152,7 +152,9 @@ async function loadGuide() {
   wrap.innerHTML =
     `<div class="card rounded-2xl p-6"><h2 class="text-xl font-semibold mb-1">What this tool does — and doesn't</h2>
       <p class="text-sm text-muted">Professional-grade fundamental analysis and valuation on individual US stocks, for free, with strong guardrails against value traps — but every number is an informed estimate, not a promise, and the final decision is yours. The snapshot at the bottom is read live from the running code, so this page stays accurate as the app is revised.</p></div>`
+    + (d.thesis ? listCard("The philosophy it's built on", d.thesis, "brand", "•") : "")
     + listCard("What it does", d.capabilities, "good", "✓")
+    + (d.guardrails ? listCard("Guardrails against value traps", d.guardrails, "good", "✓") : "")
     + listCard("Limitations", d.limitations, "warn", "•")
     + liveCard;
   el.append(wrap);
@@ -815,7 +817,6 @@ function pillarsSection(d) {
   const raw = pillars.reduce((s, p) => s + p.points, 0);
   const maxTotal = pillars.reduce((s, p) => s + p.max, 0) || 100;
   const penalty = v.forensic_penalty || 0;
-  const secAdj = v.sector_adjustment || 0;
   const final = v.score;
   const rc = { "BUY": "good", "HOLD / WATCH": "warn", "AVOID": "bad" }[v.rating] || "warn";
 
@@ -850,10 +851,9 @@ function pillarsSection(d) {
     </div>
     <p class="text-xs text-muted mb-4">Six weighted pillars sum to a raw score; forensic red flags (distress / manipulation) dock it. Each pillar shows exactly what it credited and why.</p>
     ${band}
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-5 text-center">
+    <div class="grid grid-cols-3 gap-2 mb-5 text-center">
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Pillar points</div><div class="text-lg font-bold">${raw}<span class="text-muted text-sm">/${maxTotal}</span></div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Forensic penalty</div><div class="text-lg font-bold ${penalty > 0 ? "text-bad" : "text-muted"}">${penalty > 0 ? "−" + penalty : "0"}</div></div>
-      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Sector adj.</div><div class="text-lg font-bold ${secAdj > 0 ? "text-good" : secAdj < 0 ? "text-bad" : "text-muted"}">${secAdj > 0 ? "+" + secAdj : secAdj}</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5 border border-${rc}/40"><div class="text-[11px] text-muted">Final score</div><div class="text-lg font-bold text-${rc}">${final}</div></div>
     </div>
     ${rows}
@@ -894,11 +894,10 @@ function sectorRelativeSection(d) {
         <span class="text-[11px] text-muted">sector ${fmtv(k, c.median)}</span>
         <span class="text-[10px] px-2 py-0.5 rounded bg-${vcolor[c.verdict]}/15 text-${vcolor[c.verdict]} w-[76px] text-center">${(isMult(k) ? mLabel : qLabel)[c.verdict]}</span>
       </span></div>`).join("");
-  const adj = d.verdict.sector_adjustment || 0;
   return h(`
   <section class="card rounded-2xl p-6">
     <h3 class="font-semibold mb-1">Versus its sector <span class="text-xs text-muted font-normal">· ${sr.sector}</span></h3>
-    <p class="text-xs text-muted mb-4">Each metric against the median ${sr.sector} company — a 13% ROIC is elite for a utility, mediocre for software. ${adj !== 0 ? `This ${adj > 0 ? "added" : "docked"} <span class="text-${adj > 0 ? "good" : "bad"} font-medium">${adj > 0 ? "+" : ""}${adj}</span> to the score.` : ""}</p>
+    <p class="text-xs text-muted mb-4">Each metric against the median ${sr.sector} company — a 13% ROIC is elite for a utility, mediocre for software. Context only; it doesn't move the score (backtesting showed a sector nudge added no forward-return signal).</p>
     <div class="space-y-2">${rows}</div>
   </section>`);
 }

@@ -258,38 +258,30 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
     forensic_penalty = penalty
     normalized = max(0, normalized - penalty)
 
-    # ---- Sector-relative adjustment ----
-    # The pillars are absolute; this nudges the score by how the name stacks up
-    # against its OWN sector, and flags the value-trap our backtest surfaced: a
-    # name that looks cheap vs the market but only because its whole sector is
-    # discounted (a sector headwind), not because it's cheap vs its peers.
+    # ---- Sector-relative context (purely informational — does NOT move the
+    # score). Rigorous multi-window backtesting showed a sector nudge added no
+    # forward-return signal (broad sectors are too heterogeneous — cheap pharma
+    # vs pricey biotech), so this only surfaces context as green/red flags.
     sr = metrics.get("sector_relative", {})
     srm = sr.get("metrics", {})
-    sector_adjustment = 0
     if sr.get("covered"):
         roic_c = srm.get("roic")
         if roic_c:
             if roic_c["verdict"] == "well_above":
-                sector_adjustment += 2
                 green.append(f"Sector-leading returns on capital (ROIC ~{_pct(roic_c['value'])}% "
                              f"vs a ~{_pct(roic_c['median'])}% {sr['sector']} median).")
             elif roic_c["verdict"] == "well_below":
-                sector_adjustment -= 2
                 red.append(f"ROIC ~{_pct(roic_c['value'])}% lags the {sr['sector']} median "
                            f"(~{_pct(roic_c['median'])}%) — a laggard within its own sector.")
         upside = val.get("upside_mid") if val.get("ok") else dcf.get("upside")
         mult = [c for c in (srm.get("trailing_pe"), srm.get("price_to_fcf")) if c]
         if upside is not None and upside >= 0.15 and mult:
-            cheaper = any(c["verdict"] in ("above", "well_above") for c in mult)
-            if not cheaper:
-                sector_adjustment -= 3
+            if any(c["verdict"] in ("above", "well_above") for c in mult):
+                green.append("Genuinely cheap vs its sector peers, not just the market.")
+            else:
                 red.append("Looks cheap vs the market, but trades in line with (or above) its "
                            "sector — the discount may be a sector-wide headwind, not a "
                            "stock-specific bargain.")
-            else:
-                green.append("Genuinely cheap vs its sector peers, not just the market.")
-    sector_adjustment = max(min(sector_adjustment, 4), -6)
-    normalized = max(0, min(normalized + sector_adjustment, 100))
 
     # ---- Verdict thresholds ----
     if normalized >= BUY_THRESHOLD:
@@ -329,5 +321,4 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         "green_flags": green,
         "red_flags": red,
         "forensic_penalty": forensic_penalty,
-        "sector_adjustment": sector_adjustment,
     }
