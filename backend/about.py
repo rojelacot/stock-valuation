@@ -42,6 +42,10 @@ CAPABILITIES = [
          "Weighs cheapness, business quality (returns on capital), growth, "
          "balance-sheet strength, whether it beats inflation over 10-15 years, and "
          "margins — each with the reasoning shown in plain English.",
+         "Selectable strategy — reweight the pillars to match your style (Balanced, "
+         "Deep value, Quality compounder, GARP, or Conservative). It applies to "
+         "both the single-stock score and the screener, alongside the tunable "
+         "valuation assumptions (discount rate, margin of safety, etc.).",
          "Sector-relative context: shows how the name stacks up against its own "
          "sector's medians (a 13% ROIC is elite for a utility, mediocre for "
          "software). Informational — it doesn't move the score.",

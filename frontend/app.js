@@ -39,6 +39,8 @@ const ASSUME = {
   margin_normalization:{ def: 0, unit: "%", frac: (v) => v / 100 },
 };
 
+const STRATEGY_SHORT = { balanced: "", deep_value: "deep value", quality: "quality", garp: "GARP", conservative: "conservative" };
+
 function initAssumptions() {
   for (const [id, cfg] of Object.entries(ASSUME)) {
     const el = $(id);
@@ -46,6 +48,8 @@ function initAssumptions() {
     el.addEventListener("input", () => { updateAssumeLabels(); });
     el.addEventListener("change", () => { onAssumptionsChanged(); });
   }
+  const strat = $("strategy");
+  if (strat) strat.addEventListener("change", () => { updateAssumeLabels(); onAssumptionsChanged(); });
   updateAssumeLabels();
 }
 function updateAssumeLabels() {
@@ -58,6 +62,8 @@ function updateAssumeLabels() {
     const short = { discount_rate: "DR", terminal_growth: "TG", projection_years: "", inflation_hurdle: "infl", margin_of_safety: "MoS", margin_normalization: "norm" }[id];
     parts.push(id === "projection_years" ? `${v}yr` : `${short} ${v}${cfg.unit}`);
   }
+  const strat = $("strategy") ? $("strategy").value : "balanced";
+  if (STRATEGY_SHORT[strat]) parts.unshift(STRATEGY_SHORT[strat]);
   $("assumeSummary").textContent = parts.join(" · ");
 }
 function readAssumptions() {
@@ -67,10 +73,14 @@ function readAssumptions() {
 }
 function assumptionsQS() {
   const a = readAssumptions();
-  return Object.entries(a).map(([k, v]) => `&${k}=${v}`).join("");
+  let qs = Object.entries(a).map(([k, v]) => `&${k}=${v}`).join("");
+  const strat = $("strategy") ? $("strategy").value : "balanced";
+  if (strat) qs += `&strategy=${strat}`;
+  return qs;
 }
 function resetAssumptions() {
   for (const [id, cfg] of Object.entries(ASSUME)) $(id).value = cfg.def;
+  if ($("strategy")) $("strategy").value = "balanced";
   updateAssumeLabels();
   onAssumptionsChanged();
 }
@@ -868,11 +878,12 @@ function pillarsSection(d) {
   const final = v.score;
   const rc = { "BUY": "good", "HOLD / WATCH": "warn", "AVOID": "bad" }[v.rating] || "warn";
 
+  const weighted = v.strategy && v.strategy !== "balanced";
   const rows = pillars.map(p => {
     const pct = p.max ? Math.round((p.points / p.max) * 100) : 0;
     const col = pct >= 66 ? "good" : pct >= 40 ? "warn" : "bad";
     return `<div class="mb-3">
-      <div class="flex justify-between text-sm mb-1"><span>${p.name}</span><span class="font-mono text-${col}">${p.points}<span class="text-muted">/${p.max}</span></span></div>
+      <div class="flex justify-between text-sm mb-1"><span>${p.name}</span><span class="font-mono text-${col}">${weighted && p.weight != null ? `<span class="text-[10px] text-brand mr-2">weight ${p.weight}</span>` : ""}${p.points}<span class="text-muted">/${p.max}</span></span></div>
       <div class="h-2 bg-ink/60 rounded-full overflow-hidden"><div class="h-full bg-${col} rounded-full" style="width:${pct}%"></div></div>
       <p class="text-[11px] text-muted mt-1">${p.note}</p></div>`;
   }).join("");
@@ -897,10 +908,10 @@ function pillarsSection(d) {
       <h3 class="font-semibold">Why this score</h3>
       <div class="text-sm">Final <span class="font-bold text-${rc}">${final}/100</span> · <span class="text-${rc} font-medium">${v.rating}</span></div>
     </div>
-    <p class="text-xs text-muted mb-4">Six weighted pillars sum to a raw score; forensic red flags (distress / manipulation) dock it. Each pillar shows exactly what it credited and why.</p>
+    <p class="text-xs text-muted mb-4">Six pillars, weighted by the <span class="text-slate-200">${v.strategy_label || "Balanced"}</span> strategy${weighted ? " (the weight column shows the tilt)" : ""}; forensic red flags (distress / manipulation) dock the score.</p>
     ${band}
     <div class="grid grid-cols-3 gap-2 mb-5 text-center">
-      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Pillar points</div><div class="text-lg font-bold">${raw}<span class="text-muted text-sm">/${maxTotal}</span></div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${weighted ? "Weighted score" : "Pillar points"}</div><div class="text-lg font-bold">${Math.min(100, final + penalty)}<span class="text-muted text-sm">/100</span></div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Forensic penalty</div><div class="text-lg font-bold ${penalty > 0 ? "text-bad" : "text-muted"}">${penalty > 0 ? "−" + penalty : "0"}</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5 border border-${rc}/40"><div class="text-[11px] text-muted">Final score</div><div class="text-lg font-bold text-${rc}">${final}</div></div>
     </div>

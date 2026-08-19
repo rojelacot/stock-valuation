@@ -13,6 +13,28 @@ from typing import Any
 BUY_THRESHOLD = 70    # score >= this -> BUY
 HOLD_THRESHOLD = 50   # score >= this -> HOLD / WATCH; below -> AVOID
 
+# Strategy profiles — reweight the six pillars in this fixed order:
+#   [Valuation, Business quality, Growth, Financial strength, Beats inflation, Margins]
+# "balanced" uses the pillars' own maxes, so it reproduces the classic score
+# exactly. The others tilt the emphasis. Weights are normalized, so they need not
+# sum to anything in particular.
+STRATEGIES = {
+    "balanced":     {"label": "Balanced — quality at a fair price",
+                     "weights": [30, 20, 15, 15, 10, 10]},
+    "deep_value":   {"label": "Deep value — cheapness first",
+                     "weights": [45, 12, 8, 15, 10, 10]},
+    "quality":      {"label": "Quality compounder — returns & durability",
+                     "weights": [15, 32, 20, 12, 6, 15]},
+    "garp":         {"label": "Growth at a reasonable price (GARP)",
+                     "weights": [22, 18, 30, 8, 10, 12]},
+    "conservative": {"label": "Conservative — balance-sheet & durability",
+                     "weights": [22, 18, 8, 32, 12, 8]},
+}
+
+
+def resolve_strategy(name) -> str:
+    return name if name in STRATEGIES else "balanced"
+
 
 def _pct(x):
     return None if x is None else round(x * 100, 1)
@@ -219,9 +241,17 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         red.append("Profitability may be at a cyclical peak (" + "; ".join(cyc["reasons"]) +
                    ") — today's earnings may not be durable.")
 
-    total = sum(pl["points"] for pl in pillars)
-    max_total = sum(pl["max"] for pl in pillars)
-    normalized = round(total / max_total * 100) if max_total else 0
+    # Strategy-weighted normalization: each pillar's fraction (points/max) is
+    # weighted by the chosen strategy profile. Balanced weights == the maxes, so
+    # it reproduces the classic score.
+    strategy = resolve_strategy(metrics.get("assumptions_used", {}).get("strategy"))
+    weights = STRATEGIES[strategy]["weights"]
+    num = sum((pl["points"] / pl["max"]) * weights[i]
+              for i, pl in enumerate(pillars) if pl["max"])
+    den = sum(weights[i] for i, pl in enumerate(pillars) if pl["max"])
+    normalized = round(num / den * 100) if den else 0
+    for i, pl in enumerate(pillars):   # expose the effective weight for the UI
+        pl["weight"] = weights[i] if i < len(weights) else pl["max"]
 
     # ---- Forensic penalties: distress (Altman Z) & manipulation (Beneish M) ----
     # These are near-disqualifying for a decade-plus hold, so they dock the
@@ -321,4 +351,6 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         "green_flags": green,
         "red_flags": red,
         "forensic_penalty": forensic_penalty,
+        "strategy": strategy,
+        "strategy_label": STRATEGIES[strategy]["label"],
     }

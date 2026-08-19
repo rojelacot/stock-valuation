@@ -98,7 +98,7 @@ def _get_stock(ticker: str, refresh: bool = False, use_simfin: bool = False,
 
 def _assumptions_from_query(discount_rate, terminal_growth, projection_years,
                             inflation_hurdle, margin_of_safety,
-                            margin_normalization=None) -> dict[str, Any]:
+                            margin_normalization=None, strategy=None) -> dict[str, Any]:
     return resolve_assumptions({
         "discount_rate": discount_rate,
         "terminal_growth": terminal_growth,
@@ -106,6 +106,7 @@ def _assumptions_from_query(discount_rate, terminal_growth, projection_years,
         "inflation_hurdle": inflation_hurdle,
         "margin_of_safety": margin_of_safety,
         "margin_normalization": margin_normalization,
+        "strategy": strategy,
     })
 
 
@@ -154,9 +155,10 @@ def analyze_ticker(
     inflation_hurdle: Optional[float] = Query(None),
     margin_of_safety: Optional[float] = Query(None),
     margin_normalization: Optional[float] = Query(None),
+    strategy: Optional[str] = Query(None),
 ):
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety, margin_normalization)
+                                inflation_hurdle, margin_of_safety, margin_normalization, strategy)
     # Single-stock view may use SimFin (if a key is set); bulk paths never do.
     return _analyze_one(ticker, a, use_ai, refresh, use_simfin=True)
 
@@ -231,11 +233,12 @@ def compare_tickers(
     inflation_hurdle: Optional[float] = Query(None),
     margin_of_safety: Optional[float] = Query(None),
     margin_normalization: Optional[float] = Query(None),
+    strategy: Optional[str] = Query(None),
 ):
     """Compact side-by-side summary for a watchlist. No AI (kept fast); uses the
     same assumptions across all names so the ranking is apples-to-apples."""
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety, margin_normalization)
+                                inflation_hurdle, margin_of_safety, margin_normalization, strategy)
     symbols = [t.strip().upper() for t in tickers.replace(",", " ").split() if t.strip()]
     symbols = list(dict.fromkeys(symbols))[:15]
     if not symbols:
@@ -256,6 +259,7 @@ def screen_universe(
     inflation_hurdle: Optional[float] = Query(None),
     margin_of_safety: Optional[float] = Query(None),
     margin_normalization: Optional[float] = Query(None),
+    strategy: Optional[str] = Query(None),
 ):
     """Scan a universe of quality names and surface those clearing the buy bar.
 
@@ -263,7 +267,7 @@ def screen_universe(
     ('core' or 'full'). Returns every scanned name ranked best-first, plus the
     subset at/above `min_score` (default 70 = the BUY threshold)."""
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety, margin_normalization)
+                                inflation_hurdle, margin_of_safety, margin_normalization, strategy)
     if universe:
         symbols = [t.strip().upper() for t in universe.replace(",", " ").split() if t.strip()]
     else:
@@ -395,13 +399,14 @@ def screen_start(min_score: int = 80, universe: Optional[str] = None,
                  projection_years: Optional[float] = Query(None),
                  inflation_hurdle: Optional[float] = Query(None),
                  margin_of_safety: Optional[float] = Query(None),
-                 margin_normalization: Optional[float] = Query(None)):
+                 margin_normalization: Optional[float] = Query(None),
+                 strategy: Optional[str] = Query(None)):
     """Start a screen in the background; returns a job id to poll via
     /api/screen/status. Lets the large-cap (~900-name, ~25min) scan run without
     a blocking, timeout-prone request."""
     _prune_jobs()
     a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
-                                inflation_hurdle, margin_of_safety, margin_normalization)
+                                inflation_hurdle, margin_of_safety, margin_normalization, strategy)
     # 'all' = the full ~5,000 US-listed universe; it gets a market-cap/price floor
     # (in the worker) to trim to the ~2,000 investable names before scanning.
     prefilter = (scope == "all") and not universe

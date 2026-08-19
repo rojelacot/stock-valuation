@@ -50,6 +50,10 @@ def resolve_assumptions(a: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     out["inflation_hurdle"] = min(max(out["inflation_hurdle"], 0.0), 0.15)
     out["margin_of_safety"] = min(max(out["margin_of_safety"], 0.0), 0.60)
     out["margin_normalization"] = min(max(out["margin_normalization"], 0.0), 1.0)
+    # Strategy is a scoring-emphasis profile (a string), not a numeric assumption;
+    # it rides along in the assumptions dict so it reaches scoring everywhere.
+    import scoring
+    out["strategy"] = scoring.resolve_strategy((a or {}).get("strategy"))
     return out
 
 
