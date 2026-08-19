@@ -136,6 +136,18 @@ def fetch_segments(ticker: str) -> dict[str, Any]:
         if c and c["end"] == fye and _annual(c) and not c["dims"]:
             total_rev = max(total_rev or 0, val)
 
+    def _ok_others(others):
+        # The fact may carry the segment axis alone, or also a
+        # ConsolidationItemsAxis=OperatingSegments qualifier (how many filers —
+        # GOOGL, AAPL — tag segment operating income). Anything else (intersegment
+        # eliminations, corporate/non-segment, product sub-splits) is rejected.
+        if not others:
+            return True
+        if len(others) != 1:
+            return False
+        (k, v), = others.items()
+        return k.endswith("ConsolidationItemsAxis") and v.endswith("OperatingSegmentsMember")
+
     def _by_axis(facts, axis):
         out = {}
         for cid, val in facts:
@@ -143,7 +155,7 @@ def fetch_segments(ticker: str) -> dict[str, Any]:
             if not c or c["end"] != fye or not _annual(c):
                 continue
             mem = c["dims"].get(axis)
-            if mem and len(c["dims"]) == 1:   # exactly this one axis member
+            if mem and _ok_others({k: v for k, v in c["dims"].items() if k != axis}):
                 out.setdefault(_clean_member(mem), val)
         return out
 
