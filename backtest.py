@@ -130,6 +130,7 @@ def main():
     ap.add_argument("--simfin", action="store_true", help="use SimFin instead of Yahoo")
     ap.add_argument("--edgar", action="store_true",
                     help="use SEC EDGAR (deep history — required for multi-window)")
+    ap.add_argument("--dump", help="write all observations to this JSON path for analysis")
     args = ap.parse_args()
     if args.simfin or args.edgar:
         try:
@@ -166,8 +167,17 @@ def main():
                 snap = _snapshot(stock, w)
                 if not snap:
                     continue
-                v = score(compute_metrics(snap, a))
-                obs = {"ticker": sym, "window": w, "score": v["score"], "total_return": tr}
+                m = compute_metrics(snap, a)
+                v = score(m)
+                val = m.get("valuation", {})
+                pillars = {p["name"].split(" ")[0].lower(): p["points"] for p in v["pillars"]}
+                obs = {"ticker": sym, "window": w, "score": v["score"],
+                       "total_return": tr, "sector": snap["info"].get("sector"),
+                       "method": val.get("method"), "upside": val.get("upside_mid"),
+                       "forensic_penalty": v.get("forensic_penalty", 0),
+                       "roic": m["returns"].get("roic_avg") or m["returns"].get("roic_latest"),
+                       "exp_return": m["expected_return"].get("expected_annual_return"),
+                       "pillars": pillars}
                 rows.append(obs); by_window[w].append(obs); n_obs += 1
             if n_obs:
                 print(f"  [{i}/{len(symbols)}] {sym}: {n_obs} window(s)")
@@ -176,6 +186,10 @@ def main():
 
     if not rows:
         print("No results."); return
+    if args.dump:
+        import json
+        Path(args.dump).write_text(json.dumps(rows))
+        print(f"\n(dumped {len(rows)} observations to {args.dump})")
     print("\n" + "=" * 66)
     print("POOLED (all windows) — the regime-diverse, dividend-inclusive result")
     _report(rows, "All windows pooled", args.years)
