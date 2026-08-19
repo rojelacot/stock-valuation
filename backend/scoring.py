@@ -313,6 +313,16 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
                            "sector — the discount may be a sector-wide headwind, not a "
                            "stock-specific bargain.")
 
+    # Two independent free datasets disagreeing on recent fundamentals means the
+    # fair value rests on shaky ground — surface it loudly (foreign filers only;
+    # US 10-K names come from authoritative EDGAR and never trip this).
+    div = (metrics.get("data_confidence") or {}).get("source_divergence")
+    if div and div.get("material"):
+        red.append(
+            f"Data sources disagree materially ({div['primary']} vs {div['peer']} differ "
+            f"~{round(div['max_divergence'] * 100)}% on recent revenue/earnings) — the "
+            "fair value is unreliable; reconcile the filings before trusting any number.")
+
     # ---- Verdict thresholds ----
     if normalized >= BUY_THRESHOLD:
         rating, stance = "BUY", (
@@ -342,6 +352,11 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
     elif override_upside is not None and override_upside < -0.30 and rating == "BUY":
         rating = "HOLD / WATCH"
         stance += " (Downgraded: trades well above intrinsic value — wait for a pullback.)"
+    elif div and div.get("material") and rating == "BUY":
+        rating = "HOLD / WATCH"
+        stance += (f" (Downgraded: {div['primary']} and {div['peer']} disagree ~"
+                   f"{round(div['max_divergence'] * 100)}% on recent fundamentals — a fair "
+                   "value you can't reconcile isn't a buy, however cheap it screens.)")
 
     return {
         "score": normalized,

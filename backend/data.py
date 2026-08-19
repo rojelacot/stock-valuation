@@ -297,10 +297,63 @@ def fetch_stock(ticker: str, use_simfin: bool = True,
             import simfin as _sf
             res = _sf.fetch_stock(ticker)
             if res and not res.get("error") and res.get("statements", {}).get("revenue"):
+                # Cross-check SimFin's fundamentals against Yahoo's. Foreign filers
+                # (no EDGAR 10-K) are exactly where the two free datasets diverge;
+                # a wide gap means neither fair value can be trusted (e.g. DLocal,
+                # where SimFin and Yahoo implied fair values differed ~3x).
+                try:
+                    div = _cross_check_sources(res, _fetch_yahoo(ticker),
+                                               "SimFin", "Yahoo Finance")
+                    if div:
+                        res["source_divergence"] = div
+                except Exception:  # noqa: BLE001
+                    pass  # cross-check is best-effort; never block the analysis
                 return res
         except Exception:  # noqa: BLE001
             pass  # fall through to Yahoo
     return _fetch_yahoo(ticker)
+
+
+def _cross_check_sources(primary: dict[str, Any], peer: dict[str, Any],
+                         name_primary: str, name_peer: str) -> Optional[dict[str, Any]]:
+    """Compare two independent fundamental datasets for the same ticker.
+
+    Returns a divergence report when the most recent overlapping revenue or
+    net-income figures disagree, or None if there's nothing to compare. This is
+    only meaningful off the EDGAR path — for US 10-K filers EDGAR is
+    authoritative, so no cross-check is needed. `material` (>=20% on the worst
+    metric) is the signal that a fair value built on this data is unreliable."""
+    p_st = primary.get("statements") or {}
+    q_st = peer.get("statements") or {}
+    detail: dict[str, Any] = {}
+    worst = 0.0
+    for key in ("revenue", "net_income"):
+        pv = p_st.get(key) or {}
+        qv = q_st.get(key) or {}
+        # Values may be keyed by str or int years; normalize to str for overlap.
+        p_by = {str(y): v for y, v in pv.items() if v is not None}
+        q_by = {str(y): v for y, v in qv.items() if v is not None}
+        common = set(p_by) & set(q_by)
+        if not common:
+            continue
+        yr = max(common, key=int)
+        a, b = p_by[yr], q_by[yr]
+        denom = max(abs(a), abs(b))
+        if denom <= 0:
+            continue
+        d = abs(a - b) / denom
+        detail[key] = {"year": yr, name_primary: a, name_peer: b,
+                       "divergence": round(d, 3)}
+        worst = max(worst, d)
+    if not detail:
+        return None
+    return {
+        "primary": name_primary,
+        "peer": name_peer,
+        "metrics": detail,
+        "max_divergence": round(worst, 3),
+        "material": worst >= 0.20,
+    }
 
 
 def _overlay_edgar(base: dict[str, Any], edg: dict[str, Any]) -> None:

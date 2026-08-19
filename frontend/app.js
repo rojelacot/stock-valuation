@@ -234,6 +234,28 @@ function renderAnalysis(d) {
 
 function h(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
 
+// Confidence caveats under the verdict. Two independent triggers: thin history,
+// and free-source disagreement (SimFin vs Yahoo on a foreign filer). Either can
+// fire; show both when both apply.
+function confidenceBanner(dc) {
+  if (!dc || !dc.low) return "";
+  const parts = [];
+  const div = dc.source_divergence;
+  if (div && div.material) {
+    const pct = Math.round(div.max_divergence * 100);
+    const rows = Object.entries(div.metrics || {}).map(([k, m]) => {
+      const label = k === "net_income" ? "net income" : k;
+      const fmt = (x) => (x == null ? "—" : (Math.abs(x) >= 1e9 ? "$" + (x / 1e9).toFixed(1) + "B" : "$" + (x / 1e6).toFixed(0) + "M"));
+      return `${label} (${m.year}): ${div.primary} ${fmt(m[div.primary])} vs ${div.peer} ${fmt(m[div.peer])}`;
+    }).join("; ");
+    parts.push(`<div class="mt-4 text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 leading-relaxed"><strong>Data sources disagree</strong> — ${div.primary} and ${div.peer} differ by ~${pct}% on recent fundamentals (${rows}). This name isn't covered by SEC EDGAR (a foreign 20-F filer), so there's no authoritative statement set to reconcile against. Any fair value here is unreliable — treat the score as untrustworthy until you check the filings yourself.</div>`);
+  }
+  if (dc.years != null && dc.years < 6) {
+    parts.push(`<div class="mt-4 text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 leading-relaxed"><strong>Low confidence</strong> — only ${dc.years} year${dc.years === 1 ? "" : "s"} of financial history available (a recent listing, or a foreign filer on shallow data). Growth rates, through-cycle medians and the DCF are all less reliable with this little history, so weight the score accordingly.</div>`);
+  }
+  return parts.join("");
+}
+
 function verdictCard(d, rs, cur) {
   const v = d.verdict, info = d.info;
   const dash = 264, off = dash - (dash * v.score) / 100;
@@ -267,7 +289,7 @@ function verdictCard(d, rs, cur) {
         </div>
       </div>
     </div>
-    ${(d.metrics.data_confidence && d.metrics.data_confidence.low) ? `<div class="mt-4 text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 leading-relaxed"><strong>Low confidence</strong> — only ${d.metrics.data_confidence.years} year${d.metrics.data_confidence.years === 1 ? "" : "s"} of financial history available (a recent listing, or a foreign filer on shallow data). Growth rates, through-cycle medians and the DCF are all less reliable with this little history, so weight the score accordingly.</div>` : ""}
+    ${confidenceBanner(d.metrics.data_confidence)}
   </section>`);
 }
 
@@ -1040,6 +1062,9 @@ function summarySection(d) {
   let crux;
   if (val.suspect) {
     crux = "Verify the underlying data before acting — the model doesn't fit this name cleanly.";
+  } else if (m.data_confidence && m.data_confidence.source_divergence && m.data_confidence.source_divergence.material) {
+    const dv = m.data_confidence.source_divergence;
+    crux = `${dv.primary} and ${dv.peer} disagree by ~${Math.round(dv.max_divergence * 100)}% on recent fundamentals and there's no EDGAR filing to arbitrate — don't trust any fair value here until you reconcile the numbers against the company's own reports.`;
   } else if (m.data_confidence && m.data_confidence.low) {
     crux = `Only ${m.data_confidence.years} years of financial history — treat the score as tentative, lean on the qualitative read, and wait for more of a track record before a decade-plus commitment.`;
   } else if (m.cyclical_peak && m.cyclical_peak.peak && v.rating !== "AVOID") {

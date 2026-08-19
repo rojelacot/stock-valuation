@@ -533,7 +533,11 @@ def compute_metrics(stock: dict[str, Any],
         # so a sparse-data score isn't over-trusted.
         "data_confidence": {
             "years": growth.get("years_of_data"),
-            "low": (growth.get("years_of_data") or 0) < 6,
+            "low": ((growth.get("years_of_data") or 0) < 6
+                    or bool((stock.get("source_divergence") or {}).get("material"))),
+            # Set when the two free datasets (SimFin vs Yahoo) disagree on recent
+            # fundamentals — a foreign-filer signal that fair value is shaky.
+            "source_divergence": stock.get("source_divergence"),
         },
         "margin_normalization": {
             "factor": mn, "ratio": margin_ratio, "applied": margin_ratio != 1.0,
