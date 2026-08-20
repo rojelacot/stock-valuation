@@ -1492,11 +1492,21 @@ function renderHistory(d) {
   const fmtDate = s => s ? s.slice(5) : "—";              // MM-DD
   const chip = (t, cls) => `<span class="inline-block px-2 py-0.5 rounded text-xs font-mono ${cls}">${t}</span>`;
 
+  // --- Winners-per-week trend (mini bars) ---
+  const counts = weeks.map(w => w.count);
+  const maxC = Math.max(1, ...counts);
+  const trend = weeks.map(w => `<span class="inline-flex flex-col items-center justify-end" title="${w.date}: ${w.count} winners" style="height:34px">
+      <span style="width:14px;background:#4f9dff;border-radius:2px;height:${Math.max(3, Math.round(w.count / maxC * 30))}px"></span>
+      <span class="text-[9px] text-muted mt-0.5">${fmtDate(w.date)}</span></span>`).join("");
+
   // --- Header + latest week-over-week summary ---
   let html = `<div class="card rounded-2xl p-5 mb-5">
-    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
-      <span class="text-lg font-semibold">${weeks.length} weekly run${weeks.length === 1 ? "" : "s"}</span>
-      <span class="text-muted text-sm">${fmtDate(dates[0])} → ${fmtDate(dates[dates.length - 1])} · latest ${weeks[weeks.length - 1].count} winners</span>
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+      <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <span class="text-lg font-semibold">${weeks.length} weekly run${weeks.length === 1 ? "" : "s"}</span>
+        <span class="text-muted text-sm">${fmtDate(dates[0])} → ${fmtDate(dates[dates.length - 1])} · latest ${weeks[weeks.length - 1].count} winners</span>
+      </div>
+      <div class="flex items-end gap-1.5" title="winners per week">${trend}</div>
     </div>`;
   if (latest.prev_date) {
     const mk = arr => arr.length ? arr.map(t => chip(t, "bg-good/15 text-good")).join(" ") : `<span class="text-muted text-xs">none</span>`;
@@ -1528,7 +1538,7 @@ function renderHistory(d) {
     }).join("");
     const streakBadge = b.streak >= 2 ? `<span class="ml-1 text-[10px] px-1 rounded bg-brand/20 text-brand" title="consecutive weeks">×${b.streak}</span>` : "";
     return `<tr class="border-t border-[#1b2534]">
-      <td class="px-2 py-1 font-mono font-semibold whitespace-nowrap">${b.ticker}${streakBadge}</td>
+      <td class="px-2 py-1 font-mono font-semibold whitespace-nowrap"><button class="histTicker text-brand hover:underline" data-ticker="${b.ticker}" title="Analyze ${b.ticker}">${b.ticker}</button>${streakBadge}</td>
       <td class="px-2 py-1 text-muted text-xs max-w-[180px] truncate" title="${(b.name || '').replace(/"/g, '')}">${b.name || ""}</td>
       <td class="px-2 py-1 text-center text-xs">${b.appearances}/${b.weeks_total}</td>
       ${cells}
@@ -1536,8 +1546,11 @@ function renderHistory(d) {
   }).join("");
 
   html += `<div class="card rounded-2xl p-4 overflow-x-auto">
-    <div class="text-sm font-semibold mb-1">Conviction board</div>
-    <p class="text-xs text-muted mb-3">Ranked by how many weeks each name has cleared the buy bar. Each square is one weekly run — colored by score, blank when it wasn't a winner. <b>×N</b> marks an active multi-week streak.</p>
+    <div class="flex items-center justify-between mb-1">
+      <div class="text-sm font-semibold">Conviction board</div>
+      <button id="histExport" class="text-xs text-muted hover:text-brand">⭳ Export CSV</button>
+    </div>
+    <p class="text-xs text-muted mb-3">Ranked by how many weeks each name has cleared the buy bar. Each square is one weekly run — colored by score, blank when it wasn't a winner. <b>×N</b> marks an active multi-week streak. Click a ticker to analyze it.</p>
     <table class="text-sm border-collapse">
       <thead><tr class="text-muted text-xs">
         <th class="px-2 text-left">Ticker</th><th class="px-2 text-left">Name</th>
@@ -1548,6 +1561,28 @@ function renderHistory(d) {
     </table></div>`;
 
   body.innerHTML = html;
+
+  // Click a ticker -> jump to its full analysis.
+  body.querySelectorAll(".histTicker").forEach(btn =>
+    btn.addEventListener("click", () => { switchMode("analyze"); analyze(btn.dataset.ticker); }));
+
+  // Export the board as CSV (dates as columns).
+  const exp = body.querySelector("#histExport");
+  if (exp) exp.addEventListener("click", () => {
+    const head = ["Ticker", "Name", "Sector", "Weeks", "Streak", ...dates];
+    const lines = [head.join(",")];
+    for (const b of board) {
+      const cells = [b.ticker, `"${(b.name || "").replace(/"/g, "'")}"`, `"${b.sector || ""}"`,
+        `${b.appearances}/${b.weeks_total}`, b.streak, ...dates.map(dt => b.scores[dt] ?? "")];
+      lines.push(cells.join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `track-record-${dates[dates.length - 1]}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  });
 }
 
 async function loadWatchlist() {
