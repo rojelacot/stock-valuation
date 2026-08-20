@@ -368,9 +368,12 @@ def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
         with _SCAN_LOCK:
             # Re-score the most promising names by fast-pass score. The fast pass
             # tends to *under*-score on shallow data, so we can't use a tight
-            # threshold — take the top ~60 (floored at 45 to skip clear junk).
+            # threshold — take the top ~150 (floored at 45 to skip clear junk).
+            # The cap is generous because a quality name can rank well outside the
+            # top 60 on its noisy Yahoo score yet deep-verify into a BUY (e.g. SYF,
+            # ACN, GL sat at fast ~67-69 but score 73-76 on EDGAR).
             to_verify = sorted([r for r in job["rows"] if (r.get("score") or 0) >= 45],
-                               key=lambda r: -(r["score"] or 0))[:60]
+                               key=lambda r: -(r["score"] or 0))[:150]
             job["phase"] = "verifying"
             job["deep_total"] = len(to_verify)
         deep_by_ticker: dict[str, dict] = {}

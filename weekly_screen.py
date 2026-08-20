@@ -242,6 +242,10 @@ def main():
                     help="price floor for --scope all (default $5)")
     ap.add_argument("--no-ai", action="store_true",
                     help="skip Claude's qualitative read on the candidates")
+    ap.add_argument("--deep-cap", type=int, default=200,
+                    help="max names to deep-verify on EDGAR+SimFin in the second "
+                         "pass (default 200; the fast pass under-scores, so a "
+                         "generous cap catches quality names ranked below the bar)")
     args = ap.parse_args()
 
     assumptions = resolve_assumptions() # defaults
@@ -271,8 +275,11 @@ def main():
     # uses (no more "screen says 89, deep-dive says 60"), and so the SimFin-vs-
     # Yahoo cross-check downgrades unreliable foreign filers (e.g. DLocal, whose
     # Yahoo-only fast score of 93/BUY collapses to 50/HOLD on cross-check).
+    # Cap generous: the Yahoo fast pass under-scores, so a quality name can rank
+    # well past the top 80 on its noisy fast score yet deep-verify into a BUY
+    # (e.g. SYF, ACN, GL sat at fast ~67-69 but score 73-76 on EDGAR).
     verify_floor = max(45, args.min_score - 15)
-    to_verify = [r for r in rows if (r["score"] or 0) >= verify_floor][:80]
+    to_verify = [r for r in rows if (r["score"] or 0) >= verify_floor][:args.deep_cap]
     if to_verify:
         print(f"\nDeep-verifying {len(to_verify)} near-the-bar names on EDGAR + SimFin…")
         by_t = {r["ticker"]: r for r in rows}
