@@ -41,15 +41,22 @@ def _winner(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def record(scope: str, today: str, min_score: int,
-           candidates: list[dict[str, Any]]) -> None:
-    """Append (or replace, if same date) this run's winners for `scope`."""
+           candidates: list[dict[str, Any]], note: str | None = None) -> None:
+    """Append (or replace, if same date) this run's winners for `scope`.
+
+    `note` flags a week that isn't fully comparable to the others (e.g. a
+    backfilled run made on an older methodology) — surfaced as a caveat in the
+    Track-record tab so the week-over-week deltas are read correctly."""
     if not today:
         return
     hist = _load()
     runs = [r for r in hist.get(scope, []) if r.get("date") != today]
     winners = [_winner(c) for c in candidates if c.get("ticker")]
-    runs.append({"date": today, "min_score": min_score,
-                 "count": len(winners), "winners": winners})
+    entry = {"date": today, "min_score": min_score,
+             "count": len(winners), "winners": winners}
+    if note:
+        entry["note"] = note
+    runs.append(entry)
     runs.sort(key=lambda r: r.get("date") or "")
     hist[scope] = runs[-MAX_WEEKS:]
     HIST.parent.mkdir(exist_ok=True)
@@ -64,8 +71,10 @@ def summarize(scope: str) -> dict[str, Any]:
     """
     runs = _load().get(scope, [])
     weeks = [{"date": r["date"], "count": r.get("count", len(r.get("winners", []))),
-              "tickers": [w["ticker"] for w in r.get("winners", [])]}
+              "tickers": [w["ticker"] for w in r.get("winners", [])],
+              "note": r.get("note")}
              for r in runs]
+    notes = [{"date": r["date"], "note": r["note"]} for r in runs if r.get("note")]
 
     # Per-ticker roll-up across every recorded week.
     dates = [r["date"] for r in runs]
@@ -123,4 +132,5 @@ def summarize(scope: str) -> dict[str, Any]:
         else:
             latest["added"] = sorted(cur)
 
-    return {"scope": scope, "weeks": weeks, "board": board, "latest": latest}
+    return {"scope": scope, "weeks": weeks, "board": board,
+            "latest": latest, "notes": notes}

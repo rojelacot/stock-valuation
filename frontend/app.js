@@ -1511,6 +1511,13 @@ function renderHistory(d) {
   }
   html += `</div>`;
 
+  // --- Caveat for weeks that aren't fully comparable (e.g. backfilled/legacy) ---
+  const notes = d.notes || [];
+  if (notes.length) {
+    html += `<div class="mb-5 text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-3 leading-relaxed">
+      ${notes.map(n => `<div><b>${fmtDate(n.date)}:</b> ${n.note}</div>`).join("")}</div>`;
+  }
+
   // --- Conviction board: ticker × week matrix, sorted by recurrence ---
   const colH = `<th class="px-1 text-center font-mono text-[10px] text-muted" title="week of">${dates.map(fmtDate).join('</th><th class="px-1 text-center font-mono text-[10px] text-muted">')}</th>`;
   const rows = board.map(b => {
