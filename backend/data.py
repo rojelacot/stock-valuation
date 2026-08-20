@@ -379,6 +379,7 @@ def _overlay_edgar(base: dict[str, Any], edg: dict[str, Any]) -> None:
         return  # Yahoo somehow deeper — leave it alone
     base["statements"] = {k: (e_st.get(k) or y_st.get(k) or {}) for k in STATEMENT_KEYS}
     base["statement_years"] = e_years
+    base["debt_estimated"] = bool(edg.get("debt_estimated"))
     base["data_source"] = (f"SEC EDGAR ({e_years}yr as-filed 10-K) "
                            "+ Yahoo Finance (price/market)")
 

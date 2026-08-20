@@ -255,6 +255,9 @@ function confidenceBanner(dc) {
   if (dc.years != null && dc.years < 6) {
     parts.push(`<div class="mt-4 text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 leading-relaxed"><strong>Low confidence</strong> — only ${dc.years} year${dc.years === 1 ? "" : "s"} of financial history available (a recent listing, or a foreign filer on shallow data). Growth rates, through-cycle medians and the DCF are all less reliable with this little history, so weight the score accordingly.</div>`);
   }
+  if (dc.debt_estimated) {
+    parts.push(`<div class="mt-4 text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 leading-relaxed"><strong>Debt estimated</strong> — this filer's XBRL debt tags understate its borrowings (typically a finance subsidiary, e.g. Ford Credit), so total debt was estimated from interest expense. Leverage, net-cash and refinancing figures here are approximate — verify against the balance sheet.</div>`);
+  }
   return parts.join("");
 }
 

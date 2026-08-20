@@ -506,6 +506,24 @@ sp = [p["growth"] for p in slow["projection"]]
 ok(all(0.012 <= g <= 0.0251 for g in sp), "slow grower rises gently toward terminal, not dampened")
 
 # ---------------------------------------------------------------------------
+# 7e) Data hardening — understated-debt flag propagates to low confidence
+# ---------------------------------------------------------------------------
+print("data hardening:")
+_wc_stock = make_stock(
+    {"revenue": yv(2016, [100 + 10 * i for i in range(10)]),
+     "net_income": yv(2016, [15 + 2 * i for i in range(10)]),
+     "operating_cashflow": yv(2016, [18 + 2 * i for i in range(10)]),
+     "total_equity": yv(2016, [80 + 5 * i for i in range(10)]),
+     "total_debt": yv(2016, [20] * 10)},
+    {"current_price": 30, "shares_outstanding": 10, "market_cap": 300})
+base_conf = score_conf = compute_metrics(_wc_stock, A)["data_confidence"]
+ok(base_conf.get("debt_estimated") is False, "clean stock: debt not flagged estimated")
+_wc_stock["debt_estimated"] = True
+flagged = compute_metrics(_wc_stock, A)["data_confidence"]
+ok(flagged.get("debt_estimated") is True and flagged.get("low") is True,
+   "debt_estimated propagates to data_confidence.low")
+
+# ---------------------------------------------------------------------------
 # 8) Regressions for the code-review findings
 # ---------------------------------------------------------------------------
 print("review-fix regressions:")

@@ -159,7 +159,8 @@ _CONCEPTS: dict[str, tuple[list[str], str, bool, bool]] = {
     "total_equity": (["StockholdersEquity",
                       "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
                      "USD", False, True),
-    "long_term_debt": (["LongTermDebtNoncurrent", "LongTermDebt"], "USD", False, True),
+    "long_term_debt": (["LongTermDebtNoncurrent", "LongTermDebt",
+                        "LongTermDebtAndCapitalLeaseObligations"], "USD", False, True),
     "cash": (["CashAndCashEquivalentsAtCarryingValue",
               "CashCashEquivalentsRestrictedCashAndRestrictedCashEquivalents"],
              "USD", False, True),
@@ -191,7 +192,12 @@ _CONCEPTS: dict[str, tuple[list[str], str, bool, bool]] = {
                      "FiniteLivedIntangibleAssetsNet"], "USD", False, True),
 }
 # Current portion of debt — summed into total_debt, not surfaced on its own.
-_DEBT_CURRENT_TAGS = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"]
+_DEBT_CURRENT_TAGS = ["LongTermDebtCurrent", "LongTermDebtAndCapitalLeaseObligationsCurrent",
+                      "DebtCurrent", "ShortTermBorrowings"]
+# Direct total-debt tags (including current maturities) — used as a floor so an
+# understated noncurrent+current derivation can't hide a filer's real leverage.
+_DEBT_TOTAL_TAGS = ["LongTermDebtAndCapitalLeaseObligationsIncludingCurrentMaturities",
+                    "DebtLongtermAndShorttermCombinedAmount", "DebtInstrumentCarryingAmount"]
 
 
 def _clean(v: Any) -> Optional[float]:
@@ -320,17 +326,49 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
         return {"error": f"{ticker}: no revenue history in XBRL facts"}
 
     # ---- Derived series ----
-    # total_debt = long-term + current portion (best-effort across debt tags).
+    # total_debt = long-term + current portion (best-effort across debt tags),
+    # but floored by any direct "total debt incl. current maturities" tag — some
+    # filers (utilities, KHC) tag only the combined figure, so the noncurrent +
+    # current derivation would badly understate leverage without this floor.
     debt_cur: dict[str, float] = {}
     for tag in _DEBT_CURRENT_TAGS:
         node = facts.get(tag)
         if node:
             for yr, (_, val) in _tag_series(node, "USD", True).items():
                 debt_cur.setdefault(yr, val)
+    direct_total: dict[str, float] = {}
+    for tag in _DEBT_TOTAL_TAGS:
+        node = facts.get(tag)
+        if node:
+            for yr, (_, val) in _tag_series(node, "USD", True).items():
+                direct_total.setdefault(yr, val)
     lt = statements["long_term_debt"]
     total_debt: dict[str, float] = {}
-    for yr in set(lt) | set(debt_cur):
-        total_debt[yr] = (lt.get(yr) or 0.0) + (debt_cur.get(yr) or 0.0)
+    for yr in set(lt) | set(debt_cur) | set(direct_total):
+        derived = (lt.get(yr) or 0.0) + (debt_cur.get(yr) or 0.0)
+        total_debt[yr] = max(derived, direct_total.get(yr) or 0.0)
+
+    # Sanity floor: if the tagged debt implies an implausible interest rate
+    # (>30%), it's understated — a finance-arm or unmatched tag (e.g. Ford
+    # Credit). Floor it at an interest-implied estimate (~5.5% assumed rate) so
+    # leverage/net-cash aren't wildly wrong, and mark the debt as estimated so
+    # downstream confidence is lowered rather than trusting a garbage figure.
+    ie_series = statements.get("interest_expense") or {}
+    estimated_years = set()
+    for yr, ie in ie_series.items():
+        if not ie or ie <= 0:
+            continue
+        td = total_debt.get(yr)
+        if not td or ie / td > 0.30:
+            est = ie / 0.055
+            if not td or est > td:
+                total_debt[yr] = est
+                estimated_years.add(yr)
+    # Only a CURRENT-year understatement lowers confidence — that's the figure
+    # the leverage / net-cash / discount signals use. A stale historical gap
+    # (fixed by a later tag) doesn't taint today's read.
+    latest_yr = max(total_debt) if total_debt else None
+    debt_estimated = latest_yr in estimated_years
     statements["total_debt"] = total_debt
 
     # free_cash_flow = operating cash flow + capex (capex already negative).
@@ -350,4 +388,5 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
         "years": years,
         "entity": payload.get("entityName"),
         "cik": cik,
+        "debt_estimated": debt_estimated,
     }

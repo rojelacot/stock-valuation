@@ -618,10 +618,15 @@ def compute_metrics(stock: dict[str, Any],
         "data_confidence": {
             "years": growth.get("years_of_data"),
             "low": ((growth.get("years_of_data") or 0) < 6
-                    or bool((stock.get("source_divergence") or {}).get("material"))),
+                    or bool((stock.get("source_divergence") or {}).get("material"))
+                    or bool(stock.get("debt_estimated"))),
             # Set when the two free datasets (SimFin vs Yahoo) disagree on recent
             # fundamentals — a foreign-filer signal that fair value is shaky.
             "source_divergence": stock.get("source_divergence"),
+            # Set when the filer's debt tags were understated (finance-arm debt)
+            # and total debt had to be estimated from interest expense — leverage
+            # / net-cash figures are approximate.
+            "debt_estimated": bool(stock.get("debt_estimated")),
         },
         "margin_normalization": {
             "factor": mn, "ratio": margin_ratio, "applied": margin_ratio != 1.0,
