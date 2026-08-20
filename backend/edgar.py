@@ -283,12 +283,17 @@ def _concept(facts: dict[str, Any], tags: list[str], unit: str,
     return {yr: (-v if negate else v) for yr, v in merged.items()}
 
 
-def fetch_statements(ticker: str) -> dict[str, Any]:
+def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
     """Return {'statements': {key: {year: value}}, 'years': N, 'entity': name}
-    from SEC EDGAR, or {'error': ...} if this filer isn't covered."""
+    from SEC EDGAR, or {'error': ...} if this filer isn't covered.
+
+    An explicit `cik` bypasses the ticker map — needed for delisted/bankrupt
+    filers (the map only holds currently-listed tickers), e.g. the disaster
+    backtest."""
     from data import STATEMENT_KEYS
 
-    cik = cik_for(ticker)
+    if cik is None:
+        cik = cik_for(ticker)
     if cik is None:
         return {"error": f"{ticker}: no CIK on file (not a US 10-K filer)"}
     try:
