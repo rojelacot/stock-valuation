@@ -484,6 +484,28 @@ ok(steady["premium"] <= 0 and not any("beta" in r for r in steady["reasons"]),
    "high beta but sound -> no penalty, beta never cited")
 
 # ---------------------------------------------------------------------------
+# 7d) DCF growth fade — geometric (excess growth reverts faster than linear)
+# ---------------------------------------------------------------------------
+print("DCF growth fade:")
+from valuation import discounted_cash_flow  # noqa: E402
+
+_info = {"shares_outstanding": 10, "current_price": 50, "total_cash": 0, "total_debt": 0}
+hot = discounted_cash_flow(base_fcf=100, info=_info, revenue_cagr=0.12, fcf_cagr=0.12,
+                           discount_rate=0.10, terminal_growth=0.025, years=10)
+path = [p["growth"] for p in hot["projection"]]
+ok(abs(path[0] - 0.12) < 1e-9, "year 1 keeps the full starting growth")
+linear_y2 = 0.12 + (0.025 - 0.12) * (1 / 9)              # what a linear fade would give
+ok(path[1] < linear_y2, "excess growth fades geometrically — faster than linear")
+ok(all(path[i] >= path[i + 1] - 1e-9 for i in range(len(path) - 1)) and path[-1] > 0.025,
+   "growth decays monotonically toward terminal")
+
+# A slow grower (below terminal) is essentially unaffected — rises gently to terminal.
+slow = discounted_cash_flow(base_fcf=100, info=_info, revenue_cagr=0.013, fcf_cagr=0.013,
+                            discount_rate=0.10, terminal_growth=0.025, years=10)
+sp = [p["growth"] for p in slow["projection"]]
+ok(all(0.012 <= g <= 0.0251 for g in sp), "slow grower rises gently toward terminal, not dampened")
+
+# ---------------------------------------------------------------------------
 # 8) Regressions for the code-review findings
 # ---------------------------------------------------------------------------
 print("review-fix regressions:")

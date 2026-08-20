@@ -17,6 +17,10 @@ import duediligence
 DEFAULT_DISCOUNT_RATE = 0.10       # required return / WACC proxy
 DEFAULT_TERMINAL_GROWTH = 0.025    # long-run growth ~ GDP+inflation
 DEFAULT_PROJECTION_YEARS = 10
+# Growth-fade decay: each year the EXCESS growth (above terminal) retains this
+# fraction, so abnormal growth reverts geometrically (competition erodes it) —
+# a hot starter fades faster than a modest one. ~22%/yr decay, half-life ~2.8yr.
+GROWTH_FADE = 0.78
 INFLATION_HURDLE = 0.03            # "beat inflation" bar
 MARGIN_OF_SAFETY = 0.25           # want price <= 75% of intrinsic value
 
@@ -694,12 +698,17 @@ def discounted_cash_flow(
     # (guardrail 3) so a short, hot history doesn't extrapolate into fantasy.
     stage1_growth = max(min(est_growth, max_stage1_growth), 0.0)
 
-    # Project and discount, linearly fading growth from stage1 -> terminal.
+    # Project and discount, fading growth from stage1 -> terminal. The EXCESS
+    # growth (above terminal) decays GEOMETRICALLY, not linearly: abnormally high
+    # growth reverts fast, so a hot starter fades quicker than a modest one —
+    # which reins in the classic DCF over-valuation of high-growth names. Year 1
+    # keeps the full starting growth; the fade begins in year 2.
+    excess = stage1_growth - terminal_growth
     pv_sum = 0.0
     projected = []
     fcf_t = base_fcf
     for t in range(1, years + 1):
-        g = stage1_growth + (terminal_growth - stage1_growth) * (t - 1) / max(years - 1, 1)
+        g = terminal_growth + excess * (GROWTH_FADE ** (t - 1))
         fcf_t = fcf_t * (1 + g)
         pv = fcf_t / ((1 + discount_rate) ** t)
         pv_sum += pv
