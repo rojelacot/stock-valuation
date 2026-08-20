@@ -284,6 +284,25 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
                 penalty += 5
                 red.append(f"Beneish M ~{m:.2f} — some manipulation-risk markers; "
                            "worth a closer look at accruals.")
+    # ---- Refinancing / debt-maturity risk (timing + refi-rate stress) ----
+    # Sharper than the static D/E flag: when does the debt come due, can cash +
+    # free cash flow cover the near-term wall, and does rolling it at +300bps
+    # break interest coverage? A solvency signal, so it docks the numeric score.
+    rf = metrics.get("refinancing", {})
+    if rf.get("applicable"):
+        lvl = rf.get("level")
+        first = (rf.get("reasons") or [None])[0]
+        if lvl == "high":
+            penalty += 8
+            red.append("Refinancing risk (high): " +
+                       (first or "near-term maturities look hard to cover or refinance."))
+        elif lvl == "elevated":
+            penalty += 3
+            red.append("Refinancing risk (elevated): " +
+                       (first or "a maturity wall or thin coverage bears watching."))
+        elif rf.get("positive"):
+            green.append(rf["positive"])
+
     penalty = min(penalty, 20)
     forensic_penalty = penalty
     normalized = max(0, normalized - penalty)

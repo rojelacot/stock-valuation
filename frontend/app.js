@@ -220,6 +220,7 @@ function renderAnalysis(d) {
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
+    refinancingSection(d, cur),
     ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
@@ -565,6 +566,66 @@ function forensicsSection(d) {
     <h3 class="font-semibold mb-1">Forensic checks (distress &amp; manipulation)</h3>
     <p class="text-xs text-muted mb-4">Two classic screens for the failure modes a DCF and a quality score miss — bankruptcy risk and cooked books. A red flag here docks the score directly.</p>
     <div class="grid md:grid-cols-2 gap-3">${azCard}${bmCard}</div>
+  </section>`);
+}
+
+function refinancingSection(d, cur) {
+  const rf = d.metrics.refinancing;
+  if (!rf) return h(`<div class="hidden"></div>`);
+  if (!rf.applicable) {
+    return h(`<section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-1">Debt maturities &amp; refinancing risk</h3>
+      <p class="text-muted text-sm">${rf.reason}</p></section>`);
+  }
+  const money = v => v == null ? "—" : (Math.abs(v) >= 1e9 ? cur + (v / 1e9).toFixed(1) + "B"
+    : Math.abs(v) >= 1e6 ? cur + (v / 1e6).toFixed(0) + "M" : cur + Math.round(v));
+  const lvlColor = { low: "good", moderate: "muted", elevated: "warn", high: "bad" }[rf.level] || "muted";
+  const lvlText = { low: "Low", moderate: "Moderate", elevated: "Elevated", high: "High" }[rf.level] || rf.level;
+
+  // Maturity ladder bars (near-term buckets highlighted).
+  const lad = rf.ladder || {};
+  const buckets = [["1y", lad.debt_mat_y1, true], ["2y", lad.debt_mat_y2, true],
+    ["3y", lad.debt_mat_y3], ["4y", lad.debt_mat_y4], ["5y", lad.debt_mat_y5], ["5y+", lad.debt_mat_beyond]];
+  const maxB = Math.max(1, ...buckets.map(b => b[1] || 0));
+  const ladderViz = rf.has_ladder ? `
+    <div class="mt-4">
+      <div class="text-xs text-muted mb-2">Principal coming due (from the 10-K maturities table) — <span class="text-warn">amber = near-term wall</span></div>
+      <div class="flex items-end gap-3 h-28">
+        ${buckets.map(([lbl, v, near]) => `
+          <div class="flex-1 flex flex-col items-center justify-end h-full">
+            <div class="text-[10px] text-muted mb-1">${v ? money(v) : ""}</div>
+            <div class="w-full rounded-t" style="height:${Math.max(2, Math.round((v || 0) / maxB * 88))}px;background:${near ? "#f59e0b" : "#4f9dff"}"></div>
+            <div class="text-[10px] text-muted mt-1">${lbl}</div>
+          </div>`).join("")}
+      </div>
+    </div>` : `<p class="text-xs text-muted mt-3">The filer doesn't tag a maturity ladder; using the current portion of long-term debt as the near-term proxy.</p>`;
+
+  const stat = (label, val, hint) => `<div class="bg-ink/40 rounded-lg p-2.5">
+    <div class="text-[11px] text-muted">${label}</div><div class="text-lg font-bold">${val}</div>
+    ${hint ? `<div class="text-[10px] text-muted mt-0.5">${hint}</div>` : ""}</div>`;
+  const cov = rf.coverage;
+  const covTxt = cov == null ? "—" : cov.toFixed(1) + "×";
+  const icTxt = rf.base_interest_coverage == null ? "n/a"
+    : `${rf.base_interest_coverage.toFixed(1)}× → ${rf.stress_interest_coverage.toFixed(1)}×`;
+  const bullets = (rf.reasons && rf.reasons.length)
+    ? `<ul class="mt-4 space-y-1 text-sm text-${lvlColor}">${rf.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
+    : (rf.positive ? `<p class="mt-4 text-sm text-good">✓ ${rf.positive}</p>` : "");
+
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Debt maturities &amp; refinancing risk</h3>
+      <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${lvlColor}/15 text-${lvlColor}">${lvlText} risk</div>
+    </div>
+    <p class="text-xs text-muted mb-4">Not just how much debt, but <em>when it comes due</em> — can cash + free cash flow cover the near-term wall, and does rolling it at +300bps break interest coverage? A real risk this docks the score.</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+      ${stat("Near-term wall (≤2yr)", money(rf.near_term_wall), rf.near_term_pct != null ? `${Math.round(rf.near_term_pct * 100)}% of total debt` : "")}
+      ${stat("Covered by cash + 2yr FCF", covTxt, cov != null && cov < 1 ? "shortfall" : "")}
+      ${stat("Interest cover (base → +300bps)", icTxt, rf.base_interest_coverage == null ? "REIT — n/a" : "EBITDA basis")}
+      ${stat("Implied rate on debt", rf.implied_rate != null ? (rf.implied_rate * 100).toFixed(1) + "%" : "—", "interest ÷ total debt")}
+    </div>
+    ${ladderViz}
+    ${bullets}
   </section>`);
 }
 

@@ -221,6 +221,49 @@ ok(any(n["date"] == "2026-02-08" and n["note"] == "legacy run" for n in notes),
 
 
 # ---------------------------------------------------------------------------
+# 4) refinancing.assess — debt maturity & refi-rate stress
+# ---------------------------------------------------------------------------
+print("refinancing:")
+import refinancing as refi  # noqa: E402
+
+
+def dstmt(**kw):
+    return {k: {"2025": v} for k, v in kw.items()}
+
+
+# No debt -> not applicable (a positive, not a risk).
+ok(refi.assess({}, {})["applicable"] is False, "no debt -> not applicable")
+ok(refi.assess(dstmt(total_debt=5e9), {"sector": "Financial Services"})["applicable"] is False,
+   "financials -> not applicable")
+
+# High risk: near-term wall dwarfs cash + 2yr FCF.
+hi = refi.assess({**dstmt(debt_mat_y1=4e8, debt_mat_y2=2e8, debt_mat_beyond=4e8,
+                          cash=5e7, ebitda=1e8, interest_expense=1e8),
+                  "free_cashflow": {"2023": 5e7, "2024": 5e7, "2025": 5e7}}, {"sector": "Industrials"})
+ok(hi["level"] == "high" and hi["coverage"] < 1, "wall > cash+FCF -> high, coverage<1")
+ok(hi["stress_interest_coverage"] < hi["base_interest_coverage"], "refi at +300bps lowers coverage")
+
+# Well-termed: tiny near-term wall, big liquidity, strong coverage.
+lo = refi.assess({**dstmt(debt_mat_y1=2e7, debt_mat_y2=3e7, debt_mat_beyond=9e8,
+                          cash=5e8, ebitda=3e8, interest_expense=3e7),
+                  "free_cashflow": {"2023": 2e8, "2024": 2e8, "2025": 2e8}}, {"sector": "Technology"})
+ok(lo["level"] == "low" and lo["positive"], "small wall + liquidity -> low, positive set")
+
+# REIT: interest coverage skipped (unreliable EBITDA), graded on wall/liquidity.
+reit = refi.assess({**dstmt(debt_mat_y1=1e8, debt_mat_y2=1e8, debt_mat_beyond=8e8,
+                            cash=5e8, ebitda=1e7, interest_expense=5e8),
+                    "free_cashflow": {"2025": 3e8}}, {"sector": "Real Estate"})
+ok(reit["applicable"] and reit["base_interest_coverage"] is None,
+   "REIT -> applicable but interest coverage skipped")
+
+# Ladder absent -> falls back to current portion of LT debt.
+noladder = refi.assess(dstmt(total_debt=1e9, debt_current=1e8, cash=5e8,
+                             ebitda=2e8, interest_expense=3e7,
+                             free_cashflow=1e8), {"sector": "Industrials"})
+ok(noladder["has_ladder"] is False and noladder["near_term_wall"] == 1e8,
+   "no ladder -> uses current portion as near-term wall")
+
+# ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
     for f in FAILS:

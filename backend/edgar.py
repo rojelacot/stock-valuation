@@ -174,6 +174,16 @@ _CONCEPTS: dict[str, tuple[list[str], str, bool, bool]] = {
     # SG&A (duration) — for Beneish SGAI; neutralized if absent.
     "sga": (["SellingGeneralAndAdministrativeExpense",
              "GeneralAndAdministrativeExpense"], "USD", False, False),
+    # Debt maturity ladder (instant) — for the refinancing-risk check. The 10-K
+    # contractual-maturities footnote. Absent for many filers; the check degrades
+    # gracefully to the current-portion + interest-coverage stress when so.
+    "debt_current": (["LongTermDebtCurrent"], "USD", False, True),
+    "debt_mat_y1": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInNextTwelveMonths"], "USD", False, True),
+    "debt_mat_y2": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearTwo"], "USD", False, True),
+    "debt_mat_y3": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearThree"], "USD", False, True),
+    "debt_mat_y4": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFour"], "USD", False, True),
+    "debt_mat_y5": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFive"], "USD", False, True),
+    "debt_mat_beyond": (["LongTermDebtMaturitiesRepaymentsOfPrincipalAfterYearFive"], "USD", False, True),
 }
 # Current portion of debt — summed into total_debt, not surfaced on its own.
 _DEBT_CURRENT_TAGS = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"]

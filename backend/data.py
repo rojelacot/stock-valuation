@@ -73,6 +73,9 @@ STATEMENT_KEYS = [
     "depreciation", "depreciation_recon", "gross_ppe", "net_ppe",
     "ebitda", "receivables", "inventory", "pretax_income", "tax_provision",
     "dividends_paid", "buybacks", "retained_earnings", "sga",
+    # Debt maturity ladder (EDGAR only; empty from Yahoo/SimFin) — refinancing check.
+    "debt_current", "debt_mat_y1", "debt_mat_y2", "debt_mat_y3",
+    "debt_mat_y4", "debt_mat_y5", "debt_mat_beyond",
 ]
 
 
