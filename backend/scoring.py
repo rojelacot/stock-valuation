@@ -316,6 +316,24 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         elif wc.get("positive"):
             green.append(wc["positive"])
 
+    # ---- Covenant / leverage-trend deterioration ----
+    # The trajectory static leverage misses: rising Net Debt/EBITDA and
+    # compressing coverage toward the levels where lenders set covenants.
+    lt_ = metrics.get("leverage_trend", {})
+    if lt_.get("applicable"):
+        lvl = lt_.get("level")
+        if lvl == "stressed":
+            penalty += 6
+            for r in (lt_.get("reasons") or [])[:2]:
+                red.append("Leverage: " + r)
+        elif lvl == "deteriorating":
+            penalty += 3
+            first = (lt_.get("reasons") or [None])[0]
+            if first:
+                red.append("Leverage trend: " + first)
+        elif lvl == "improving" and lt_.get("positive"):
+            green.append(lt_["positive"])
+
     penalty = min(penalty, 20)
     forensic_penalty = penalty
     normalized = max(0, normalized - penalty)

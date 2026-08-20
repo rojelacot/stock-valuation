@@ -220,7 +220,7 @@ function renderAnalysis(d) {
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
-    refinancingSection(d, cur), workingCapitalSection(d),
+    refinancingSection(d, cur), leverageTrendSection(d), workingCapitalSection(d),
     ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
@@ -625,6 +625,63 @@ function refinancingSection(d, cur) {
       ${stat("Implied rate on debt", rf.implied_rate != null ? (rf.implied_rate * 100).toFixed(1) + "%" : "—", "interest ÷ total debt")}
     </div>
     ${ladderViz}
+    ${bullets}
+  </section>`);
+}
+
+function leverageTrendSection(d) {
+  const lt = d.metrics.leverage_trend;
+  if (!lt) return h(`<div class="hidden"></div>`);
+  if (!lt.applicable) {
+    return h(`<section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-1">Leverage trend &amp; covenant headroom</h3>
+      <p class="text-muted text-sm">${lt.reason}</p></section>`);
+  }
+  const col = { improving: "good", none: "good", stable: "muted", deteriorating: "warn", stressed: "bad" }[lt.level] || "muted";
+  const txt = { improving: "Improving", none: "No leverage", stable: "Stable", deteriorating: "Deteriorating", stressed: "Stressed" }[lt.level] || lt.level;
+
+  // Leverage line: Net Debt/EBITDA over time with threshold markers.
+  const lev = lt.leverage;
+  const th = lt.thresholds || {};
+  let levViz = "";
+  if (lev && lev.series && lev.series.length) {
+    const xs = lev.series;
+    const maxX = Math.max(th.lev_stress || 5, ...xs.map(p => p.x));
+    const bar = p => {
+      const bad = p.x >= (th.lev_stress || 5), warn = p.x >= (th.lev_elevated || 4);
+      return `<div class="flex-1 flex flex-col items-center justify-end h-full">
+        <div class="text-[10px] text-muted mb-0.5">${p.x.toFixed(1)}</div>
+        <div class="w-full rounded-t" style="height:${Math.max(2, Math.round(p.x / maxX * 70))}px;background:${bad ? "#ef4444" : warn ? "#f59e0b" : "#4f9dff"}"></div>
+        <div class="text-[9px] text-muted mt-0.5">${p.year.slice(2)}</div></div>`;
+    };
+    levViz = `<div class="mt-3">
+      <div class="text-xs text-muted mb-1">Net Debt / EBITDA over time — <span class="text-warn">amber ≥${(th.lev_elevated || 4)}×</span> (covenant zone), <span class="text-bad">red ≥${(th.lev_stress || 5)}×</span></div>
+      <div class="flex items-end gap-2 h-24">${xs.map(bar).join("")}</div></div>`;
+  }
+
+  const stat = (label, val) => `<div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${label}</div><div class="text-lg font-bold">${val}</div></div>`;
+  const cov = lt.coverage;
+  const tiles = `<div class="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+    ${lev ? stat("Net Debt/EBITDA (now)", lev.latest.toFixed(1) + "×") : ""}
+    ${lev ? stat(`vs ${lev.prior_year}`, lev.prior.toFixed(1) + "×") : ""}
+    ${cov ? stat("Interest coverage (EBITDA)", cov.latest.toFixed(1) + "×") : ""}
+    ${lt.de && !lev ? stat("Debt/Equity (now)", lt.de.latest.toFixed(1) + "×") : ""}
+    ${lt.de && !lev ? stat(`vs ${lt.de.prior_year}`, lt.de.prior.toFixed(1) + "×") : ""}
+  </div>`;
+
+  const bullets = (lt.reasons && lt.reasons.length)
+    ? `<ul class="mt-4 space-y-1 text-sm text-${col}">${lt.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
+    : (lt.positive ? `<p class="mt-4 text-sm text-good">✓ ${lt.positive}</p>` : "");
+
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Leverage trend &amp; covenant headroom</h3>
+      <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${col}/15 text-${col}">${txt}</div>
+    </div>
+    <p class="text-xs text-muted mb-4">The <em>trajectory</em> static leverage misses: is Net Debt/EBITDA climbing and coverage compressing toward the levels where lenders set covenants? (Thresholds are generic loan-market conventions, not this filer's actual terms.)</p>
+    ${tiles}
+    ${levViz}
     ${bullets}
   </section>`);
 }

@@ -319,6 +319,68 @@ ok(wcap.assess(wc_stmt(rev={"2023": 1000, "2024": 1000, "2025": 1000},
 ok(wcap.assess({}, {})["applicable"] is False, "empty statements -> not applicable")
 
 # ---------------------------------------------------------------------------
+# 6) leverage_trend.assess — covenant / leverage-trajectory deterioration
+# ---------------------------------------------------------------------------
+print("leverage trend:")
+import leverage_trend as levt  # noqa: E402
+
+
+def lstmt(debt, ebitda, cash=None, interest=None, equity=None, rev=None):
+    yrs = sorted(debt)
+    out = {"revenue": rev or {y: 1000 for y in yrs}, "total_debt": debt, "ebitda": ebitda}
+    if cash: out["cash"] = cash
+    if interest: out["interest_expense"] = interest
+    if equity: out["total_equity"] = equity
+    return out
+
+
+Y = ["2021", "2022", "2023", "2024", "2025"]
+# Leverage climbing 2x -> 4.5x -> deteriorating.
+climb = levt.assess(lstmt(
+    debt={y: v for y, v in zip(Y, [200, 300, 400, 450, 450])},
+    ebitda={y: 100 for y in Y},
+    interest={y: 20 for y in Y}), {"sector": "Industrials"})
+ok(climb["level"] in ("deteriorating", "stressed") and climb["leverage"]["latest"] >= 4,
+   "leverage climbing -> deteriorating")
+
+# Deleveraging 4x -> 1.5x -> improving.
+delev = levt.assess(lstmt(
+    debt={y: v for y, v in zip(Y, [400, 350, 250, 180, 150])},
+    ebitda={y: 100 for y in Y},
+    interest={y: 15 for y in Y}), {"sector": "Industrials"})
+ok(delev["level"] == "improving" and delev["positive"], "deleveraging -> improving, positive")
+
+# Stressed: >5x leverage AND <2x coverage.
+stress = levt.assess(lstmt(
+    debt={y: 650 for y in Y}, ebitda={y: 100 for y in Y},
+    interest={y: 60 for y in Y}), {"sector": "Industrials"})
+ok(stress["level"] == "stressed", "high leverage + thin coverage -> stressed")
+
+# Coverage slipping from a high level to a still-fine level is NOT deterioration.
+finecov = levt.assess(lstmt(
+    debt={y: 150 for y in Y}, ebitda={y: 100 for y in Y},
+    interest={y: v for y, v in zip(Y, [15, 18, 22, 26, 30])}), {"sector": "Industrials"})
+ok(finecov["level"] in ("stable", "improving"), "coverage high->still-fine not flagged")
+
+# A COVID-style collapsed-EBITDA year is excluded from the trend baseline.
+covid = levt.assess(lstmt(
+    debt={y: v for y, v in zip(Y, [300, 320, 300, 280, 260])},
+    ebitda={y: v for y, v in zip(Y, [100, 2, 90, 110, 120])},  # 2022 near-zero
+    interest={y: 20 for y in Y}), {"sector": "Consumer Cyclical"})
+ok("2022" not in {p["year"] for p in (covid.get("leverage") or {}).get("series", [])},
+   "collapsed-EBITDA year dropped from leverage series")
+
+# Net cash -> no leverage concern.
+netcash = levt.assess(lstmt(
+    debt={y: 50 for y in Y}, cash={y: 300 for y in Y},
+    ebitda={y: 100 for y in Y}, interest={y: 3 for y in Y}), {"sector": "Technology"})
+ok(netcash["level"] in ("improving", "stable", "none"), "net cash -> not a concern")
+
+# Financials -> N/A.
+ok(levt.assess(lstmt(debt={y: 500 for y in Y}, ebitda={y: 100 for y in Y}),
+               {"sector": "Financial Services"})["applicable"] is False, "financials -> N/A")
+
+# ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
     for f in FAILS:
