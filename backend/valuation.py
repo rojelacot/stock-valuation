@@ -517,6 +517,10 @@ def compute_metrics(stock: dict[str, Any],
     import dividend_coverage
     divcov = dividend_coverage.assess(st, info)
 
+    # ---- Acquisition-accounting / goodwill-impairment risk ----
+    import intangibles
+    intang = intangibles.assess(st, info)
+
     # ---- Sector-relative context (is this good *for this sector*?) ----
     import sector_benchmarks as _sb
     _sector = info.get("sector")
@@ -547,6 +551,7 @@ def compute_metrics(stock: dict[str, Any],
         "working_capital": workcap,
         "leverage_trend": levtrend,
         "dividend_coverage": divcov,
+        "intangibles": intang,
         "sector_relative": sector_relative,
         # Confidence gate: CAGRs, medians and the DCF need a few years to be
         # stable. Thin history (foreign filers on Yahoo, recent IPOs) is flagged

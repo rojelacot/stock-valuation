@@ -184,6 +184,11 @@ _CONCEPTS: dict[str, tuple[list[str], str, bool, bool]] = {
     "debt_mat_y4": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFour"], "USD", False, True),
     "debt_mat_y5": (["LongTermDebtMaturitiesRepaymentsOfPrincipalInYearFive"], "USD", False, True),
     "debt_mat_beyond": (["LongTermDebtMaturitiesRepaymentsOfPrincipalAfterYearFive"], "USD", False, True),
+    # Goodwill & other intangibles (instant) — for the acquisition-accounting /
+    # impairment-risk check. A roll-up carries these far above tangible book.
+    "goodwill": (["Goodwill"], "USD", False, True),
+    "intangibles": (["IntangibleAssetsNetExcludingGoodwill",
+                     "FiniteLivedIntangibleAssetsNet"], "USD", False, True),
 }
 # Current portion of debt — summed into total_debt, not surfaced on its own.
 _DEBT_CURRENT_TAGS = ["LongTermDebtCurrent", "DebtCurrent", "ShortTermBorrowings"]

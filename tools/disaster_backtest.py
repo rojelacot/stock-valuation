@@ -27,6 +27,7 @@ sys.path.insert(0, str(ROOT / "backend"))
 
 import edgar                                      # noqa: E402
 import refinancing, working_capital, leverage_trend, dividend_coverage  # noqa: E402
+import intangibles                                # noqa: E402
 import forensics                                  # noqa: E402
 
 # (label, ticker, cik|None, type, event_year). cutoff = event_year - 1.
@@ -64,11 +65,11 @@ CONTROL_CUTOFF = 2019
 
 # Which flags are "relevant" to each disaster type (for a fair per-type catch).
 RELEVANT = {
-    "bankruptcy": {"leverage", "refinancing", "dividend", "forensic", "working_capital"},
-    "dividend_cut": {"dividend", "leverage", "refinancing"},
-    "fraud_restatement": {"forensic", "working_capital"},
+    "bankruptcy": {"leverage", "refinancing", "dividend", "forensic", "working_capital", "intangibles"},
+    "dividend_cut": {"dividend", "leverage", "refinancing", "intangibles"},
+    "fraud_restatement": {"forensic", "working_capital", "intangibles"},
 }
-FLAGS = ["forensic", "refinancing", "leverage", "working_capital", "dividend"]
+FLAGS = ["forensic", "refinancing", "leverage", "working_capital", "dividend", "intangibles"]
 
 
 def _truncate(statements: dict, cutoff: int) -> dict:
@@ -100,6 +101,9 @@ def _run_checks(statements: dict) -> dict:
 
     dc = dividend_coverage.assess(statements, info)
     out["dividend"] = dc.get("level") == "uncovered"
+
+    ig = intangibles.assess(statements, info)
+    out["intangibles"] = ig.get("level") == "high"   # strict: bloat + negative tangible book
     return out
 
 

@@ -85,6 +85,9 @@ CAPABILITIES = [
          "Data cross-check — when two independent providers disagree materially on a "
          "foreign filer's numbers, the valuation is flagged untrustworthy and the "
          "name downgraded, rather than shown as a bargain.",
+         "Acquisition-accounting / impairment risk — flags a balance sheet that's "
+         "mostly acquired goodwill with a negative tangible book (the debt-funded "
+         "roll-up pattern), where one writedown erases the equity cushion.",
      ]},
     {"title": "AI second opinion (optional)",
      "items": [

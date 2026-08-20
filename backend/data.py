@@ -76,6 +76,8 @@ STATEMENT_KEYS = [
     # Debt maturity ladder (EDGAR only; empty from Yahoo/SimFin) — refinancing check.
     "debt_current", "debt_mat_y1", "debt_mat_y2", "debt_mat_y3",
     "debt_mat_y4", "debt_mat_y5", "debt_mat_beyond",
+    # Goodwill & intangibles — acquisition-accounting / impairment-risk check.
+    "goodwill", "intangibles",
 ]
 
 

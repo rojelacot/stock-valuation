@@ -347,6 +347,21 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         elif dc_.get("level") == "comfortable" and dc_.get("positive"):
             green.append(dc_["positive"])
 
+    # ---- Acquisition-accounting / goodwill-impairment risk ----
+    # A balance sheet that is mostly acquired goodwill with a negative tangible
+    # book is the roll-up/impairment configuration behind many blow-ups. 'high'
+    # (bloat AND negative tangible book) docks the score; 'elevated' is a note.
+    ig_ = metrics.get("intangibles", {})
+    if ig_.get("applicable"):
+        if ig_.get("level") == "high":
+            penalty += 4
+            for r in (ig_.get("reasons") or [])[:1]:
+                red.append("Impairment risk: " + r)
+        elif ig_.get("level") == "elevated":
+            first = (ig_.get("reasons") or [None])[0]
+            if first:
+                red.append("Goodwill-heavy: " + first)
+
     penalty = min(penalty, 20)
     forensic_penalty = penalty
     normalized = max(0, normalized - penalty)

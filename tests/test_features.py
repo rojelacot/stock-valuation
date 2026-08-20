@@ -433,6 +433,34 @@ ok(any("buyback" in r.lower() or "shareholder returns" in r.lower() for r in str
    "total payout > FCF is surfaced")
 
 # ---------------------------------------------------------------------------
+# 7b) intangibles.assess — acquisition-accounting / impairment risk
+# ---------------------------------------------------------------------------
+print("intangibles:")
+import intangibles as intg  # noqa: E402
+
+
+def igstmt(goodwill, intangibles_, assets, equity):
+    return {k: {"2024": v * 1e6} for k, v in
+            {"goodwill": goodwill, "intangibles": intangibles_,
+             "total_assets": assets, "total_equity": equity}.items()}
+
+
+# Roll-up: goodwill+intangibles >> assets and > equity (negative tangible book).
+rollup = intg.assess(igstmt(8000, 4000, 15000, 2000), {})
+ok(rollup["level"] == "high" and rollup["tangible_negative"], "roll-up (G+I 80% assets, neg tangible) -> high")
+# Real assets, low goodwill -> low / positive.
+real = intg.assess(igstmt(500, 200, 10000, 6000), {})
+ok(real["level"] == "low" and real["positive"], "real-asset balance sheet -> low, positive")
+# No goodwill -> not applicable.
+ok(intg.assess(igstmt(0, 0, 10000, 6000), {})["applicable"] is False, "no goodwill -> not applicable")
+# Goodwill above equity but modest share of assets -> elevated, not high.
+elev = intg.assess(igstmt(3000, 1000, 12000, 3500), {})
+ok(elev["level"] in ("elevated", "high") and elev["tangible_negative"],
+   "goodwill > equity -> at least elevated")
+# None-safe on empty.
+ok(intg.assess({}, {})["applicable"] is False, "empty -> not applicable")
+
+# ---------------------------------------------------------------------------
 # 8) Regressions for the code-review findings
 # ---------------------------------------------------------------------------
 print("review-fix regressions:")

@@ -221,7 +221,7 @@ function renderAnalysis(d) {
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
     refinancingSection(d, cur), leverageTrendSection(d), workingCapitalSection(d),
-    dividendCoverageSection(d, cur), ddSection(d, cur), divSafetySection(d, cur),
+    dividendCoverageSection(d, cur), intangiblesSection(d, cur), ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
@@ -742,6 +742,33 @@ function leverageTrendSection(d) {
     <p class="text-xs text-muted mb-4">The <em>trajectory</em> static leverage misses: is Net Debt/EBITDA climbing and coverage compressing toward the levels where lenders set covenants? (Thresholds are generic loan-market conventions, not this filer's actual terms.)</p>
     ${tiles}
     ${levViz}
+    ${bullets}
+  </section>`);
+}
+
+function intangiblesSection(d, cur) {
+  const ig = d.metrics.intangibles;
+  if (!ig || !ig.applicable) return h(`<div class="hidden"></div>`);  // most names: skip quietly
+  if (ig.level === "low") return h(`<div class="hidden"></div>`);      // clean: no need for a card
+  const col = { moderate: "muted", elevated: "warn", high: "bad" }[ig.level] || "muted";
+  const txt = { moderate: "Some", elevated: "Elevated", high: "High" }[ig.level] || ig.level;
+  const money = v => v == null ? "—" : (Math.abs(v) >= 1e9 ? cur + (v / 1e9).toFixed(1) + "B"
+    : Math.abs(v) >= 1e6 ? cur + (v / 1e6).toFixed(0) + "M" : cur + Math.round(v));
+  const stat = (label, val, hint) => `<div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${label}</div><div class="text-lg font-bold">${val}</div>${hint ? `<div class="text-[10px] text-muted mt-0.5">${hint}</div>` : ""}</div>`;
+  const bullets = (ig.reasons && ig.reasons.length)
+    ? `<ul class="mt-4 space-y-1 text-sm text-${col}">${ig.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>` : "";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Acquisition accounting &amp; impairment risk</h3>
+      <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${col}/15 text-${col}">${txt}</div>
+    </div>
+    <p class="text-xs text-muted mb-4">How much of the balance sheet is acquired goodwill vs real, built assets. When goodwill exceeds equity, one writedown erases the shareholders' cushion — the roll-up / impairment pattern behind many blow-ups.</p>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-2.5">
+      ${stat("Goodwill + intangibles", `${Math.round((ig.gi_to_assets || 0) * 100)}%`, "of total assets")}
+      ${stat("Tangible book equity", money(ig.tangible_equity), ig.tangible_negative ? "negative — goodwill > equity" : "positive")}
+      ${stat("Impairment vs equity", ig.impair_vs_equity != null ? ig.impair_vs_equity.toFixed(1) + "×" : "—", "a full writedown vs book")}
+    </div>
     ${bullets}
   </section>`);
 }
