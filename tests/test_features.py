@@ -264,6 +264,61 @@ ok(noladder["has_ladder"] is False and noladder["near_term_wall"] == 1e8,
    "no ladder -> uses current portion as near-term wall")
 
 # ---------------------------------------------------------------------------
+# 5) working_capital.assess — receivables/inventory vs sales
+# ---------------------------------------------------------------------------
+print("working capital:")
+import working_capital as wcap  # noqa: E402
+
+
+def wc_stmt(rev, rec=None, inv=None, gp=None):
+    out = {"revenue": rev}
+    if rec is not None:
+        out["receivables"] = rec
+    if inv is not None:
+        out["inventory"] = inv
+    if gp is not None:
+        out["gross_profit"] = gp
+    return out
+
+
+# Receivables ballooning vs flat sales -> elevated concern.
+bad = wcap.assess(wc_stmt(
+    rev={"2022": 1000, "2023": 1000, "2024": 1000, "2025": 1000},
+    rec={"2022": 100, "2023": 110, "2024": 120, "2025": 170}), {"sector": "Technology"})
+ok(bad["level"] == "elevated" and bad["receivables"]["ratio"] > 1.25,
+   "receivables outrunning sales -> elevated")
+
+# Stable intensity (both grow together) -> low + positive.
+good = wcap.assess(wc_stmt(
+    rev={"2022": 1000, "2023": 1100, "2024": 1200, "2025": 1300},
+    rec={"2022": 100, "2023": 110, "2024": 120, "2025": 130}), {"sector": "Technology"})
+ok(good["level"] == "low" and good["positive"], "receivables tracking sales -> low, positive")
+
+# High-but-stable DSO must NOT be flagged (it's the trend, not the level).
+saas = wcap.assess(wc_stmt(
+    rev={"2022": 1000, "2023": 1100, "2024": 1200, "2025": 1300},
+    rec={"2022": 340, "2023": 374, "2024": 408, "2025": 442}), {"sector": "Technology"})
+ok(saas["level"] == "low", "high but stable DSO not flagged")
+
+# Stale line (inventory ends years before revenue) -> that component dropped.
+stale = wcap.assess(wc_stmt(
+    rev={"2022": 1000, "2023": 1000, "2024": 1000, "2025": 1000},
+    inv={"2009": 50, "2010": 60, "2011": 90}), {"sector": "Consumer Cyclical"})
+ok(stale["applicable"] is False or stale.get("inventory") is None,
+   "stale inventory series is dropped, not trended as current")
+
+# Financials -> N/A.
+ok(wcap.assess(wc_stmt(rev={"2025": 1000}, rec={"2025": 500}),
+               {"sector": "Financial Services"})["applicable"] is False,
+   "financials -> not applicable")
+
+# Trivially small receivables ignored; no crash on empty.
+ok(wcap.assess(wc_stmt(rev={"2023": 1000, "2024": 1000, "2025": 1000},
+                       rec={"2023": 1, "2024": 1, "2025": 2}), {})["applicable"] is False,
+   "trivially small receivables ignored")
+ok(wcap.assess({}, {})["applicable"] is False, "empty statements -> not applicable")
+
+# ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
     for f in FAILS:

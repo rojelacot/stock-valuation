@@ -220,7 +220,7 @@ function renderAnalysis(d) {
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
-    refinancingSection(d, cur),
+    refinancingSection(d, cur), workingCapitalSection(d),
     ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
@@ -625,6 +625,54 @@ function refinancingSection(d, cur) {
       ${stat("Implied rate on debt", rf.implied_rate != null ? (rf.implied_rate * 100).toFixed(1) + "%" : "—", "interest ÷ total debt")}
     </div>
     ${ladderViz}
+    ${bullets}
+  </section>`);
+}
+
+function workingCapitalSection(d) {
+  const wc = d.metrics.working_capital;
+  if (!wc) return h(`<div class="hidden"></div>`);
+  if (!wc.applicable) {
+    return h(`<section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-1">Working-capital quality</h3>
+      <p class="text-muted text-sm">${wc.reason}</p></section>`);
+  }
+  const lvlColor = { low: "good", moderate: "warn", elevated: "bad" }[wc.level] || "muted";
+  const lvlText = { low: "Clean", moderate: "Watch", elevated: "Concern" }[wc.level] || wc.level;
+
+  const comp = (c, label) => {
+    if (!c) return `<div class="bg-ink/40 rounded-xl p-4 border border-line/60">
+      <div class="text-sm text-muted">${label}</div>
+      <div class="text-muted text-sm mt-2">Not separately reported.</div></div>`;
+    const col = c.level === "elevated" ? "bad" : c.level === "moderate" ? "warn" : "good";
+    const arrow = c.ratio >= 1.12 ? "↑" : c.ratio <= 0.92 ? "↓" : "→";
+    // mini day-trend sparkline
+    const ser = c.series || [];
+    const maxD = Math.max(1, ...ser.map(p => p.days));
+    const spark = ser.map(p => `<span class="inline-block align-bottom rounded-t" title="${p.year}: ${p.days.toFixed(0)}d" style="width:8px;background:#4f9dff;height:${Math.max(2, Math.round(p.days / maxD * 30))}px"></span>`).join("");
+    return `<div class="bg-ink/40 rounded-xl p-4 border border-${col}/40">
+      <div class="flex items-center justify-between">
+        <div class="text-sm text-muted">${label} <span class="opacity-70">(days per ${c.denom})</span></div>
+        <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${col}/15 text-${col}">${c.level}</div>
+      </div>
+      <div class="text-3xl font-bold text-${col} mt-1">${c.days_latest.toFixed(0)}<span class="text-sm text-muted font-normal"> days ${arrow}</span></div>
+      <div class="text-[11px] text-muted mt-1">vs a ~${c.days_base.toFixed(0)}-day recent norm (${c.ratio >= 1 ? "+" : ""}${((c.ratio - 1) * 100).toFixed(0)}%)</div>
+      <div class="flex items-end gap-0.5 h-8 mt-2">${spark}</div>
+    </div>`;
+  };
+
+  const bullets = (wc.reasons && wc.reasons.length)
+    ? `<ul class="mt-4 space-y-1 text-sm text-${lvlColor}">${wc.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
+    : (wc.positive ? `<p class="mt-4 text-sm text-good">✓ ${wc.positive}</p>` : "");
+
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Working-capital quality</h3>
+      <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${lvlColor}/15 text-${lvlColor}">${lvlText}</div>
+    </div>
+    <p class="text-xs text-muted mb-4">Receivables or inventory growing faster than sales is an early warning — cash trapped in working capital, channel-stuffing / aggressive revenue recognition, or inventory that isn't selling. It's the trend that matters, not the absolute level.</p>
+    <div class="grid md:grid-cols-2 gap-3">${comp(wc.receivables, "Days sales outstanding (receivables)")}${comp(wc.inventory, "Days inventory outstanding")}</div>
     ${bullets}
   </section>`);
 }

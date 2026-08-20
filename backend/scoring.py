@@ -303,6 +303,19 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         elif rf.get("positive"):
             green.append(rf["positive"])
 
+    # ---- Working-capital quality (receivables/inventory outrunning sales) ----
+    # An early accruals/demand warning — cash trapped in working capital. A
+    # softer signal than distress, so only a sustained (elevated) build docks the
+    # score; a moderate creep is surfaced in the section but not flagged here.
+    wc = metrics.get("working_capital", {})
+    if wc.get("applicable"):
+        if wc.get("level") == "elevated":
+            penalty += 4
+            for r in (wc.get("reasons") or [])[:2]:
+                red.append("Working capital: " + r)
+        elif wc.get("positive"):
+            green.append(wc["positive"])
+
     penalty = min(penalty, 20)
     forensic_penalty = penalty
     normalized = max(0, normalized - penalty)

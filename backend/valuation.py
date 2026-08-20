@@ -505,6 +505,10 @@ def compute_metrics(stock: dict[str, Any],
     import refinancing
     refin = refinancing.assess(st, info)
 
+    # ---- Working-capital quality (receivables/inventory vs sales) ----
+    import working_capital
+    workcap = working_capital.assess(st, info)
+
     # ---- Sector-relative context (is this good *for this sector*?) ----
     import sector_benchmarks as _sb
     _sector = info.get("sector")
@@ -532,6 +536,7 @@ def compute_metrics(stock: dict[str, Any],
         "monte_carlo": monte_carlo,
         "forensics": forensic_scores,
         "refinancing": refin,
+        "working_capital": workcap,
         "sector_relative": sector_relative,
         # Confidence gate: CAGRs, medians and the DCF need a few years to be
         # stable. Thin history (foreign filers on Yahoo, recent IPOs) is flagged
