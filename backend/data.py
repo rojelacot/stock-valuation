@@ -331,9 +331,11 @@ def _cross_check_sources(primary: dict[str, Any], peer: dict[str, Any],
         pv = p_st.get(key) or {}
         qv = q_st.get(key) or {}
         # Values may be keyed by str or int years; normalize to str for overlap.
+        # Keep only 4-digit fiscal-year keys — a non-numeric period label (e.g.
+        # a "TTM" row) would otherwise break max(..., key=int).
         p_by = {str(y): v for y, v in pv.items() if v is not None}
         q_by = {str(y): v for y, v in qv.items() if v is not None}
-        common = set(p_by) & set(q_by)
+        common = [y for y in (set(p_by) & set(q_by)) if y.isdigit()]
         if not common:
             continue
         yr = max(common, key=int)

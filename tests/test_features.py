@@ -80,6 +80,27 @@ try:
 except Exception as e:  # noqa: BLE001
     ok(False, f"None value in series -> crashed ({e})")
 
+# Non-numeric period keys (e.g. a "TTM" row) must be ignored, not crash.
+a = stmt(revenue={"2024": 1000, "TTM": 1100}, net_income={"2024": 100})
+b = stmt(revenue={"2024": 1000, "TTM": 2000}, net_income={"2024": 100})
+try:
+    d = data._cross_check_sources(a, b, "A", "B")
+    ok(d is not None and d["metrics"]["revenue"]["year"] == "2024",
+       "non-numeric period key ignored (compares 2024, not TTM)")
+except Exception as e:  # noqa: BLE001
+    ok(False, f"non-numeric key crashed ({e})")
+
+# --- atomic_json: locked read-modify-write survives corruption + concurrency ---
+import atomic_json  # noqa: E402
+apath = Path(tempfile.mkdtemp()) / "s.json"
+atomic_json.update(apath, lambda d: d.__setitem__("a", 1))
+atomic_json.update(apath, lambda d: d.__setitem__("b", 2))
+ok(atomic_json.load(apath) == {"a": 1, "b": 2}, "atomic_json: successive updates accumulate")
+apath.write_text("{ this is not json")   # simulate corruption
+ok(atomic_json.load(apath) == {}, "atomic_json: unreadable file loads as {}")
+atomic_json.update(apath, lambda d: d.__setitem__("c", 3))
+ok(atomic_json.load(apath) == {"c": 3}, "atomic_json: update recovers after corruption")
+
 
 # ---------------------------------------------------------------------------
 # 2) Scoring downgrade when sources materially disagree

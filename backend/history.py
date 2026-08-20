@@ -8,19 +8,17 @@ weekly job and an ad-hoc 'core' scan don't clobber each other.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
+
+import atomic_json
 
 HIST = Path(__file__).resolve().parent.parent / "reports" / "screen_history.json"
 MAX_WEEKS = 104  # keep ~2yr of weekly snapshots per scope
 
 
 def _load() -> dict[str, Any]:
-    try:
-        return json.loads(HIST.read_text())
-    except Exception:  # noqa: BLE001
-        return {}
+    return atomic_json.load(HIST)
 
 
 def _winner(row: dict[str, Any]) -> dict[str, Any]:
@@ -49,18 +47,20 @@ def record(scope: str, today: str, min_score: int,
     Track-record tab so the week-over-week deltas are read correctly."""
     if not today:
         return
-    hist = _load()
-    runs = [r for r in hist.get(scope, []) if r.get("date") != today]
     winners = [_winner(c) for c in candidates if c.get("ticker")]
     entry = {"date": today, "min_score": min_score,
              "count": len(winners), "winners": winners}
     if note:
         entry["note"] = note
-    runs.append(entry)
-    runs.sort(key=lambda r: r.get("date") or "")
-    hist[scope] = runs[-MAX_WEEKS:]
-    HIST.parent.mkdir(exist_ok=True)
-    HIST.write_text(json.dumps(hist))
+
+    def _mutate(hist):
+        runs = [r for r in hist.get(scope, []) if r.get("date") != today]
+        runs.append(entry)
+        runs.sort(key=lambda r: r.get("date") or "")
+        hist[scope] = runs[-MAX_WEEKS:]
+
+    # Locked + atomic: the launchd job and an in-app scan can write concurrently.
+    atomic_json.update(HIST, _mutate)
 
 
 def summarize(scope: str) -> dict[str, Any]:

@@ -372,6 +372,10 @@ def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
             # The cap is generous because a quality name can rank well outside the
             # top 60 on its noisy Yahoo score yet deep-verify into a BUY (e.g. SYF,
             # ACN, GL sat at fast ~67-69 but score 73-76 on EDGAR).
+            # Known limitation: a foreign filer whose fast score falls below this
+            # cap is never deep-verified, so its SimFin-vs-Yahoo cross-check never
+            # runs — it can slip through as a fast-pass BUY. The generous cap
+            # mitigates; fully closing it would mean cross-checking every name.
             to_verify = sorted([r for r in job["rows"] if (r.get("score") or 0) >= 45],
                                key=lambda r: -(r["score"] or 0))[:150]
             job["phase"] = "verifying"
