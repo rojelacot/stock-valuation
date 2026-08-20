@@ -96,12 +96,13 @@ function onAssumptionsChanged() {
 function switchMode(mode) {
   currentMode = mode;
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.mode === mode));
-  ["analyze", "compare", "screen", "watchlist", "guide"].forEach(m => $("mode-" + m).classList.toggle("hidden", m !== mode));
+  ["analyze", "compare", "screen", "history", "watchlist", "guide"].forEach(m => $("mode-" + m).classList.toggle("hidden", m !== mode));
   $("results").classList.add("hidden");
   $("error").classList.add("hidden");
   $("loading").classList.add("hidden");
   if (mode === "watchlist") loadWatchlist();
   if (mode === "guide") loadGuide();
+  if (mode === "history") loadHistory();
   if (mode === "screen") resumeScreen();
 }
 
@@ -1459,6 +1460,89 @@ function wireWatchlistControl(d) {
   });
 }
 
+// ---------- Track record (weekly winners over time) ----------
+function histScoreColor(s) {
+  if (s == null) return "transparent";
+  if (s >= 85) return "#16a34a";      // strong
+  if (s >= 75) return "#22c55e";
+  if (s >= 65) return "#65a30d";
+  if (s >= 55) return "#ca8a04";
+  return "#6b7280";
+}
+
+async function loadHistory() {
+  const body = $("historyBody");
+  body.innerHTML = `<div class="text-muted text-sm">Loading…</div>`;
+  try {
+    const d = await getJSON("/api/history?scope=all");
+    renderHistory(d);
+  } catch (e) { body.innerHTML = `<div class="text-bad text-sm">Couldn't load history: ${e.message}</div>`; }
+}
+
+function renderHistory(d) {
+  const body = $("historyBody");
+  const weeks = d.weeks || [], board = d.board || [], latest = d.latest || {};
+  if (!weeks.length) {
+    body.innerHTML = `<div class="card rounded-2xl p-8 text-center text-muted text-sm">
+      No weekly runs recorded yet. The scheduled screen (and any full scan you run from the
+      <b>Weekly buy screen</b> tab) will start filling this in — each run adds a column here.</div>`;
+    return;
+  }
+  const dates = weeks.map(w => w.date);
+  const fmtDate = s => s ? s.slice(5) : "—";              // MM-DD
+  const chip = (t, cls) => `<span class="inline-block px-2 py-0.5 rounded text-xs font-mono ${cls}">${t}</span>`;
+
+  // --- Header + latest week-over-week summary ---
+  let html = `<div class="card rounded-2xl p-5 mb-5">
+    <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1 mb-3">
+      <span class="text-lg font-semibold">${weeks.length} weekly run${weeks.length === 1 ? "" : "s"}</span>
+      <span class="text-muted text-sm">${fmtDate(dates[0])} → ${fmtDate(dates[dates.length - 1])} · latest ${weeks[weeks.length - 1].count} winners</span>
+    </div>`;
+  if (latest.prev_date) {
+    const mk = arr => arr.length ? arr.map(t => chip(t, "bg-good/15 text-good")).join(" ") : `<span class="text-muted text-xs">none</span>`;
+    const mkd = arr => arr.length ? arr.map(t => chip(t, "bg-bad/15 text-bad")).join(" ") : `<span class="text-muted text-xs">none</span>`;
+    html += `<div class="grid md:grid-cols-3 gap-3 text-sm">
+      <div><div class="text-muted text-xs mb-1">＋ New this week (${latest.added.length})</div>${mk(latest.added)}</div>
+      <div><div class="text-muted text-xs mb-1">− Dropped (${latest.dropped.length})</div>${mkd(latest.dropped)}</div>
+      <div><div class="text-muted text-xs mb-1">＝ Held (${latest.held.length})</div><span class="text-xs text-muted">${latest.held.length} names carried over</span></div>
+    </div>`;
+  } else {
+    html += `<div class="text-sm text-muted">First recorded week — week-over-week comparison appears once the next run lands.</div>`;
+  }
+  html += `</div>`;
+
+  // --- Conviction board: ticker × week matrix, sorted by recurrence ---
+  const colH = `<th class="px-1 text-center font-mono text-[10px] text-muted" title="week of">${dates.map(fmtDate).join('</th><th class="px-1 text-center font-mono text-[10px] text-muted">')}</th>`;
+  const rows = board.map(b => {
+    const cells = dates.map(dt => {
+      const s = b.scores[dt];
+      const bg = histScoreColor(s);
+      return `<td class="px-1 text-center"><span class="inline-flex items-center justify-center rounded" style="width:26px;height:20px;background:${bg};color:${s == null ? 'transparent' : '#fff'};font-size:10px;font-weight:600" title="${dt}: ${s == null ? 'not a winner' : 'score ' + s}">${s == null ? '·' : s}</span></td>`;
+    }).join("");
+    const streakBadge = b.streak >= 2 ? `<span class="ml-1 text-[10px] px-1 rounded bg-brand/20 text-brand" title="consecutive weeks">×${b.streak}</span>` : "";
+    return `<tr class="border-t border-[#1b2534]">
+      <td class="px-2 py-1 font-mono font-semibold whitespace-nowrap">${b.ticker}${streakBadge}</td>
+      <td class="px-2 py-1 text-muted text-xs max-w-[180px] truncate" title="${(b.name || '').replace(/"/g, '')}">${b.name || ""}</td>
+      <td class="px-2 py-1 text-center text-xs">${b.appearances}/${b.weeks_total}</td>
+      ${cells}
+    </tr>`;
+  }).join("");
+
+  html += `<div class="card rounded-2xl p-4 overflow-x-auto">
+    <div class="text-sm font-semibold mb-1">Conviction board</div>
+    <p class="text-xs text-muted mb-3">Ranked by how many weeks each name has cleared the buy bar. Each square is one weekly run — colored by score, blank when it wasn't a winner. <b>×N</b> marks an active multi-week streak.</p>
+    <table class="text-sm border-collapse">
+      <thead><tr class="text-muted text-xs">
+        <th class="px-2 text-left">Ticker</th><th class="px-2 text-left">Name</th>
+        <th class="px-2 text-center" title="weeks as a winner / total weeks">Weeks</th>
+        ${colH}
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+
+  body.innerHTML = html;
+}
+
 async function loadWatchlist() {
   showLoading("Checking your watchlist against buy-below prices…");
   try {
@@ -1554,6 +1638,7 @@ function watchlistRow(r) {
 // ---------- wire up ----------
 document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => switchMode(t.dataset.mode)));
 $("refreshWatchlist")?.addEventListener("click", loadWatchlist);
+$("refreshHistory")?.addEventListener("click", loadHistory);
 $("go").addEventListener("click", () => analyze());
 $("ticker").addEventListener("keydown", (e) => { if (e.key === "Enter") analyze(); });
 $("goCompare").addEventListener("click", runCompare);

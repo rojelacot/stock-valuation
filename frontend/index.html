@@ -41,6 +41,7 @@
       <div class="tab active" data-mode="analyze">Analyze one</div>
       <div class="tab" data-mode="compare">Compare</div>
       <div class="tab" data-mode="screen">Weekly buy screen</div>
+      <div class="tab" data-mode="history">Track record</div>
       <div class="tab" data-mode="watchlist">Watchlist</div>
       <div class="tab" data-mode="guide">Guide</div>
     </div>
@@ -161,6 +162,16 @@
       </div>
     </section>
 
+    <!-- ===== Track record mode ===== -->
+    <section id="mode-history" class="hidden">
+      <div class="card rounded-2xl p-4 mb-6 flex items-center justify-between">
+        <div><h2 class="font-semibold">Track record — weekly winners</h2>
+          <p class="text-xs text-muted mt-0.5">Every weekly screen's BUY list, stacked week over week. Names that keep recurring are the highest-conviction ideas.</p></div>
+        <button id="refreshHistory" class="text-sm text-muted hover:text-brand">↻ Refresh</button>
+      </div>
+      <div id="historyBody"><div class="text-muted text-sm">Loading…</div></div>
+    </section>
+
     <!-- ===== Guide mode ===== -->
     <section id="mode-guide" class="hidden">
       <div id="guideBody"><div class="text-muted text-sm">Loading…</div></div>
@@ -186,6 +197,6 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=16"></script>
+  <script src="/static/app.js?v=17"></script>
 </body>
 </html>

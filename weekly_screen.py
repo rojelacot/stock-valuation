@@ -306,7 +306,11 @@ def main():
     # ---- Week-over-week diff (shared with the app, keyed by scope) ----
     scope_key = "custom" if args.tickers else args.scope
     cur_map = {r["ticker"]: r["score"] for r in candidates}
-    diff = diffstate.compute_diff(scope_key, cur_map, date.today().isoformat())
+    today_iso = date.today().isoformat()
+    diff = diffstate.compute_diff(scope_key, cur_map, today_iso)
+    # Append to the multi-week track record (the app's "Track record" tab).
+    import history as _history
+    _history.record(scope_key, today_iso, args.min_score, candidates)
 
     # ---- Watchlist buy-zone alerts ----
     import watchlist as _wl

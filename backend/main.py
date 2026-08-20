@@ -396,12 +396,18 @@ def _run_scan_job(job_id: str, symbols: list[str], a: dict[str, Any],
                       and r.get("rating") == "BUY" and not r.get("suspect")]
         diff = None
         if not is_custom and not job.get("cancelled"):
+            today_iso = date.today().isoformat()
             try:
                 diff = diffstate.compute_diff(
                     scope, {r["ticker"]: r["score"] for r in candidates},
-                    date.today().isoformat())
+                    today_iso)
             except Exception:  # noqa: BLE001
                 diff = None
+            try:  # append to the multi-week track record
+                import history as _history
+                _history.record(scope, today_iso, min_score, candidates)
+            except Exception:  # noqa: BLE001
+                pass
         job["rows"], job["candidates"], job["diff"] = rows, candidates, diff
         job["status"] = "cancelled" if job.get("cancelled") else "done"
         job["finished"] = time.time()
@@ -479,6 +485,16 @@ def screen_cancel(job_id: str):
     if job:
         job["cancelled"] = True
     return {"ok": True}
+
+
+@app.get("/api/history")
+def screen_history(scope: str = "all"):
+    """Multi-week track record of screen winners for `scope`: each week's list,
+    a conviction board (names ranked by how often they recur), and the latest
+    week-over-week added/dropped/held. Populated by the weekly job and any
+    non-custom app scan."""
+    import history as _history
+    return _history.summarize(scope)
 
 
 _SEGMENT_CACHE: dict[str, dict] = {}
