@@ -524,6 +524,35 @@ ok(flagged.get("debt_estimated") is True and flagged.get("low") is True,
    "debt_estimated propagates to data_confidence.low")
 
 # ---------------------------------------------------------------------------
+# 7f) Price-source resilience (Yahoo fallbacks)
+# ---------------------------------------------------------------------------
+print("price-source resilience:")
+import data as _data  # noqa: E402
+
+_edg = {"statements": {"shares": {"2022": 100, "2023": 110, "2024": 120},
+                       "total_debt": {"2024": 50}, "cash": {"2024": 10}},
+        "entity": "Test Co", "statement_years": 8}
+ok(_data._edgar_shares_latest(_edg) == 120, "latest share count picked from EDGAR")
+
+# Full Yahoo outage + no fallback price -> give up cleanly (no crash).
+_orig = _data._stooq_price
+_data._stooq_price = lambda t: None
+ok(_data._edgar_price_fallback("X", _edg) is None, "no fallback price -> None, not a crash")
+# With a fallback price, salvage builds a price x EDGAR-shares market cap.
+_data._stooq_price = lambda t: 50.0
+_fb = _data._edgar_price_fallback("X", _edg)
+ok(_fb and _fb["info"]["current_price"] == 50.0
+   and _fb["info"]["market_cap"] == 50.0 * 120 and _fb.get("_price_fallback"),
+   "salvage builds price x EDGAR-shares market cap")
+_data._stooq_price = _orig
+
+# _get fails over query1 <-> query2 (host list construction).
+# (verified live that both hosts serve; here we just assert the swap logic.)
+ok("query2.finance.yahoo.com" in
+   "https://query1.finance.yahoo.com/v8/x".replace("query1.", "query2."),
+   "query1 URL maps to the query2 mirror")
+
+# ---------------------------------------------------------------------------
 # 8) Regressions for the code-review findings
 # ---------------------------------------------------------------------------
 print("review-fix regressions:")

@@ -110,11 +110,21 @@ def _new_session() -> cr.Session:
 
 
 def _get(session: cr.Session, url: str, params: dict, tries: int = 3) -> Any:
-    """GET JSON with a small backoff on 429/5xx."""
+    """GET JSON with a small backoff on 429/5xx, failing over between Yahoo's
+    query1 and query2 mirror hosts — when one is rate-limited (a 429) the other
+    frequently still serves, so a full-universe screen survives throttling that
+    would otherwise stall it."""
+    # Alternate hosts to try in turn (query1 <-> query2 for Yahoo endpoints).
+    hosts = [url]
+    if "query1.finance.yahoo.com" in url:
+        hosts.append(url.replace("query1.", "query2."))
+    elif "query2.finance.yahoo.com" in url:
+        hosts.append(url.replace("query2.", "query1."))
     last = None
     for i in range(tries):
+        u = hosts[i % len(hosts)]          # rotate hosts across attempts
         try:
-            r = session.get(url, params=params, timeout=20)
+            r = session.get(u, params=params, timeout=20)
             if r.status_code == 200:
                 return r.json()
             if r.status_code in (429, 500, 502, 503):
@@ -127,6 +137,26 @@ def _get(session: cr.Session, url: str, params: dict, tries: int = 3) -> Any:
             last = str(e)
             time.sleep(0.6 * (i + 1))
     raise YahooError(last or "request failed")
+
+
+def _stooq_price(ticker: str) -> Optional[float]:
+    """Last close from Stooq (free, no key) — a residual price fallback for when
+    Yahoo is fully unavailable on both hosts. Best-effort: returns None on any
+    hiccup. Stooq blocks some datacenter IPs but serves residential ones, which
+    is where this local app runs."""
+    sym = ticker.strip().lower().replace(".", "-") + ".us"
+    try:
+        r = _new_session().get(f"https://stooq.com/q/d/l/?s={sym}&i=d", timeout=10)
+        if r.status_code != 200 or r.text[:1] == "<":   # HTML = block page, not CSV
+            return None
+        lines = [ln for ln in r.text.strip().splitlines() if ln]
+        if len(lines) < 2 or "Close" not in lines[0]:
+            return None
+        rec = dict(zip(lines[0].split(","), lines[-1].split(",")))
+        val = float(rec.get("Close"))
+        return val if val > 0 else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _crumb(session: cr.Session) -> str:
@@ -292,8 +322,25 @@ def fetch_stock(ticker: str, use_simfin: bool = True,
         if not edg.get("error") and edg.get("years", 0) >= 4:
             base = _fetch_yahoo(ticker)
             if base.get("error"):
-                return base  # need Yahoo for price; nothing to pair EDGAR with
+                # Yahoo down/rate-limited on both hosts — salvage price from Stooq
+                # + shares from EDGAR so the analysis still runs.
+                base = _edgar_price_fallback(ticker, edg)
+                if base is None:
+                    return {"ticker": ticker, "error": "No price available (Yahoo "
+                            "unavailable and no fallback price for this ticker)."}
             _overlay_edgar(base, edg)
+            if base.get("_price_fallback"):
+                base["data_source"] = (f"SEC EDGAR ({base.get('statement_years')}yr) "
+                                       "+ Stooq price (Yahoo unavailable)")
+            # Fill a missing share count from EDGAR so market cap / per-share value
+            # can still be computed when Yahoo omits it.
+            info = base.get("info") or {}
+            if not info.get("shares_outstanding"):
+                sh = _edgar_shares_latest(edg)
+                if sh:
+                    info["shares_outstanding"] = sh
+                    if not info.get("market_cap") and info.get("current_price"):
+                        info["market_cap"] = info["current_price"] * sh
             return base
 
     # 2) SimFin then Yahoo (EDGAR didn't cover this name).
@@ -361,6 +408,37 @@ def _cross_check_sources(primary: dict[str, Any], peer: dict[str, Any],
         "max_divergence": round(worst, 3),
         "material": worst >= 0.20,
     }
+
+
+def _edgar_shares_latest(edg: dict[str, Any]) -> Optional[float]:
+    sh = (edg.get("statements") or {}).get("shares") or {}
+    yrs = [y for y in sh if sh.get(y)]
+    return sh[max(yrs)] if yrs else None
+
+
+def _edgar_price_fallback(ticker: str, edg: dict[str, Any]) -> Optional[dict[str, Any]]:
+    """Build a minimal price/market base from Stooq + EDGAR shares when Yahoo is
+    unavailable, so an EDGAR-backed analysis can still run. None if no price."""
+    price = _stooq_price(ticker)
+    if not price:
+        return None
+    st = edg.get("statements") or {}
+    shares = _edgar_shares_latest(edg)
+
+    def _latest(series):
+        d = {y: v for y, v in (series or {}).items() if v is not None}
+        return d[max(d)] if d else None
+    info = {
+        "name": edg.get("entity") or ticker, "current_price": price,
+        "shares_outstanding": shares,
+        "market_cap": (price * shares) if shares else None,
+        "currency": "USD", "financial_currency": "USD",
+        "currency_converted": False, "currency_unresolved": False, "fx_rate": 1.0,
+        "total_debt": _latest(st.get("total_debt")), "total_cash": _latest(st.get("cash")),
+    }
+    return {"ticker": ticker, "error": None, "info": info,
+            "statements": {k: {} for k in STATEMENT_KEYS}, "price_history": [],
+            "data_source": "SEC EDGAR + Stooq (Yahoo unavailable)", "_price_fallback": True}
 
 
 def _overlay_edgar(base: dict[str, Any], edg: dict[str, Any]) -> None:
