@@ -10,6 +10,10 @@ resets to `{}`, dropping the whole multi-week series.
 `update()` fixes both: an exclusive file lock serializes writers across
 processes, and a temp-file + `os.replace` makes each write atomic, so a reader
 ever only sees a complete old-or-new file — never a partial one.
+
+Locking uses POSIX `fcntl.flock` (this app targets darwin). On a platform
+without `fcntl` the cross-process lock degrades to a no-op — the atomic-replace
+still prevents a *corrupt* file, but a concurrent lost update becomes possible.
 """
 from __future__ import annotations
 

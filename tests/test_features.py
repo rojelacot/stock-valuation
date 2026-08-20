@@ -433,6 +433,49 @@ ok(any("buyback" in r.lower() or "shareholder returns" in r.lower() for r in str
    "total payout > FCF is surfaced")
 
 # ---------------------------------------------------------------------------
+# 8) Regressions for the code-review findings
+# ---------------------------------------------------------------------------
+print("review-fix regressions:")
+
+# leverage_trend: a genuine current spike clamped out of the trend series must
+# still grade stressed (not "stable"), on the unclamped latest reading.
+spike = levt.assess({
+    "revenue": {y: 9000 for y in ["2021", "2022", "2023", "2024"]},
+    "total_debt": {y: 2000 for y in ["2021", "2022", "2023", "2024"]},
+    "cash": {y: 0 for y in ["2021", "2022", "2023", "2024"]},
+    "ebitda": {"2021": 1000, "2022": 1000, "2023": 1000, "2024": 50},  # 2024 collapse -> 40x
+}, {"sector": "Industrials"})
+ok(spike["level"] == "stressed", "leverage: 40x latest (clamped) still grades stressed")
+
+# leverage_trend: a REIT sitting at high book D/E (not rising) must not read fine.
+reit_hi = levt.assess({
+    "revenue": {y: 1000 for y in ["2021", "2022", "2023", "2024"]},
+    "total_debt": {y: 8000 for y in ["2021", "2022", "2023", "2024"]},
+    "total_equity": {y: 2000 for y in ["2021", "2022", "2023", "2024"]},
+}, {"sector": "Real Estate"})
+ok(reit_hi["level"] == "deteriorating", "leverage: chronically high REIT D/E flagged, not 'stable'")
+
+# refinancing: a 'moderate' grade must always carry an explanation.
+mod = refi.assess({"total_debt": {"2024": 1e9}, "debt_mat_y1": {"2024": 1.8e8},
+                   "debt_mat_y2": {"2024": 1.7e8}, "debt_mat_beyond": {"2024": 6.5e8},
+                   "cash": {"2024": 5e8}, "ebitda": {y: 1e8 for y in ["2022", "2023", "2024"]},
+                   "interest_expense": {"2024": 2e7},
+                   "free_cashflow": {y: 1e8 for y in ["2022", "2023", "2024"]}}, {"sector": "Industrials"})
+ok(mod["level"] != "moderate" or mod["reasons"], "refinancing: a moderate grade carries a reason")
+
+# dividend_coverage: a dividend suspended years ago isn't graded as a current payer.
+susp = divc.assess({"dividends_paid": {y: -5e7 for y in ["2018", "2019", "2020", "2021", "2022"]},
+                    "free_cashflow": {y: 1e8 for y in ["2018", "2019", "2020", "2021", "2022", "2023", "2024"]}},
+                   {"sector": "Technology"})
+ok(susp["applicable"] is False, "dividend: suspended-years-ago payout -> not applicable")
+
+# dividend_coverage: a comfortable dividend keeps its positive even with a buyback note.
+cb = divc.assess(dvstmt({y: -40 for y in DY}, {y: 100 for y in DY}, bb={y: -80 for y in DY}),
+                 {"sector": "Industrials"})
+ok(cb["level"] == "comfortable" and cb["positive"] and cb["reasons"],
+   "dividend: comfortable keeps its ✓ alongside a buyback note")
+
+# ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
     for f in FAILS:

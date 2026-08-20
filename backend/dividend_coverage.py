@@ -22,12 +22,14 @@ TIGHT = 1.3
 TOTAL_STRETCH = 1.15   # (divs + buybacks) / FCF above this = returning more than earned
 
 
-def _series(d: dict) -> dict:
-    return {str(y): abs(v) for y, v in (d or {}).items() if v is not None}
+def _series(d: dict) -> dict:  # magnitudes, numeric-year keys only
+    return {str(y): abs(v) for y, v in (d or {}).items()
+            if v is not None and str(y).isdigit()}
 
 
 def _fcf_series(d: dict) -> dict:
-    return {str(y): v for y, v in (d or {}).items() if v is not None}
+    return {str(y): v for y, v in (d or {}).items()
+            if v is not None and str(y).isdigit()}
 
 
 def assess(statements: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
@@ -60,6 +62,14 @@ def assess(statements: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
     if len(years) < 3:
         return {"applicable": False, "level": "none",
                 "reason": "Not enough overlapping dividend & cash-flow history."}
+    # Staleness: a suspended dividend leaves its last *paid* year as the most
+    # recent key (suspended years are None → dropped), which would otherwise be
+    # graded as a current payer. If the last payout lags the latest cash-flow
+    # year, treat it as a former payer.
+    latest_fcf_year = max(int(y) for y in fcf)
+    if int(years[-1]) < latest_fcf_year - 1:
+        return {"applicable": False, "level": "none",
+                "reason": "No recent dividend — appears to have suspended or ended its payout."}
 
     sum_div = sum(div[y] for y in years)
     sum_fcf = sum(fcf[y] for y in years)
@@ -106,7 +116,11 @@ def assess(statements: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
                        "total shareholder returns exceed what the business generates, "
                        "the balance funded externally.")
 
-    if level == "comfortable" and not reasons:
+    # Always vouch for a comfortable dividend, even when a buyback-stretch note is
+    # also present — the dividend itself is genuinely covered, so the green badge
+    # should carry its checkmark (the note reads as added context, not a mixed
+    # signal). The frontend shows the positive and any secondary note together.
+    if level == "comfortable":
         positive = (f"Dividend is well-covered — free cash flow is {cum_cov:.1f}× the payout "
                     f"over {len(years)} years"
                     + (f", earnings payout ~{earn_payout:.0%}" if earn_payout is not None else "")

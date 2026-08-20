@@ -141,7 +141,7 @@ async function loadGuide() {
         ${chip("Buy bar", "score ≥ " + s.buy_bar)}
         ${chip("Hold bar", "score ≥ " + s.hold_bar)}
         ${chip("Monte-Carlo runs", (vd.monte_carlo_runs || 0).toLocaleString())}
-        ${chip("Forensic max penalty", "−" + s.forensic_max_penalty + " pts")}
+        ${chip("Red-flag max penalty", "−" + s.forensic_max_penalty + " pts")}
         ${chip("Default discount rate", fmtPct(vd.discount_rate, 0))}
         ${chip("Terminal growth", fmtPct(vd.terminal_growth, 1))}
         ${chip("Projection years", vd.projection_years)}
@@ -660,9 +660,13 @@ function dividendCoverageSection(d, cur) {
       <div class="text-[9px] text-muted">${p.year.slice(2)}</div>
     </div>`).join("");
 
-  const bullets = (dc.reasons && dc.reasons.length)
-    ? `<ul class="mt-4 space-y-1 text-sm text-${col}">${dc.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
-    : (dc.positive ? `<p class="mt-4 text-sm text-good">✓ ${dc.positive}</p>` : "");
+  // A comfortable dividend keeps its ✓ even when a secondary buyback note is
+  // present — show the positive, then any notes.
+  const bullets =
+    (dc.positive ? `<p class="mt-4 text-sm text-good">✓ ${dc.positive}</p>` : "")
+    + ((dc.reasons && dc.reasons.length)
+        ? `<ul class="mt-${dc.positive ? "2" : "4"} space-y-1 text-sm text-${col}">${dc.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
+        : "");
 
   return h(`
   <section class="card rounded-2xl p-6">
@@ -1153,11 +1157,11 @@ function pillarsSection(d) {
       <h3 class="font-semibold">Why this score</h3>
       <div class="text-sm">Final <span class="font-bold text-${rc}">${final}/100</span> · <span class="text-${rc} font-medium">${v.rating}</span></div>
     </div>
-    <p class="text-xs text-muted mb-4">Six pillars, weighted by the <span class="text-slate-200">${v.strategy_label || "Balanced"}</span> strategy${weighted ? " (the weight column shows the tilt)" : ""}; forensic red flags (distress / manipulation) dock the score.</p>
+    <p class="text-xs text-muted mb-4">Six pillars, weighted by the <span class="text-slate-200">${v.strategy_label || "Balanced"}</span> strategy${weighted ? " (the weight column shows the tilt)" : ""}; red flags — distress, manipulation, a refinancing wall, deteriorating leverage or an uncovered dividend — dock the score.</p>
     ${band}
     <div class="grid grid-cols-3 gap-2 mb-5 text-center">
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${weighted ? "Weighted score" : "Pillar points"}</div><div class="text-lg font-bold">${Math.min(100, final + penalty)}<span class="text-muted text-sm">/100</span></div></div>
-      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Forensic penalty</div><div class="text-lg font-bold ${penalty > 0 ? "text-bad" : "text-muted"}">${penalty > 0 ? "−" + penalty : "0"}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Red-flag penalty</div><div class="text-lg font-bold ${penalty > 0 ? "text-bad" : "text-muted"}">${penalty > 0 ? "−" + penalty : "0"}</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5 border border-${rc}/40"><div class="text-[11px] text-muted">Final score</div><div class="text-lg font-bold text-${rc}">${final}</div></div>
     </div>
     ${rows}

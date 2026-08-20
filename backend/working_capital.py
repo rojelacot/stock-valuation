@@ -22,8 +22,9 @@ MIN_YEARS = 3
 MIN_INTENSITY = 0.02   # ignore trivially small AR/inventory (<2% of revenue)
 
 
-def _series(d: dict) -> dict:
-    return {str(y): v for y, v in (d or {}).items() if v is not None}
+def _series(d: dict) -> dict:  # numeric-year keys only (a "TTM" key would crash int())
+    return {str(y): v for y, v in (d or {}).items()
+            if v is not None and str(y).isdigit()}
 
 
 def _intensity(num: dict, den: dict) -> dict:

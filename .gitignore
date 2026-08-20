@@ -5,3 +5,6 @@ __pycache__/
 reports/
 logs/
 .DS_Store
+
+# local scheduled-run wrapper (has a hardcoded path; not portable)
+oneshot_fullscreen.sh

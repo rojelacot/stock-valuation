@@ -131,6 +131,16 @@ def assess(statements: dict[str, Any], info: dict[str, Any]) -> dict[str, Any]:
           or (near_pct is not None and near_pct > 0.30)):
         level = "moderate"
 
+    # A 'moderate' badge must carry an explanation — its triggers (coverage in
+    # [2,3)x, or 30-40% due near-term) don't match the stronger reason thresholds.
+    if level == "moderate" and not reasons:
+        if base_cover is not None and base_cover < 3:
+            reasons.append(f"Interest coverage is {base_cover:.1f}× — adequate, but limited "
+                           "room to absorb higher refinancing rates.")
+        elif near_pct is not None and near_pct > 0.30:
+            reasons.append(f"{near_pct*100:.0f}% of total debt comes due within "
+                           f"{NEAR_TERM_YEARS} years — a meaningful near-term load.")
+
     positive = None
     if level == "low" and not reasons:
         parts = []
