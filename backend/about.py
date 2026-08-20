@@ -153,8 +153,11 @@ GUARDRAILS = [
                "stress margins back to normal with the normalization slider."]},
     {"title": "Honest cash flow & risk",
      "items": ["Stock-based comp is subtracted from cash flow (no flattered FCF). "
-               "The discount rate is risk-adjusted per stock (CAPM: volatile / "
-               "small / levered / emerging-market names must clear a higher bar). "
+               "The discount rate is risk-adjusted per stock by *fundamental* risk — "
+               "leverage, thin interest coverage, erratic earnings, weak returns on "
+               "capital, small size, emerging-market domicile — NOT by beta, because "
+               "price volatility isn't business risk (a steady fortress compounder is "
+               "safer than a volatile-but-sound one). "
                "ADR reporting currencies are converted to the trading currency."]},
     {"title": "Solvency & payout downgrades",
      "items": ["Stressed leverage, a near-term refinancing wall it can't cover, a "

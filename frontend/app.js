@@ -413,7 +413,7 @@ function dcfSection(d, cur) {
         <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Discount rate</div><div>${fmtPct(a.discount_rate)}</div></div>
         <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Years</div><div>${a.years}</div></div>
       </div>
-      ${(d.metrics.risk_premium && Math.abs(d.metrics.risk_premium.premium) >= 0.001) ? `<p class="text-[11px] text-muted mt-2">Discount rate is risk-adjusted per stock (CAPM): base ${fmtPct((d.metrics.assumptions_used || {}).discount_rate, 0)} ${d.metrics.risk_premium.premium >= 0 ? "+" : "−"} ${fmtPct(Math.abs(d.metrics.risk_premium.premium), 1)} (${d.metrics.risk_premium.reasons.join(", ")}) = ${fmtPct(d.metrics.effective_discount_rate, 1)}.</p>` : ""}
+      ${(d.metrics.risk_premium && Math.abs(d.metrics.risk_premium.premium) >= 0.001) ? `<p class="text-[11px] text-muted mt-2">Discount rate is risk-adjusted per stock by fundamental risk (not beta): base ${fmtPct((d.metrics.assumptions_used || {}).discount_rate, 0)} ${d.metrics.risk_premium.premium >= 0 ? "+" : "−"} ${fmtPct(Math.abs(d.metrics.risk_premium.premium), 1)} (${d.metrics.risk_premium.reasons.join(", ")}) = ${fmtPct(d.metrics.effective_discount_rate, 1)}.</p>` : ""}
       ${(dcf.ok && dcf.terminal_pct != null) ? `<p class="text-[11px] ${dcf.terminal_pct >= 0.7 ? "text-warn" : "text-muted"} mt-1"><span class="font-medium">${fmtPct(dcf.terminal_pct, 0)}</span> of the estimate comes from the terminal value${dcf.terminal_pct >= 0.7 ? " — most of the value sits beyond the projection window, so it's highly sensitive to the terminal-growth and discount-rate assumptions." : " (the rest from the explicitly projected years)."}</p>` : ""}
     </details>
   </section>`);

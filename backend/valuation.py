@@ -123,37 +123,89 @@ DEVELOPED = {"United States", "Canada", "United Kingdom", "Germany", "France",
              "Singapore", "Hong Kong", "New Zealand", "Israel", "Italy", "Spain"}
 
 
-EQUITY_RISK_PREMIUM = 0.05  # long-run equity premium (for the CAPM beta term)
 
 
-def risk_premium(info: dict[str, Any]) -> dict[str, Any]:
-    """Signed adjustment to the discount rate for company-specific risk.
+def _earnings_stability(net_income: list, revenue: list) -> Optional[float]:
+    """0 (erratic / loss-ridden) .. 1 (rock-steady) from the net-MARGIN history.
 
-    The user's discount rate is the required return for an *average-risk* (beta=1)
-    business. From there we adjust smoothly per-stock via CAPM — (beta − 1) × the
-    equity risk premium — so a defensive low-beta name is discounted *less* (a
-    negative premium) and a volatile one more. On top of that we add premiums for
-    small size, high leverage, and emerging-market domicile that beta alone misses.
-    Net premium is bounded to [−3%, +5%]."""
+    Margin (scale-free) rather than raw earnings, so a healthy grower — whose
+    profits rise every year — reads as stable, while a business whose
+    profitability swings reads as risky. Loss years dock it."""
+    ni, rev = dict(net_income), dict(revenue)
+    margins = [ni[y] / rev[y] for y in rev if y in ni and rev[y]]
+    if len(margins) < 4:
+        return None
+    losses = sum(1 for m in margins if m < 0)
+    mean = sum(margins) / len(margins)
+    if mean <= 0:
+        return 0.1
+    import statistics
+    cv = statistics.pstdev(margins) / mean          # coefficient of variation
+    score = (1.0 - min(cv, 1.5) / 1.5) - 0.15 * losses
+    return max(0.0, min(1.0, score))
+
+
+def risk_premium(info: dict[str, Any], returns: Optional[dict] = None,
+                 balance: Optional[dict] = None,
+                 stability: Optional[float] = None) -> dict[str, Any]:
+    """Signed adjustment to the discount rate for company-specific *fundamental*
+    risk — the things that threaten a permanent loss of capital, which is what a
+    value investor actually means by risk.
+
+    Deliberately NOT beta. Price volatility ≠ business risk: a steady,
+    fortress-balance-sheet compounder is *lower* risk than a volatile-but-sound
+    one, and CAPM would say the opposite. Instead we adjust for balance-sheet
+    fragility (leverage, thin interest coverage, offset by net cash), earnings
+    instability, weak returns on capital, small size (durability), and
+    emerging-market domicile (governance / rule of law). Bounded to [−3%, +5%]."""
+    returns, balance = returns or {}, balance or {}
     prem, reasons = 0.0, []
-    # CAPM beta term (can be negative for defensive names).
-    beta = info.get("beta")
-    if beta is not None:
-        badj = min(max((beta - 1.0) * EQUITY_RISK_PREMIUM, -0.03), 0.05)
-        prem += badj
-        if abs(badj) >= 0.005:
-            reasons.append(f"beta {beta:.2f}" + (" (defensive)" if badj < 0 else " (volatile)"))
+
+    # --- Balance-sheet fragility (the #1 cause of permanent loss) ---
+    # Leverage first; the net-cash credit requires GENUINELY low leverage, so an
+    # understated debt tag (finance-arm debt at SO/F) can't spuriously earn a
+    # "fortress" credit for a heavily-levered company.
+    de = balance.get("debt_to_equity")
+    net_cash = balance.get("net_cash")
+    cov = balance.get("interest_coverage")
+    if de is not None and de > 2.0:
+        prem += 0.02; reasons.append(f"high leverage (D/E {de:.1f})")
+    elif de is not None and de > 1.0:
+        prem += 0.01; reasons.append(f"elevated leverage (D/E {de:.1f})")
+    elif (net_cash is not None and net_cash > 0 and (de is None or de < 0.5)
+          and (cov is None or cov > 8)):
+        # A genuine fortress: net cash, low D/E, AND barely reliant on debt.
+        # The coverage test blocks a spurious credit when a finance-arm debt tag
+        # understates leverage (SO, F) but interest expense reveals the truth.
+        prem -= 0.005; reasons.append("net cash (fortress balance sheet)")
+    if cov is not None and 0 < cov < 3:
+        prem += 0.015; reasons.append(f"thin interest coverage ({cov:.1f}×)")
+
+    # --- Earnings instability = business risk ---
+    if stability is not None:
+        if stability < 0.4:
+            prem += 0.015; reasons.append("erratic earnings")
+        elif stability > 0.85:
+            prem -= 0.005; reasons.append("very steady earnings")
+
+    # --- Returns on capital = quality/durability of the economics ---
+    roic = returns.get("roic_avg") or returns.get("roic_latest")
+    if roic is not None:
+        if roic < 0.06:
+            prem += 0.01; reasons.append("weak returns on capital")
+        elif roic > 0.20:
+            prem -= 0.005; reasons.append("high returns on capital")
+
+    # --- Size & jurisdiction (fundamental durability, not price) ---
     mc = info.get("market_cap") or 0
     if 0 < mc < 3e9:
         prem += 0.02; reasons.append("small cap")
     elif 0 < mc < 10e9:
         prem += 0.01; reasons.append("mid cap")
-    net_debt = (info.get("total_debt") or 0) - (info.get("total_cash") or 0)
-    if mc and net_debt > 0.5 * mc:
-        prem += 0.01; reasons.append("high leverage")
     country = info.get("country")
     if country and country not in DEVELOPED:
         prem += 0.02; reasons.append("emerging market")
+
     return {"premium": min(max(prem, -0.03), 0.05), "reasons": reasons}
 
 
@@ -315,8 +367,11 @@ def compute_metrics(stock: dict[str, Any],
     yrs = growth.get("years_of_data") or 0
     max_g = 0.12 if yrs >= 5 else 0.10
 
-    # Guardrail 4: risk-adjust the discount rate so riskier names clear a higher bar.
-    rp = risk_premium(info)
+    # Guardrail 4: risk-adjust the discount rate by *fundamental* risk (balance
+    # sheet, earnings stability, returns on capital) — not beta — so a fragile
+    # business clears a higher bar and a fortress compounder a lower one.
+    stability = _earnings_stability(net_income, revenue)
+    rp = risk_premium(info, returns=returns, balance=balance, stability=stability)
     # Risk-adjusted discount rate, floored at 6% (a defensive name still can't be
     # discounted below a sane minimum) and capped at 25%.
     eff_discount = min(max(A["discount_rate"] + rp["premium"], 0.06), 0.25)

@@ -461,6 +461,29 @@ ok(elev["level"] in ("elevated", "high") and elev["tangible_negative"],
 ok(intg.assess({}, {})["applicable"] is False, "empty -> not applicable")
 
 # ---------------------------------------------------------------------------
+# 7c) risk_premium — fundamental risk, NOT beta
+# ---------------------------------------------------------------------------
+print("discount-rate risk premium:")
+from valuation import risk_premium  # noqa: E402
+
+fortress = risk_premium(
+    {"market_cap": 1e12}, returns={"roic_avg": 0.25},
+    balance={"net_cash": 5e10, "debt_to_equity": 0.2, "interest_coverage": 50}, stability=0.95)
+fragile = risk_premium(
+    {"market_cap": 2e9}, returns={"roic_avg": 0.03},
+    balance={"net_cash": -1e9, "debt_to_equity": 3.0, "interest_coverage": 1.2}, stability=0.2)
+ok(fragile["premium"] > fortress["premium"], "fragile name discounted MORE than a fortress")
+ok(fortress["premium"] < 0, "a fortress compounder gets a negative (lower-bar) premium")
+ok(fragile["premium"] >= 0.04, "a fragile levered small-cap clears a much higher bar")
+
+# Beta must be ignored — a high-beta but fundamentally-sound name isn't penalised.
+steady = risk_premium(
+    {"market_cap": 5e11, "beta": 2.5}, returns={"roic_avg": 0.30},
+    balance={"net_cash": 3e10, "debt_to_equity": 0.3, "interest_coverage": 40}, stability=0.9)
+ok(steady["premium"] <= 0 and not any("beta" in r for r in steady["reasons"]),
+   "high beta but sound -> no penalty, beta never cited")
+
+# ---------------------------------------------------------------------------
 # 8) Regressions for the code-review findings
 # ---------------------------------------------------------------------------
 print("review-fix regressions:")
