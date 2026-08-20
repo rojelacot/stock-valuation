@@ -221,7 +221,7 @@ function renderAnalysis(d) {
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
     refinancingSection(d, cur), leverageTrendSection(d), workingCapitalSection(d),
-    ddSection(d, cur), divSafetySection(d, cur),
+    dividendCoverageSection(d, cur), ddSection(d, cur), divSafetySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
@@ -625,6 +625,62 @@ function refinancingSection(d, cur) {
       ${stat("Implied rate on debt", rf.implied_rate != null ? (rf.implied_rate * 100).toFixed(1) + "%" : "—", "interest ÷ total debt")}
     </div>
     ${ladderViz}
+    ${bullets}
+  </section>`);
+}
+
+function dividendCoverageSection(d, cur) {
+  const dc = d.metrics.dividend_coverage;
+  if (!dc) return h(`<div class="hidden"></div>`);
+  if (!dc.applicable) {
+    // Non-payers are common — render nothing rather than an empty card.
+    if (/doesn't pay/i.test(dc.reason || "")) return h(`<div class="hidden"></div>`);
+    return h(`<section class="card rounded-2xl p-6">
+      <h3 class="font-semibold mb-1">Dividend coverage</h3>
+      <p class="text-muted text-sm">${dc.reason}</p></section>`);
+  }
+  const col = { comfortable: "good", tight: "warn", uncovered: "bad" }[dc.level] || "muted";
+  const txt = { comfortable: "Well covered", tight: "Tight", uncovered: "Uncovered" }[dc.level] || dc.level;
+  const money = v => v == null ? "—" : (Math.abs(v) >= 1e9 ? cur + (v / 1e9).toFixed(1) + "B"
+    : Math.abs(v) >= 1e6 ? cur + (v / 1e6).toFixed(0) + "M" : cur + Math.round(v));
+  const covTxt = dc.fcf_negative ? "FCF negative" : (dc.cum_coverage != null ? dc.cum_coverage.toFixed(2) + "×" : "—");
+
+  const stat = (label, val, hint) => `<div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${label}</div><div class="text-lg font-bold">${val}</div>${hint ? `<div class="text-[10px] text-muted mt-0.5">${hint}</div>` : ""}</div>`;
+  const pct = v => v == null ? "—" : Math.round(v * 100) + "%";
+
+  // FCF vs dividend bars, per year (green if covered, red if not).
+  const ser = dc.series || [];
+  const maxV = Math.max(1, ...ser.map(p => Math.max(p.fcf, p.dividend)));
+  const bars = ser.map(p => `
+    <div class="flex-1 flex flex-col items-center justify-end h-full gap-0.5">
+      <div class="w-full flex items-end justify-center gap-0.5 h-full">
+        <div class="w-2.5 rounded-t" title="${p.year} FCF ${money(p.fcf)}" style="height:${Math.max(1, Math.round(Math.max(p.fcf, 0) / maxV * 70))}px;background:${p.covered ? "#22c55e" : "#4f9dff"}"></div>
+        <div class="w-2.5 rounded-t" title="${p.year} dividend ${money(p.dividend)}" style="height:${Math.max(1, Math.round(p.dividend / maxV * 70))}px;background:${p.covered ? "#4f9dff" : "#ef4444"}"></div>
+      </div>
+      <div class="text-[9px] text-muted">${p.year.slice(2)}</div>
+    </div>`).join("");
+
+  const bullets = (dc.reasons && dc.reasons.length)
+    ? `<ul class="mt-4 space-y-1 text-sm text-${col}">${dc.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
+    : (dc.positive ? `<p class="mt-4 text-sm text-good">✓ ${dc.positive}</p>` : "");
+
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Dividend coverage (from free cash flow)</h3>
+      <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${col}/15 text-${col}">${txt}</div>
+    </div>
+    <p class="text-xs text-muted mb-4">Is the dividend funded by the business or by debt / asset sales? Measured on cumulative free cash flow over ${dc.years_window || 5} years, so a one-off heavy-capex year doesn't masquerade as a chronic shortfall.</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+      ${stat("FCF ÷ dividends (5yr)", covTxt, `${dc.years_covered}/${dc.years_window} years covered`)}
+      ${stat("FCF payout ratio", dc.fcf_negative ? ">100%" : pct(dc.fcf_payout_pct), "dividends ÷ FCF")}
+      ${stat("Total payout (+ buybacks)", pct(dc.total_payout_pct), "vs free cash flow")}
+      ${stat("Earnings payout", pct(dc.earnings_payout_pct), "dividends ÷ net income")}
+    </div>
+    <div class="mt-4">
+      <div class="text-xs text-muted mb-1">Free cash flow vs dividends by year — <span class="text-good">green FCF</span> covers the <span class="text-brand">dividend</span>; <span class="text-bad">red</span> = uncovered</div>
+      <div class="flex items-end gap-2 h-24">${bars}</div>
+    </div>
     ${bullets}
   </section>`);
 }

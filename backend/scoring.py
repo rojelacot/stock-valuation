@@ -334,6 +334,19 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         elif lvl == "improving" and lt_.get("positive"):
             green.append(lt_["positive"])
 
+    # ---- Dividend coverage from free cash flow ----
+    # An uncovered dividend is a cut waiting to happen (or a growing reliance on
+    # external funding) — a capital-allocation quality signal for income names.
+    dc_ = metrics.get("dividend_coverage", {})
+    if dc_.get("applicable"):
+        if dc_.get("level") == "uncovered":
+            penalty += 4
+            first = (dc_.get("reasons") or [None])[0]
+            if first:
+                red.append("Dividend: " + first)
+        elif dc_.get("level") == "comfortable" and dc_.get("positive"):
+            green.append(dc_["positive"])
+
     penalty = min(penalty, 20)
     forensic_penalty = penalty
     normalized = max(0, normalized - penalty)

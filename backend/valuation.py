@@ -513,6 +513,10 @@ def compute_metrics(stock: dict[str, Any],
     import leverage_trend
     levtrend = leverage_trend.assess(st, info)
 
+    # ---- Dividend coverage from free cash flow ----
+    import dividend_coverage
+    divcov = dividend_coverage.assess(st, info)
+
     # ---- Sector-relative context (is this good *for this sector*?) ----
     import sector_benchmarks as _sb
     _sector = info.get("sector")
@@ -542,6 +546,7 @@ def compute_metrics(stock: dict[str, Any],
         "refinancing": refin,
         "working_capital": workcap,
         "leverage_trend": levtrend,
+        "dividend_coverage": divcov,
         "sector_relative": sector_relative,
         # Confidence gate: CAGRs, medians and the DCF need a few years to be
         # stable. Thin history (foreign filers on Yahoo, recent IPOs) is flagged

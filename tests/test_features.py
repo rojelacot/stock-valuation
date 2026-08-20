@@ -381,6 +381,58 @@ ok(levt.assess(lstmt(debt={y: 500 for y in Y}, ebitda={y: 100 for y in Y}),
                {"sector": "Financial Services"})["applicable"] is False, "financials -> N/A")
 
 # ---------------------------------------------------------------------------
+# 7) dividend_coverage.assess — dividend funded by FCF?
+# ---------------------------------------------------------------------------
+print("dividend coverage:")
+import dividend_coverage as divc  # noqa: E402
+
+
+def dvstmt(div, fcf, bb=None, ni=None):
+    M = 1_000_000  # values given in $M so they clear the non-payer floor
+    def sc(d): return {y: v * M for y, v in d.items()}
+    out = {"dividends_paid": sc(div), "free_cashflow": sc(fcf)}
+    if bb: out["buybacks"] = sc(bb)
+    if ni: out["net_income"] = sc(ni)
+    return out
+
+
+DY = ["2021", "2022", "2023", "2024", "2025"]
+# Non-payer -> N/A.
+ok(divc.assess(dvstmt({y: 0 for y in DY}, {y: 100 for y in DY}), {})["applicable"] is False,
+   "non-payer -> N/A")
+# REIT / financials -> N/A.
+ok(divc.assess(dvstmt({y: -50 for y in DY}, {y: 100 for y in DY}),
+               {"sector": "Real Estate"})["applicable"] is False, "REIT -> N/A")
+ok(divc.assess(dvstmt({y: -50 for y in DY}, {y: 100 for y in DY}),
+               {"sector": "Financial Services"})["applicable"] is False, "financials -> N/A")
+
+# Well covered: FCF ~2x dividends.
+covd = divc.assess(dvstmt({y: -50 for y in DY}, {y: 100 for y in DY},
+                          ni={y: 120 for y in DY}), {"sector": "Consumer Defensive"})
+ok(covd["level"] == "comfortable" and covd["positive"], "FCF 2x dividends -> comfortable")
+
+# Uncovered: dividends exceed FCF every year.
+unc = divc.assess(dvstmt({y: -120 for y in DY}, {y: 100 for y in DY}), {"sector": "Utilities"})
+ok(unc["level"] == "uncovered", "dividends > FCF -> uncovered")
+
+# Negative FCF (heavy capex) -> uncovered with a clear message, no negative %.
+neg = divc.assess(dvstmt({y: -30 for y in DY},
+                         {y: v for y, v in zip(DY, [-10, -20, -5, -15, -8])}), {"sector": "Utilities"})
+ok(neg["level"] == "uncovered" and neg["fcf_negative"] is True and neg["capex_heavy"] is True,
+   "negative FCF -> uncovered, fcf_negative flagged")
+
+# One-off dip: 4 good years + 1 bad still nets covered -> not 'uncovered'.
+dip = divc.assess(dvstmt({y: -50 for y in DY},
+                         {y: v for y, v in zip(DY, [100, 100, 10, 100, 100])}), {"sector": "Consumer Defensive"})
+ok(dip["level"] != "uncovered", "one-off FCF dip doesn't read as chronic (cumulative)")
+
+# Buyback stretch: dividend covered, but divs + buybacks exceed FCF -> noted.
+stretch = divc.assess(dvstmt({y: -40 for y in DY}, {y: 100 for y in DY},
+                             bb={y: -80 for y in DY}), {"sector": "Industrials"})
+ok(any("buyback" in r.lower() or "shareholder returns" in r.lower() for r in stretch["reasons"]),
+   "total payout > FCF is surfaced")
+
+# ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
     for f in FAILS:
