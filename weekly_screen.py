@@ -47,14 +47,19 @@ def usd(x):
     return "—" if x is None else f"${x:.2f}"
 
 
-def _analyze(sym, assumptions):
-    stock = fetch_stock(sym, use_edgar=False) # bulk scan: Yahoo only (fast)
+def _analyze(sym, assumptions, deep=False):
+    # Fast pass: Yahoo only (use_edgar=False) for a quick full-universe sweep.
+    # Deep pass: EDGAR (10-19yr as-filed) + SimFin, which also runs the
+    # SimFin-vs-Yahoo cross-check so unreliable foreign filers get flagged and
+    # downgraded — the same two-pass the app's screener uses.
+    stock = fetch_stock(sym, use_edgar=deep, use_simfin=deep)
     if stock.get("error"):
         return None, stock["error"]
     m = compute_metrics(stock, assumptions)
     v = score(m)
     val = m.get("valuation", {})
     return {
+        "deep_verified": deep,
         "ticker": sym,
         "name": stock["info"].get("name"),
         "sector": stock["info"].get("sector") or "Other / Unknown",
@@ -260,6 +265,31 @@ def main():
 
     print(f"Scanning {len(symbols)} names (buy bar ≥ {args.min_score})…\n")
     rows, errors = scan(symbols, assumptions, signature=signature)
+
+    # Second pass: deep-verify the near-and-above-the-bar names on EDGAR + SimFin
+    # so candidates rest on the same 10-19yr as-filed data the app's Analyze view
+    # uses (no more "screen says 89, deep-dive says 60"), and so the SimFin-vs-
+    # Yahoo cross-check downgrades unreliable foreign filers (e.g. DLocal, whose
+    # Yahoo-only fast score of 93/BUY collapses to 50/HOLD on cross-check).
+    verify_floor = max(45, args.min_score - 15)
+    to_verify = [r for r in rows if (r["score"] or 0) >= verify_floor][:80]
+    if to_verify:
+        print(f"\nDeep-verifying {len(to_verify)} near-the-bar names on EDGAR + SimFin…")
+        by_t = {r["ticker"]: r for r in rows}
+        for i, r in enumerate(to_verify, 1):
+            print(f" [{i}/{len(to_verify)}] {r['ticker']} …", end="", flush=True)
+            try:
+                deep, err = _analyze(r["ticker"], assumptions, deep=True)
+                if deep:
+                    by_t[r["ticker"]] = deep
+                    print(f" {deep['score']} {deep['rating']}")
+                else:
+                    print(f" kept fast ({err})")
+            except Exception as e:  # noqa: BLE001
+                print(f" error ({e})")
+            time.sleep(0.2)
+        rows = sorted(by_t.values(), key=lambda r: -(r["score"] or 0))
+
     # Candidates must clear the score bar AND be rated BUY (a high score a
     # guardrail downgraded — overvalued / suspect / distressed — is not a buy).
     candidates = [r for r in rows
