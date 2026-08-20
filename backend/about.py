@@ -70,6 +70,22 @@ CAPABILITIES = [
          "reportable segment and by product, parsed from the 10-K's XBRL, so you "
          "can see where the money and the profit actually come from.",
      ]},
+    {"title": "Solvency, debt & payout red-flag checks",
+     "items": [
+         "Refinancing risk — reads the debt maturity ladder and asks whether cash + "
+         "free cash flow covers the near-term wall, and whether rolling it at +300bps "
+         "would break interest coverage.",
+         "Leverage trend — whether Net Debt/EBITDA is climbing and coverage "
+         "compressing toward the levels where lenders set covenants (the trajectory a "
+         "snapshot misses).",
+         "Working-capital quality — receivables or inventory growing faster than "
+         "sales, an early tell of stuffed channels or unsold product.",
+         "Dividend coverage — is the dividend funded by free cash flow over ~5 years, "
+         "or by debt and asset sales (a cut waiting to happen)?",
+         "Data cross-check — when two independent providers disagree materially on a "
+         "foreign filer's numbers, the valuation is flagged untrustworthy and the "
+         "name downgraded, rather than shown as a bargain.",
+     ]},
     {"title": "AI second opinion (optional)",
      "items": [
          "Claude reads the business and writes up the moat, management, risks and "
@@ -78,8 +94,14 @@ CAPABILITIES = [
     {"title": "Beyond one stock",
      "items": [
          "Compare several stocks side by side.",
-         "Weekly buy screen scans a large US universe and surfaces only names "
-         "clearing your bar, grouped by sector, with week-over-week changes.",
+         "Weekly buy screen scans the whole investable US market (~2,000 names) in "
+         "two passes — a fast scan, then a deep EDGAR + SimFin re-verify of the "
+         "leaders, so a candidate's score matches its single-stock deep-dive — and "
+         "surfaces only names clearing your bar, grouped by sector, with "
+         "week-over-week changes. It can run on its own overnight.",
+         "Track record tab: each week's shortlist stacked against the last, so the "
+         "names that keep earning their place — the highest-conviction ideas — rise "
+         "to the top.",
          "Watchlist + portfolio view: track names, get alerted when one hits your "
          "buy-below price, and see holdings' value, sector mix and weighted quality.",
          "Trend charts (price, revenue, cash flow, EPS, margins, returns) and "
@@ -131,10 +153,22 @@ GUARDRAILS = [
                "The discount rate is risk-adjusted per stock (CAPM: volatile / "
                "small / levered / emerging-market names must clear a higher bar). "
                "ADR reporting currencies are converted to the trading currency."]},
+    {"title": "Solvency & payout downgrades",
+     "items": ["Stressed leverage, a near-term refinancing wall it can't cover, a "
+               "materially deteriorating debt trend, or a dividend that free cash "
+               "flow doesn't fund each dock the score and can knock a name out of "
+               "Buy — a cheap price doesn't offset a balance sheet that may not "
+               "survive the hold."]},
+    {"title": "A Buy must actually be a Buy",
+     "items": ["Screen candidates must be rated Buy, not merely score above the bar. "
+               "A high score that a guardrail downgraded — overvalued, distressed, "
+               "flagged by the data cross-check — is not surfaced as a candidate."]},
     {"title": "Know when to distrust the score",
      "items": ["Thin history (<6 years) is flagged as low-confidence. The reverse-"
                "DCF shows the growth the current price already assumes. Sector "
-               "context shows whether a metric is actually good for its sector."]},
+               "context shows whether a metric is actually good for its sector. And "
+               "when two data sources disagree on a foreign filer, the fair value "
+               "is marked unreliable rather than trusted."]},
 ]
 
 LIMITATIONS = [
@@ -154,11 +188,16 @@ LIMITATIONS = [
          "Forensic scores don't apply to banks, insurers or REITs (different "
          "financials) — the app skips them there.",
      ]},
-    {"title": "The track-record test is directional, not proof",
+    {"title": "The score is a filter, not a proven signal",
      "items": [
-         "The backtest uses restated (not point-in-time) data and ignores dividends. "
-         "It's real evidence the scoring works, but a rough check — not a guarantee "
-         "of future results.",
+         "A point-in-time backtest (score the past on data knowable then, measure "
+         "the actual forward return) found the composite 0-100 score has NO clear "
+         "ability to predict returns — no free single-number score realistically "
+         "would, and the test is survivorship-biased and dividend-blind on top.",
+         "So treat the score as a filter and a checklist, never a buy signal. Trust "
+         "the specific red flags — forensics, refinancing, leverage trend, "
+         "working-capital, dividend coverage, the data cross-check — each of which "
+         "rests on something you can check, far more than the overall grade.",
      ]},
     {"title": "Other",
      "items": [
