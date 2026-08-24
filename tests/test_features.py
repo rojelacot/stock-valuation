@@ -734,8 +734,10 @@ ok(_ep.justified_pe(0.30, 0.09, 0.04) > _ep.justified_pe(0.12, 0.09, 0.04),
    "earnings-power: higher ROE -> higher justified P/E")
 ok(_ep.justified_pe(0.25, 0.12, 0.03) < _ep.justified_pe(0.25, 0.08, 0.03),
    "earnings-power: higher required return -> lower justified P/E")
-ok(8.0 <= _ep.justified_pe(0.60, 0.08, 0.05) <= 20.0,
+ok(8.0 <= _ep.justified_pe(0.60, 0.08, 0.07) <= 25.0,
    "earnings-power: justified P/E clamped to a sane band (never a bubble multiple)")
+ok(_ep.justified_pe(0.30, 0.10, 0.07) > _ep.justified_pe(0.30, 0.10, 0.03),
+   "earnings-power: a faster grower earns a higher justified multiple")
 _epv = _ep.value(5.0, 0.25, 0.09, 0.04, 100.0, 0.20)
 ok(_epv["ok"] and _epv["method"] == "earnings-power" and _epv["mid"] > 0,
    "earnings-power: value() returns a positive earnings-power valuation")

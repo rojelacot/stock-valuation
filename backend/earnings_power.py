@@ -33,12 +33,19 @@ import random
 from typing import Any, Optional
 
 PE_FLOOR = 8.0     # even a wonderful business is worth at least ~8x earnings
-PE_CAP = 20.0      # never justify a bubble multiple, however high the ROE
+PE_CAP = 25.0      # never justify a bubble multiple, however high the ROE/growth
+G_CAP = 0.075      # durable-growth ceiling; a decade-plus of >7.5% is rare
 MIN_SPREAD = 0.02  # floor on (r - g) to avoid the Gordon blow-up
 
 
 def justified_pe(roe: Optional[float], r: float, g: float) -> Optional[float]:
-    """Fair P/E from through-cycle ROE, required return r, growth g."""
+    """Fair P/E from through-cycle ROE, required return r, growth g.
+
+    The Gordon form scales the multiple with growth on its own — a faster grower
+    earns a higher fair multiple — so growth is allowed up to G_CAP (not pinned at
+    a low mature rate), letting a genuine compounder justify more than a no-growth
+    staple. PE_CAP is the anti-bubble backstop; MIN_SPREAD stops the blow-up as g
+    approaches r."""
     if roe is None or roe <= 0 or r is None:
         return None
     spread = max(r - g, MIN_SPREAD)
@@ -52,8 +59,8 @@ def _upside(iv: Optional[float], price: Optional[float]) -> Optional[float]:
 
 
 def _norm(g: Optional[float]) -> float:
-    """Conservative, capped growth for the justified multiple."""
-    return min(max(g if g is not None else 0.03, 0.0), 0.05)
+    """Growth for the justified multiple: capped at the durable ceiling."""
+    return min(max(g if g is not None else 0.03, 0.0), G_CAP)
 
 
 def value(earnings_ps: Optional[float], roe: Optional[float], r: float,
@@ -125,7 +132,7 @@ def scenarios(earnings_ps: float, roe: Optional[float], r: float, g: Optional[fl
 
     def run(roe_mult, g_delta, r_delta):
         pe = justified_pe(roe * roe_mult, min(max(r + r_delta, 0.05), 0.20),
-                          min(max(g + g_delta, 0.0), 0.05))
+                          min(max(g + g_delta, 0.0), G_CAP))
         iv = (pe * earnings_ps) if pe is not None else None
         wiped = iv is not None and iv < 0
         if wiped:
@@ -144,7 +151,7 @@ def sensitivity(earnings_ps: float, roe: Optional[float], r: float, g: Optional[
     if roe is None or not earnings_ps or not price:
         return {"ok": False}
     dr_axis = [min(max(round(r + d, 4), 0.05), 0.20) for d in (-0.02, -0.01, 0, 0.01, 0.02)]
-    g_axis = [round(max(min(g + d, 0.05), 0.0), 4) for d in (-0.02, -0.01, 0, 0.01, 0.02)]
+    g_axis = [round(max(min(g + d, G_CAP), 0.0), 4) for d in (-0.02, -0.01, 0, 0.01, 0.02)]
     cells = []
     for dr in dr_axis:
         row = []
@@ -173,7 +180,7 @@ def monte_carlo(earnings_ps: float, roe: Optional[float], r: float, g: Optional[
     for _ in range(iterations):
         roe_s = max(rng.gauss(roe, abs(roe) * 0.20 + 0.01), 0.01)
         r_s = min(max(rng.gauss(r, 0.015), 0.05), 0.20)
-        g_s = min(max(rng.gauss(g, 0.005), 0.0), 0.05)
+        g_s = min(max(rng.gauss(g, 0.005), 0.0), G_CAP)
         pe = justified_pe(roe_s, r_s, g_s)
         if pe is not None and pe > 0:
             ivs.append(pe * earnings_ps)
