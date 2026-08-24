@@ -359,6 +359,8 @@ function dcfSection(d, cur) {
     ? "Valued on <span class='text-slate-300'>funds from operations (FFO)</span> — the REIT standard. GAAP earnings are crushed by real-estate depreciation and book value understates the property, so FFO (net income + real-estate D&amp;A) is discounted as an equity-level stream. The debt isn't subtracted again — FFO is already after interest."
     : val.method === "book-value"
     ? "Valued on the <span class='text-slate-300'>justified price-to-book</span> model — the tool bank &amp; insurance analysts actually use: fair P/B = (ROE − g) / (r − g), applied to book value per share. A financial is worth a premium to book only insofar as its return on equity beats the return you require. Uses through-cycle (7-yr median) ROE so a cyclical peak doesn't inflate it."
+    : val.method === "earnings-power"
+    ? "Valued on the <span class='text-slate-300'>justified P/E</span> earnings-power model — a strict cash-flow DCF misprices a mature wide-moat compounder on the low side (a depressed trailing growth rate compounded through a full discount and a Gordon terminal). Fair P/E = (1 − g/ROE) / (r − g), on normalized earnings, using through-cycle ROE and a capped growth rate. Used only where the DCF is clearly an artifact; the multiple is clamped so it never justifies a bubble."
     : val.method === "earnings"
     ? "Valued on <span class='text-slate-300'>earnings power</span> — a free-cash-flow DCF doesn't fit banks / insurers / REITs."
     : "Two DCFs: <span class='text-slate-300'>conservative</span> discounts free cash flow (penalizes all capex); <span class='text-slate-300'>adjusted</span> discounts owner earnings (credits growth capex). The truth sits between.";
@@ -366,7 +368,7 @@ function dcfSection(d, cur) {
   const mnBanner = mn.applied ? `<div class="text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 my-2 leading-relaxed"><strong>Stress test active:</strong> earnings normalized to a ${fmtPct(mn.target_margin, 1)} net margin (${Math.round(mn.factor * 100)}% of the way from the current ${fmtPct(mn.latest_margin, 1)} toward the ${fmtPct(mn.avg_margin, 1)} long-run average). The earnings base is scaled ${mn.ratio.toFixed(2)}×, so this valuation and the score below reflect that assumption — not as-reported earnings.</div>` : "";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "ffo" ? "(funds from operations)" : val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
+    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "ffo" ? "(funds from operations)" : val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings-power" ? "(justified P/E)" : val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
     ${mnBanner}
     ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed"><strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
     <p class="text-xs text-muted mb-4">${methodNote}</p>
@@ -380,7 +382,19 @@ function dcfSection(d, cur) {
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Current P/FFO</div><div class="text-sm font-semibold">${fmtNum(val.current_pffo, 1)}×</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Fair P/FFO (implied)</div><div class="text-sm font-semibold text-brand">${fmtNum(val.fair_pffo, 1)}×</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">FFO growth used</div><div class="text-sm font-semibold">${fmtPct(val.ffo_growth, 1)}</div></div>
-    </div>` : val.method === "book-value" ? `
+    </div>` : val.method === "earnings-power" ? `
+    <div class="grid md:grid-cols-3 gap-3 mb-4">
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (justified P/E)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Normalized EPS</div><div class="text-2xl font-bold text-slate-300">${price(val.eps_used, cur)}</div></div>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Current P/E</div><div class="text-sm font-semibold">${fmtNum(val.current_pe, 1)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Justified P/E</div><div class="text-sm font-semibold text-brand">${fmtNum(val.justified_pe, 1)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Through-cycle ROE</div><div class="text-sm font-semibold">${fmtPct(val.roe_used, 1)}</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Required return</div><div class="text-sm font-semibold">${fmtPct(val.cost_of_equity, 1)}</div></div>
+    </div>
+    <p class="text-[11px] text-muted mb-4 leading-relaxed">A strict DCF put fair value implausibly low here — an artifact of extrapolating depressed trailing growth. This values the business on a justified P/E instead: at today's <span class="text-slate-200">${fmtNum(val.current_pe, 1)}×</span> earnings versus a justified <span class="text-slate-200">${fmtNum(val.justified_pe, 1)}×</span>, ${up != null && up < 0 ? "the quality is real but the price isn't cheap." : "it screens as reasonably priced for the quality."}</p>` : val.method === "book-value" ? `
     <div class="grid md:grid-cols-3 gap-3 mb-4">
       <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (justified P/B)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
       <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
@@ -1318,6 +1332,7 @@ function summarySection(d) {
 
   const methodWord = val.method === "ffo" ? "on funds from operations (FFO)"
     : val.method === "book-value" ? "on book value &amp; through-cycle ROE"
+    : val.method === "earnings-power" ? "on a justified P/E (earnings power)"
     : val.method === "earnings" ? "on earnings power" : "on discounted cash flow";
   const up = val.upside_mid;
   let valSentence;

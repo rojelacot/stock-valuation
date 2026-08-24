@@ -578,6 +578,47 @@ def compute_metrics(stock: dict[str, Any],
         valuation["suspect_reason"] = "Data quality: " + data_bad_reason
         valuation["data_quality_bad"] = True
 
+    # ---- Earnings-power floor for mature, wide-moat compounders ----
+    # A strict DCF misprices these on the LOW side (a depressed trailing growth
+    # rate x a full equity discount x a Gordon terminal -> an artifact fair value
+    # at 3-10x earnings). When the business is genuinely high-return and stable AND
+    # the DCF sits well below its justified-P/E earnings-power value, the DCF is the
+    # artifact, not a real bear case — value it on earnings power instead. Operating
+    # companies only; financials/REITs keep their own models.
+    earnings_power_val = None
+    if (not fin_valuation and not reit_valuation
+            and valuation.get("ok") and not valuation.get("suspect")):
+        import earnings_power
+        # The multiple keys off through-cycle ROE, but eligibility is gated on ROIC
+        # too, so a merely leverage-inflated ROE doesn't earn the premium multiple.
+        _epv_roe = returns.get("roe_avg")
+        _epv_roic = returns.get("roic_avg")
+        _epv_shares = (info.get("shares_outstanding")
+                       or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
+        # P/E model -> value NET INCOME per share (comparable to the market's P/E),
+        # not owner earnings (which understates a low-capex staple). Use latest-year
+        # net income so the model's current P/E reconciles with the trailing P/E
+        # shown elsewhere; the strict stability gate keeps this from valuing a fluke.
+        _epv_ni = net_income[-1][1] if net_income else None
+        _epv_eps = (_epv_ni / _epv_shares) if (_epv_ni and _epv_shares and _epv_ni > 0) else None
+        # A proven high-ROE, stable, mature compounder is a low-business-risk,
+        # bond-like stream; its required return belongs in ~7-10%, so don't let a
+        # leverage-driven discount (which crushes the justified multiple) exceed 10%.
+        _epv_disc = min(max(eff_discount, 0.07), 0.10)
+        _epv_mature = (growth.get("years_of_data") or 0) >= 7
+        _epv_stable = stability is not None and stability >= 0.5
+        if (_epv_eps and _epv_eps > 0 and _epv_stable and _epv_mature
+                and _epv_roe and _epv_roe >= 0.15
+                and _epv_roic and _epv_roic >= 0.10):
+            _epv = earnings_power.value(_epv_eps, _epv_roe, _epv_disc, oe_growth,
+                                        price, A["margin_of_safety"])
+            # Floor: step in only when the DCF is materially BELOW the earnings-power
+            # value (>20%) — that gap is the artifact. A DCF near or above it stands.
+            if (_epv.get("ok") and valuation.get("mid")
+                    and valuation["mid"] < _epv["mid"] * 0.80):
+                earnings_power_val = _epv
+                valuation = _epv
+
     # ---- Multiples vs the stock's own recent history ----
     multiples = compute_multiples(stock, eps, fcf)
     # Trailing-PEG proxy = trailing P/E ÷ historical EPS growth (%). A backward-
@@ -648,6 +689,18 @@ def compute_metrics(stock: dict[str, Any],
         sensitivity = {"ok": False}  # the DCF discount×growth grid doesn't apply
         reverse = {"ok": True, "method": "book-value",
                    "implied_roe": fin_valuation.get("implied_roe")}
+
+    # Earnings-power names: run scenarios / Monte-Carlo / sensitivity / reverse on
+    # the justified-P/E model so the whole panel matches the headline valuation
+    # (otherwise it would show the artifact-low DCF numbers under an EPV headline).
+    if earnings_power_val:
+        import earnings_power
+        _e, _re = earnings_power_val["eps_used"], earnings_power_val["roe_used"]
+        _rd = earnings_power_val["cost_of_equity"]   # the capped EPV discount rate
+        scenarios = earnings_power.scenarios(_e, _re, _rd, oe_growth, price)
+        monte_carlo = earnings_power.monte_carlo(_e, _re, _rd, oe_growth, price)
+        sensitivity = earnings_power.sensitivity(_e, _re, _rd, oe_growth, price)
+        reverse = earnings_power.reverse(_e, _re, _rd, oe_growth, price)
 
     # ---- Forensic scores: Altman Z (distress) + Beneish M (manipulation) ----
     import forensics  # lazy: forensics imports this module (needs_earnings_valuation)

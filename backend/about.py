@@ -36,6 +36,11 @@ CAPABILITIES = [
          "REITs are valued on FFO (funds from operations = net income + real-estate "
          "depreciation) and P/FFO — not GAAP earnings or book value, both of which "
          "mislead for property companies.",
+         "Mature wide-moat compounders (where a strict DCF extrapolates a depressed "
+         "trailing growth rate into an artifact-low value) fall back to a justified "
+         "P/E earnings-power model — fair P/E = (1 - g/ROE) / (r - g), on normalized "
+         "earnings — used only when the DCF is clearly the artifact, with the "
+         "multiple clamped so it never justifies a bubble.",
      ]},
     {"title": "Scores the business 0-100 -> Buy / Hold / Avoid",
      "items": [
@@ -157,8 +162,10 @@ GUARDRAILS = [
     {"title": "The right model for each business",
      "items": ["Operating companies: free-cash-flow / owner-earnings DCF. Banks, "
                "insurers, brokers: justified price-to-book on through-cycle ROE. "
-               "REITs: FFO (funds from operations). A one-size DCF misprices the "
-               "last two badly, so it's never used on them."]},
+               "REITs: FFO (funds from operations). Mature wide-moat compounders "
+               "whose DCF comes out artifact-low: a justified-P/E earnings-power "
+               "model. A one-size DCF misprices these badly, so the fitting model "
+               "is used instead."]},
     {"title": "Forensic gate (avoid blow-ups & frauds)",
      "items": ["Altman Z-score (bankruptcy risk) and Beneish M-score (earnings-"
                "manipulation profile) dock the score and block a Buy, however "

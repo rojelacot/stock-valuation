@@ -728,6 +728,25 @@ _dcf_nc = (_stock["info"]["total_cash"] or 0) - (_stock["info"]["total_debt"] or
 ok(abs(_bal["net_cash"] - _dcf_nc) < 1.0, "net-cash: card figure matches the DCF's net-cash basis")
 ok(_stock["info"]["total_debt"] == 777e6, "net-cash: info is written back so downstream consumers agree")
 
+# earnings-power model: justified P/E behaves and is clamped; value() shape.
+import earnings_power as _ep
+ok(_ep.justified_pe(0.30, 0.09, 0.04) > _ep.justified_pe(0.12, 0.09, 0.04),
+   "earnings-power: higher ROE -> higher justified P/E")
+ok(_ep.justified_pe(0.25, 0.12, 0.03) < _ep.justified_pe(0.25, 0.08, 0.03),
+   "earnings-power: higher required return -> lower justified P/E")
+ok(8.0 <= _ep.justified_pe(0.60, 0.08, 0.05) <= 20.0,
+   "earnings-power: justified P/E clamped to a sane band (never a bubble multiple)")
+_epv = _ep.value(5.0, 0.25, 0.09, 0.04, 100.0, 0.20)
+ok(_epv["ok"] and _epv["method"] == "earnings-power" and _epv["mid"] > 0,
+   "earnings-power: value() returns a positive earnings-power valuation")
+ok(abs(_epv["buy_below"] - _epv["mid"] * 0.80) < 1e-9,
+   "earnings-power: buy-below applies the margin of safety")
+_rev = _ep.reverse(5.0, 0.25, 0.09, 0.04, 100.0)
+ok(_rev["ok"] and 0.0 <= _rev["implied_growth"] <= 0.09,
+   "earnings-power: reverse solves an implied growth within range")
+_epv_neg = _ep.value(0.0, 0.25, 0.09, 0.04, 100.0, 0.20)
+ok(not _epv_neg["ok"], "earnings-power: no valuation without positive earnings")
+
 # ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
