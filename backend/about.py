@@ -39,8 +39,10 @@ CAPABILITIES = [
          "Mature wide-moat compounders (where a strict DCF extrapolates a depressed "
          "trailing growth rate into an artifact-low value) fall back to a justified "
          "P/E earnings-power model — fair P/E = (1 - g/ROE) / (r - g), on normalized "
-         "earnings — used only when the DCF is clearly the artifact, with the "
-         "multiple clamped so it never justifies a bubble.",
+         "earnings, with ROE capped at 2x ROIC so leverage can't inflate the "
+         "multiple — used only when the DCF is clearly the artifact, and clamped so "
+         "it never justifies a bubble. Capital-intensive wide-moats (e.g. Waste "
+         "Management) are covered this way instead of left showing a DCF artifact.",
      ]},
     {"title": "Scores the business 0-100 -> Buy / Hold / Avoid",
      "items": [

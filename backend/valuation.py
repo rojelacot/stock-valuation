@@ -589,10 +589,16 @@ def compute_metrics(stock: dict[str, Any],
     if (not fin_valuation and not reit_valuation
             and valuation.get("ok") and not valuation.get("suspect")):
         import earnings_power
-        # The multiple keys off through-cycle ROE, but eligibility is gated on ROIC
-        # too, so a merely leverage-inflated ROE doesn't earn the premium multiple.
+        # The multiple keys off through-cycle return on equity, but capped at 2x ROIC
+        # so a leverage- or goodwill-inflated ROE can't buy a premium multiple: the
+        # capped return credits genuine economics while pulling a heavily-levered name
+        # back toward its true return on capital. This lets capital-intensive wide-
+        # moats (e.g. Waste Management: 22% ROE, 8% ROIC) be valued conservatively
+        # rather than left showing a -95% DCF artifact.
         _epv_roe = returns.get("roe_avg")
         _epv_roic = returns.get("roic_avg")
+        _epv_return = (min(_epv_roe, 2 * _epv_roic)
+                       if (_epv_roe is not None and _epv_roic is not None) else None)
         _epv_shares = (info.get("shares_outstanding")
                        or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
         # P/E model -> value NORMALIZED net income per share (comparable to the
@@ -608,10 +614,12 @@ def compute_metrics(stock: dict[str, Any],
         _epv_disc = min(max(eff_discount, 0.07), 0.10)
         _epv_mature = (growth.get("years_of_data") or 0) >= 7
         _epv_stable = stability is not None and stability >= 0.5
+        # Eligible when the business earns a real return on capital (ROIC >= 7%) and
+        # a decent leverage-capped return (>= 12%), and is stable and mature.
         if (_epv_eps and _epv_eps > 0 and _epv_stable and _epv_mature
-                and _epv_roe and _epv_roe >= 0.15
-                and _epv_roic and _epv_roic >= 0.10):
-            _epv = earnings_power.value(_epv_eps, _epv_roe, _epv_disc, oe_growth,
+                and _epv_roic and _epv_roic >= 0.07
+                and _epv_return and _epv_return >= 0.12):
+            _epv = earnings_power.value(_epv_eps, _epv_return, _epv_disc, oe_growth,
                                         price, A["margin_of_safety"])
             # Floor: step in only when the DCF is materially BELOW the earnings-power
             # value (>20%) — that gap is the artifact. A DCF near or above it stands.
@@ -716,7 +724,7 @@ def compute_metrics(stock: dict[str, Any],
     # (otherwise it would show the artifact-low DCF numbers under an EPV headline).
     if earnings_power_val:
         import earnings_power
-        _e, _re = earnings_power_val["eps_used"], earnings_power_val["roe_used"]
+        _e, _re = earnings_power_val["eps_used"], earnings_power_val["return_used"]
         _rd = earnings_power_val["cost_of_equity"]   # the capped EPV discount rate
         scenarios = earnings_power.scenarios(_e, _re, _rd, oe_growth, price)
         monte_carlo = earnings_power.monte_carlo(_e, _re, _rd, oe_growth, price)

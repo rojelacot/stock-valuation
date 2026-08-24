@@ -18,10 +18,12 @@ The (1 - g/ROE) term is the payout-equivalent: the share of earnings NOT retaine
 to fund growth. Growth is funded by retained EQUITY earning ROE, so a high-ROE
 business needs to retain little to grow and pays a higher multiple — this is the
 same residual-income logic behind the financials' justified-P/B, expressed on
-earnings. We use THROUGH-CYCLE average ROE and a conservative, capped growth
-rate, and clamp the multiple to a sane band — the point is to replace an artifact
-with a credible number, never to justify a bubble multiple. (Eligibility is gated
-on ROIC too, so a merely leverage-inflated ROE doesn't earn the premium.)
+earnings. We use THROUGH-CYCLE average ROE — CAPPED AT 2x ROIC so a leverage- or
+goodwill-inflated ROE can't buy a premium multiple (a capital-intensive wide-moat
+is credited for its genuine returns but pulled back toward its true return on
+capital) — and a conservative, capped growth rate, and clamp the multiple to a
+sane band. The point is to replace an artifact with a credible number, never to
+justify a bubble multiple.
 
 Used as a FLOOR: this only replaces the DCF when the DCF is producing an
 implausibly low value for a genuinely high-quality, stable business. Ordinary
@@ -92,7 +94,7 @@ def value(earnings_ps: Optional[float], roe: Optional[float], r: float,
         "suspect": suspect, "suspect_reason": reason,
         # earnings-power detail block (for the UI):
         "justified_pe": pe, "current_pe": current_pe, "eps_used": earnings_ps,
-        "roe_used": roe, "cost_of_equity": r, "growth": g,
+        "return_used": roe, "cost_of_equity": r, "growth": g,
     }
 
 
