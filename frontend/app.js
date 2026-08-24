@@ -389,7 +389,7 @@ function dcfSection(d, cur) {
       <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Normalized EPS</div><div class="text-2xl font-bold text-slate-300">${price(val.eps_used, cur)}</div></div>
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
-      <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Current P/E</div><div class="text-sm font-semibold">${fmtNum(val.current_pe, 1)}×</div></div>
+      <div class="bg-ink/40 rounded-lg p-2.5" title="Price ÷ normalized (3-yr avg) EPS — so it may differ from the as-reported trailing P/E above"><div class="text-[11px] text-muted">P/E on norm. EPS</div><div class="text-sm font-semibold">${fmtNum(val.current_pe, 1)}×</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Justified P/E</div><div class="text-sm font-semibold text-brand">${fmtNum(val.justified_pe, 1)}×</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Through-cycle ROE</div><div class="text-sm font-semibold">${fmtPct(val.roe_used, 1)}</div></div>
       <div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">Required return</div><div class="text-sm font-semibold">${fmtPct(val.cost_of_equity, 1)}</div></div>

@@ -595,11 +595,12 @@ def compute_metrics(stock: dict[str, Any],
         _epv_roic = returns.get("roic_avg")
         _epv_shares = (info.get("shares_outstanding")
                        or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
-        # P/E model -> value NET INCOME per share (comparable to the market's P/E),
-        # not owner earnings (which understates a low-capex staple). Use latest-year
-        # net income so the model's current P/E reconciles with the trailing P/E
-        # shown elsewhere; the strict stability gate keeps this from valuing a fluke.
-        _epv_ni = net_income[-1][1] if net_income else None
+        # P/E model -> value NORMALIZED net income per share (comparable to the
+        # market's P/E), not owner earnings (which understates a low-capex staple).
+        # Normalized (3-yr average, margin-adjusted) rather than latest, so a name
+        # in a cyclical earnings trough (e.g. TXN, SBUX) isn't valued on a depressed
+        # year — that would understate the floor exactly when it's needed most.
+        _epv_ni = base_ni * margin_ratio if (base_ni and margin_ratio) else base_ni
         _epv_eps = (_epv_ni / _epv_shares) if (_epv_ni and _epv_shares and _epv_ni > 0) else None
         # A proven high-ROE, stable, mature compounder is a low-business-risk,
         # bond-like stream; its required return belongs in ~7-10%, so don't let a
