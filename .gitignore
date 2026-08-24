@@ -2,7 +2,9 @@
 .env
 __pycache__/
 *.pyc
-reports/
+reports/*
+# …but keep the weekly-winners track record versioned (backed up, survives a re-clone).
+!reports/screen_history.json
 logs/
 .DS_Store
 
