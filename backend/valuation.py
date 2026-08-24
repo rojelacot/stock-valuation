@@ -620,6 +620,26 @@ def compute_metrics(stock: dict[str, Any],
                 earnings_power_val = _epv
                 valuation = _epv
 
+        # Low-multiple artifact guard (the strict-gate complement): a name the
+        # earnings-power floor doesn't cover — e.g. a capital-intensive wide-moat
+        # below the ROIC gate (WM) — can still get an artifact-low DCF. A profitable,
+        # stable, mature business almost never has a real fair value below ~7x
+        # normalized earnings, so when the DCF says that, flag it low-confidence
+        # rather than present it as a real bear case. This does NOT hand out a
+        # premium multiple; it just stops a -95% artifact being trusted (and gives
+        # a neutral valuation score instead of a false 'priced for perfection').
+        if (earnings_power_val is None and valuation.get("ok")
+                and valuation.get("method") == "dcf-range" and not valuation.get("suspect")
+                and _epv_eps and _epv_eps > 0 and _epv_stable and _epv_mature
+                and valuation.get("mid") and valuation["mid"] / _epv_eps < 7.0):
+            valuation["suspect"] = True
+            valuation["low_multiple_artifact"] = True
+            valuation["suspect_reason"] = (
+                f"DCF fair value implies only ~{valuation['mid'] / _epv_eps:.0f}x normalized "
+                "earnings — implausibly low for a profitable, stable, mature business, so it's "
+                "likely a growth-extrapolation artifact, not a real bear case. Treated as "
+                "low-confidence (the earnings-power model doesn't cover this business type).")
+
     # ---- Multiples vs the stock's own recent history ----
     multiples = compute_multiples(stock, eps, fcf)
     # Trailing-PEG proxy = trailing P/E ÷ historical EPS growth (%). A backward-
