@@ -123,8 +123,10 @@ It prints the candidates and writes `reports/screen-YYYY-MM-DD.md`. Like the web
 within 15 points of the bar on EDGAR (10–19yr as-filed) + SimFin — so candidate scores match the
 single-stock Analyze view and the SimFin-vs-Yahoo cross-check downgrades unreliable foreign filers
 out of the buy list. The installed **LaunchAgent**
-(`launchd/…weeklyscreen.plist`, loaded in `~/Library/LaunchAgents/`) runs `--scope all` every
-**Monday 8am**. Edit the plist's `StartCalendarInterval` / `--scope` and reload
+(`launchd/…weeklyscreen.plist`, loaded in `~/Library/LaunchAgents/`) runs `--scope large`
+(~900 curated large-caps) every **Monday 8am** — it finishes in ~30–40 min, whereas
+`--scope all` (~2,000 names) gets rate-limited by Yahoo into a multi-hour crawl. Edit the
+plist's `StartCalendarInterval` / `--scope` and reload
 (`launchctl unload … && launchctl load -w …`) to change the time or breadth.
 
 ## Earnings quality & the capex-cycle distortion

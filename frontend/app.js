@@ -1730,7 +1730,7 @@ async function loadHistory() {
   const body = $("historyBody");
   body.innerHTML = `<div class="text-muted text-sm">Loading…</div>`;
   try {
-    const d = await getJSON("/api/history?scope=all");
+    const d = await getJSON("/api/history?scope=large");
     renderHistory(d);
   } catch (e) { body.innerHTML = `<div class="text-bad text-sm">Couldn't load history: ${e.message}</div>`; }
 }
