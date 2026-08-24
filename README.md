@@ -36,6 +36,27 @@ cp .env.example .env    # then paste your ANTHROPIC_API_KEY into .env
 ```
 Then open http://127.0.0.1:8000 and type a ticker (AAPL, MSFT, KO, GOOGL, JNJ, BRK-B…).
 
+## Run with Docker (self-host)
+Runs anywhere Docker does — no Python setup, one command. Each instance is a single
+user, so it stays within the data sources' free personal-use limits.
+```bash
+cp .env.example .env     # optional — add SEC_EDGAR_UA and any keys you have
+docker compose up -d     # build + run; web UI at http://localhost:8000
+```
+- **No keys required** — it works on SEC EDGAR + Yahoo out of the box. Each key in `.env`
+  just lights up more: `SEC_EDGAR_UA` (recommended SEC contact), `SIMFIN_API_KEY` (foreign
+  filers + the data cross-check), `ANTHROPIC_API_KEY` (the AI read).
+- **State persists** in `./reports/` (watchlist, weekly track record, dated reports) via a
+  bind-mounted volume.
+- **Weekly auto-screen** (optional) — the cross-platform replacement for the macOS launchd
+  job: `docker compose --profile scheduler up -d` runs `weekly_screen.py --scope large`
+  every Monday 8am (tune via `TZ` / `SCHEDULE_HOUR` / `SCHEDULE_WEEKDAY` / `SCREEN_SCOPE`).
+- **Run a screen by hand:** `docker compose exec app python weekly_screen.py --scope large`.
+
+> Self-host only. This tool scrapes Yahoo's public endpoints for price/market data, which is
+> fine for personal use but **not licensed for redistribution** — don't run it as a public,
+> multi-user service without swapping in a licensed data provider in `backend/data.py`.
+
 ## Four modes
 - **Analyze one** — the full single-stock report (see the feature list below).
 - **Compare** — up to 15 tickers ranked side-by-side under the same assumptions.
