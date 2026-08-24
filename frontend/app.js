@@ -438,9 +438,12 @@ function scenariosSection(d, cur) {
   const row = (label, sc, color) => {
     const up = sc.upside;
     const upc = up == null ? "muted" : up >= 0 ? "good" : "bad";
+    const fv = sc.wiped_out
+      ? `<span class="text-bad" title="Equity wiped out — net debt exceeds the stressed enterprise value">$0 <span class="text-[10px]">⚠</span></span>`
+      : price(sc.fair_value, cur);
     return `<tr class="border-b border-line/40 text-sm">
       <td class="py-2 font-medium text-${color}">${label}</td>
-      <td class="text-right px-2">${price(sc.fair_value, cur)}</td>
+      <td class="text-right px-2">${fv}</td>
       <td class="text-right px-2 text-${upc}">${up == null ? "—" : signPct(up)}</td></tr>`;
   };
   const impl = r && r.ok ? r.implied_growth : null;
@@ -505,7 +508,7 @@ function sensitivityGrid(d, cur) {
   const body = s.cells.map((row, i) => `<tr>
     <td class="text-[10px] text-muted p-1 font-mono">${fmtPct(s.discount_rates[i], 0)}</td>
     ${row.map((c, j) => `<td class="p-1 text-center text-[11px] rounded ${upColor(c.upside)} ${isBase(s.discount_rates[i], s.growth_rates[j]) ? "ring-1 ring-brand" : ""}">
-      <div class="font-semibold">${price(c.iv, cur)}</div><div class="text-[9px] opacity-80">${c.upside == null ? "" : signPct(c.upside)}</div></td>`).join("")}
+      <div class="font-semibold" ${c.wiped_out ? 'title="Equity wiped out — net debt exceeds the stressed enterprise value"' : ""}>${c.wiped_out ? "$0 ⚠" : price(c.iv, cur)}</div><div class="text-[9px] opacity-80">${c.upside == null ? "" : signPct(c.upside)}</div></td>`).join("")}
   </tr>`).join("");
   return `<div class="mt-6">
     <div class="text-sm text-muted mb-2">Fair-value sensitivity — discount rate × growth <span class="text-[11px]">(box = base case; green = upside, red = overvalued)</span></div>

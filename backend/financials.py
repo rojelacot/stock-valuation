@@ -81,7 +81,12 @@ def scenarios(bvps: float, roe: Optional[float], r: float, g: float,
     def run(roe_mult, r_delta):
         pb = justified_pb(roe * roe_mult, min(max(r + r_delta, 0.05), 0.20), g)
         iv = (pb * bvps) if pb is not None else None
-        return {"fair_value": iv, "upside": _upside(iv, price)}
+        # Floor at zero: a negative justified value (ROE below growth, or negative
+        # book value) is an equity wipeout — show $0 / -100%, not a negative price.
+        wiped = iv is not None and iv < 0
+        if wiped:
+            iv = 0.0
+        return {"fair_value": iv, "upside": _upside(iv, price), "wiped_out": wiped}
 
     return {"bear": run(0.75, +0.015), "base": run(1.0, 0.0),
             "bull": run(1.25, -0.010), "current_price": price}

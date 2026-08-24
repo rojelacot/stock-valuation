@@ -1012,6 +1012,20 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
     revert, and forcing a decline there is misleading)."""
     price = info.get("current_price")
 
+    def _pack(iv, extra=None):
+        """Floor a fair value at zero: a negative DCF per-share value means net
+        debt swamps the (stressed) enterprise value — that's an equity wipeout,
+        which reads far more clearly as $0 / -100% than as a negative price."""
+        wiped = iv is not None and iv < 0
+        if wiped:
+            iv = 0.0
+        out = {"fair_value": iv,
+               "upside": ((iv - price) / price) if (iv is not None and price) else None,
+               "wiped_out": wiped}
+        if extra:
+            out.update(extra)
+        return out
+
     def run(gmult, ddelta, tdelta):
         d = discounted_cash_flow(
             base_cf, info, None, None,
@@ -1020,8 +1034,7 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
             years=years, margin_of_safety=margin_of_safety,
             growth_estimate=max(base_growth * gmult, -0.02),
             max_stage1_growth=0.25, add_net_cash=add_net_cash)
-        iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
-        return {"fair_value": iv, "upside": ((iv - price) / price) if (iv and price) else None}
+        return _pack(d.get("intrinsic_value_per_share") if d.get("ok") else None)
 
     def run_decline(haircut):
         if not haircut or not base_cf or base_cf <= 0:
@@ -1036,13 +1049,9 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
             max_stage1_growth=0.25, add_net_cash=add_net_cash)
         iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
         note = decline_note
-        # A stressed equity value below zero means net debt swamps the shrunken
-        # enterprise value — floor it at zero rather than show a negative price.
         if iv is not None and iv < 0:
-            iv = 0.0
             note = (decline_note or "") + " — equity value is wiped out (net debt exceeds the stressed enterprise value)"
-        return {"fair_value": iv, "upside": ((iv - price) / price) if (iv is not None and price) else None,
-                "haircut": haircut, "note": note}
+        return _pack(iv, {"haircut": haircut, "note": note})
 
     return {
         "bear": run(0.4, +0.02, -0.01),
@@ -1073,7 +1082,13 @@ def sensitivity_grid(base_cf: Optional[float], info: dict[str, Any], base_growth
                                      growth_estimate=g, max_stage1_growth=0.30,
                                      add_net_cash=add_net_cash)
             iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
-            row.append({"iv": iv, "upside": ((iv - price) / price) if iv else None})
+            # Same clamp as the scenario rows: a negative DCF value is an equity
+            # wipeout — show $0 / -100%, not a negative price.
+            wiped = iv is not None and iv < 0
+            if wiped:
+                iv = 0.0
+            row.append({"iv": iv, "wiped_out": wiped,
+                        "upside": ((iv - price) / price) if (iv is not None) else None})
         cells.append(row)
     return {"ok": True, "discount_rates": dr_axis, "growth_rates": g_axis,
             "cells": cells, "current_price": price,

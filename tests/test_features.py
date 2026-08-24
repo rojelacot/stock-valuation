@@ -670,6 +670,13 @@ _sc_wipe = _val.scenario_values(base_cf=10_000_000.0, info=_info_debt, base_grow
 ok(_sc_wipe["earnings_decline"]["fair_value"] == 0.0
    and "wiped out" in _sc_wipe["earnings_decline"]["note"],
    "scenario: negative stressed equity is floored at zero with a wipeout note")
+# The clamp applies to every scenario row, not just the decline: no fair value
+# is ever negative, and a wiped-out row is flagged.
+_rows = [_sc_wipe[k] for k in ("bear", "base", "bull") if _sc_wipe.get(k)]
+ok(all((r["fair_value"] is None or r["fair_value"] >= 0) for r in _rows),
+   "scenario: bear/base/bull fair values are never negative")
+ok(any(r.get("wiped_out") for r in _rows),
+   "scenario: a wiped-out bear/base/bull row is flagged")
 
 # net-cash reconciliation: the card (balance) and the DCF (info) must agree on
 # net cash — take the MORE COMPLETE debt (larger of EDGAR statements vs Yahoo
