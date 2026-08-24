@@ -204,6 +204,10 @@ def _summary_row(sym: str, a: dict[str, Any], use_edgar: bool = False) -> dict[s
         "iv_low": val.get("low"),
         "iv_high": val.get("high"),
         "buy_below": val.get("buy_below"),
+        # Certainty-scaled margin of safety (thesis principle 4) — carried into
+        # the track record so each week's winners record their MoS discount.
+        "certainty": (m.get("margin_of_safety_scaling") or {}).get("certainty"),
+        "mos": (m.get("margin_of_safety_scaling") or {}).get("effective"),
         "heavy_capex": eq.get("heavy_capex"),
         "suspect": val.get("suspect", False),
         "method": val.get("method"),

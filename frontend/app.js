@@ -1792,17 +1792,30 @@ function renderHistory(d) {
 
   // --- Conviction board: ticker × week matrix, sorted by recurrence ---
   const colH = `<th class="px-1 text-center font-mono text-[10px] text-muted" title="week of">${dates.map(fmtDate).join('</th><th class="px-1 text-center font-mono text-[10px] text-muted">')}</th>`;
+  const money = (x) => x == null ? "—" : "$" + fmtMoney(x);
+  const certColor = (c) => c == null ? "#334155" : c >= 0.8 ? "#16a34a" : c >= 0.6 ? "#4f9dff" : c >= 0.45 ? "#d97706" : "#dc2626";
   const rows = board.map(b => {
     const cells = dates.map(dt => {
       const s = b.scores[dt];
       const bg = histScoreColor(s);
-      return `<td class="px-1 text-center"><span class="inline-flex items-center justify-center rounded" style="width:26px;height:20px;background:${bg};color:${s == null ? 'transparent' : '#fff'};font-size:10px;font-weight:600" title="${dt}: ${s == null ? 'not a winner' : 'score ' + s}">${s == null ? '·' : s}</span></td>`;
+      // Ring the square green when the name traded at/below its certainty-scaled
+      // buy-below that week — a genuine buy-zone hit, not just a high score.
+      const inZone = b.buyzone && b.buyzone[dt] === true;
+      // Gold ring, not green — the score squares are already green for high
+      // scores, so a green ring would vanish against them.
+      const ring = inZone ? ";box-shadow:0 0 0 2px #fbbf24" : "";
+      const zoneTitle = s == null ? "not a winner" : `score ${s}${inZone ? " · at/below buy-below (in buy zone)" : " · above buy-below"}`;
+      return `<td class="px-1 text-center"><span class="inline-flex items-center justify-center rounded" style="width:26px;height:20px;background:${bg};color:${s == null ? 'transparent' : '#fff'};font-size:10px;font-weight:600${ring}" title="${dt}: ${zoneTitle}">${s == null ? '·' : s}</span></td>`;
     }).join("");
     const streakBadge = b.streak >= 2 ? `<span class="ml-1 text-[10px] px-1 rounded bg-brand/20 text-brand" title="consecutive weeks">×${b.streak}</span>` : "";
+    const certTitle = "How knowable the business is (earnings steadiness, returns on capital, balance sheet, length of record). Higher certainty → smaller required margin of safety.";
     return `<tr class="border-t border-[#1b2534]">
       <td class="px-2 py-1 font-mono font-semibold whitespace-nowrap"><button class="histTicker text-brand hover:underline" data-ticker="${b.ticker}" title="Analyze ${b.ticker}">${b.ticker}</button>${streakBadge}</td>
       <td class="px-2 py-1 text-muted text-xs max-w-[180px] truncate" title="${(b.name || '').replace(/"/g, '')}">${b.name || ""}</td>
       <td class="px-2 py-1 text-center text-xs">${b.appearances}/${b.weeks_total}</td>
+      <td class="px-2 py-1 text-center text-xs" title="${certTitle}"><span style="color:${certColor(b.certainty)};font-weight:600">${b.certainty == null ? "—" : b.certainty.toFixed(2)}</span></td>
+      <td class="px-2 py-1 text-center text-xs" title="Certainty-scaled required discount to fair value (thesis principle 4).">${b.mos == null ? "—" : fmtPct(b.mos, 0)}</td>
+      <td class="px-2 py-1 text-center text-xs font-mono" title="Fair-value midpoint discounted by the margin of safety.">${money(b.buy_below)}</td>
       ${cells}
     </tr>`;
   }).join("");
@@ -1812,11 +1825,14 @@ function renderHistory(d) {
       <div class="text-sm font-semibold">Conviction board</div>
       <button id="histExport" class="text-xs text-muted hover:text-brand">⭳ Export CSV</button>
     </div>
-    <p class="text-xs text-muted mb-3">Ranked by how many weeks each name has cleared the buy bar. Each square is one weekly run — colored by score, blank when it wasn't a winner. <b>×N</b> marks an active multi-week streak. Click a ticker to analyze it.</p>
+    <p class="text-xs text-muted mb-3">Ranked by how many weeks each name has cleared the buy bar. Each square is one weekly run — colored by score, blank when it wasn't a winner. A <span style="box-shadow:0 0 0 2px #fbbf24;border-radius:3px;padding:0 3px">gold ring</span> marks weeks it traded at/below its certainty-scaled buy-below (a real buy-zone hit). <b>Certainty</b> and <b>MoS</b> are the new-thesis margin-of-safety scaling — higher certainty demands a smaller discount. <b>×N</b> marks an active multi-week streak. Click a ticker to analyze it.</p>
     <table class="text-sm border-collapse">
       <thead><tr class="text-muted text-xs">
         <th class="px-2 text-left">Ticker</th><th class="px-2 text-left">Name</th>
         <th class="px-2 text-center" title="weeks as a winner / total weeks">Weeks</th>
+        <th class="px-2 text-center" title="How knowable the business is (0–1). Drives the margin of safety.">Certainty</th>
+        <th class="px-2 text-center" title="Certainty-scaled required margin of safety.">MoS</th>
+        <th class="px-2 text-center" title="Certainty-scaled buy-below price.">Buy&lt;</th>
         ${colH}
       </tr></thead>
       <tbody>${rows}</tbody>
@@ -1831,11 +1847,13 @@ function renderHistory(d) {
   // Export the board as CSV (dates as columns).
   const exp = body.querySelector("#histExport");
   if (exp) exp.addEventListener("click", () => {
-    const head = ["Ticker", "Name", "Sector", "Weeks", "Streak", ...dates];
+    const head = ["Ticker", "Name", "Sector", "Weeks", "Streak", "Certainty", "MoS", "BuyBelow", ...dates];
     const lines = [head.join(",")];
     for (const b of board) {
       const cells = [b.ticker, `"${(b.name || "").replace(/"/g, "'")}"`, `"${b.sector || ""}"`,
-        `${b.appearances}/${b.weeks_total}`, b.streak, ...dates.map(dt => b.scores[dt] ?? "")];
+        `${b.appearances}/${b.weeks_total}`, b.streak,
+        b.certainty ?? "", b.mos == null ? "" : (b.mos * 100).toFixed(1), b.buy_below == null ? "" : b.buy_below.toFixed(2),
+        ...dates.map(dt => b.scores[dt] ?? "")];
       lines.push(cells.join(","));
     }
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });

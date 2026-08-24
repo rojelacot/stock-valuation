@@ -67,7 +67,9 @@ def update(path: Path, mutate: Callable[[dict], Any]) -> Any:
             fcntl.flock(lf, fcntl.LOCK_EX)
         data = load(path)
         result = mutate(data)
-        _atomic_write(path, json.dumps(data))
+        # Pretty-print: screen_history.json is versioned in git, so each weekly
+        # run should produce a readable line-level diff, not one giant line.
+        _atomic_write(path, json.dumps(data, indent=2) + "\n")
         return result
     finally:
         try:

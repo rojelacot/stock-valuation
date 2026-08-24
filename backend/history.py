@@ -27,6 +27,14 @@ def _winner(row: dict[str, Any]) -> dict[str, Any]:
     up = row.get("upside")
     if up is None:
         up = row.get("upside_mid")
+    scaling = row.get("margin_of_safety_scaling") or {}
+    certainty = row.get("certainty", scaling.get("certainty"))
+    mos = row.get("mos", scaling.get("effective"))
+    buy_below = row.get("buy_below")
+    price = row.get("price")
+    below_buy = row.get("below_buy")
+    if below_buy is None and price is not None and buy_below is not None:
+        below_buy = price <= buy_below
     return {
         "ticker": row.get("ticker"),
         "name": row.get("name"),
@@ -34,7 +42,12 @@ def _winner(row: dict[str, Any]) -> dict[str, Any]:
         "score": row.get("score"),
         "rating": row.get("rating"),
         "upside": up,
-        "price": row.get("price"),
+        "price": price,
+        # New-thesis fields: certainty-scaled margin of safety (principle 4).
+        "certainty": certainty,
+        "mos": mos,
+        "buy_below": buy_below,
+        "below_buy": below_buy,
     }
 
 
@@ -84,10 +97,17 @@ def summarize(scope: str) -> dict[str, Any]:
             t = w["ticker"]
             a = agg.setdefault(t, {"ticker": t, "name": w.get("name"),
                                    "sector": w.get("sector"), "scores": {},
+                                   "buyzone": {},
                                    "first_seen": r["date"], "last_seen": r["date"]})
             a["name"] = w.get("name") or a["name"]
             a["sector"] = w.get("sector") or a["sector"]
             a["scores"][r["date"]] = w.get("score")
+            a["buyzone"][r["date"]] = w.get("below_buy")
+            # Certainty-scaled MoS is a current intrinsic estimate, not per-week;
+            # keep the most recent non-null across the series.
+            for k in ("certainty", "mos", "buy_below"):
+                if w.get(k) is not None:
+                    a[k] = w.get(k)
             a["first_seen"] = min(a["first_seen"], r["date"])
             a["last_seen"] = max(a["last_seen"], r["date"])
 
@@ -114,6 +134,11 @@ def summarize(scope: str) -> dict[str, Any]:
             "latest_score": latest_score,
             "present_latest": latest_date in a["scores"] if latest_date else False,
             "scores": a["scores"],
+            # New-thesis: certainty-scaled margin of safety and buy-below.
+            "certainty": a.get("certainty"),
+            "mos": a.get("mos"),
+            "buy_below": a.get("buy_below"),
+            "buyzone": a.get("buyzone", {}),
         })
     # Highest conviction first: most appearances, then longest active streak, then score.
     board.sort(key=lambda x: (-x["appearances"], -x["streak"],

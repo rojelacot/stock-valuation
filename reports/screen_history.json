@@ -1,528 +1,748 @@
 {
-"large": [
-{
-"date": "2026-08-17",
-"min_score": 80,
-"count": 18,
-"winners": [
-{
-"ticker": "DECK",
-"name": "Deckers Outdoor Corporation",
-"sector": "Consumer Cyclical",
-"score": 100,
-"rating": "BUY",
-"upside": 0.5,
-"price": 90.38
-},
-{
-"ticker": "DLO",
-"name": "DLocal Limited",
-"sector": "Technology",
-"score": 93,
-"rating": "BUY",
-"upside": 0.38,
-"price": 13.98
-},
-{
-"ticker": "HRMY",
-"name": "Harmony Biosciences Holdings, Inc.",
-"sector": "Healthcare",
-"score": 92,
-"rating": "BUY",
-"upside": 0.43,
-"price": 37.78
-},
-{
-"ticker": "SLDE",
-"name": "Slide Insurance Holdings, Inc.",
-"sector": "Financial Services",
-"score": 92,
-"rating": "BUY",
-"upside": 0.87,
-"price": 21.6
-},
-{
-"ticker": "LRN",
-"name": "Stride, Inc.",
-"sector": "Consumer Defensive",
-"score": 91,
-"rating": "BUY",
-"upside": 0.53,
-"price": 83.5
-},
-{
-"ticker": "PRDO",
-"name": "Perdoceo Education Corporation",
-"sector": "Consumer Defensive",
-"score": 90,
-"rating": "BUY",
-"upside": 0.46,
-"price": 32.04
-},
-{
-"ticker": "DOCS",
-"name": "Doximity, Inc.",
-"sector": "Healthcare",
-"score": 89,
-"rating": "BUY",
-"upside": 0.17,
-"price": 24.41
-},
-{
-"ticker": "ACGL",
-"name": "Arch Capital Group Ltd.",
-"sector": "Financial Services",
-"score": 89,
-"rating": "BUY",
-"upside": 0.89,
-"price": 98.47
-},
-{
-"ticker": "BMA",
-"name": "Banco Macro S.A.",
-"sector": "Financial Services",
-"score": 87,
-"rating": "BUY",
-"upside": 0.45,
-"price": 79.25
-},
-{
-"ticker": "VC",
-"name": "Visteon Corporation",
-"sector": "Consumer Cyclical",
-"score": 86,
-"rating": "BUY",
-"upside": 0.32,
-"price": 107.8
-},
-{
-"ticker": "GDDY",
-"name": "GoDaddy Inc.",
-"sector": "Technology",
-"score": 85,
-"rating": "BUY",
-"upside": 0.44,
-"price": 93.17
-},
-{
-"ticker": "PYPL",
-"name": "PayPal Holdings, Inc.",
-"sector": "Financial Services",
-"score": 83,
-"rating": "BUY",
-"upside": 0.55,
-"price": 60.47
-},
-{
-"ticker": "NMIH",
-"name": "NMI Holdings Inc. Class A Common Stock",
-"sector": "Financial Services",
-"score": 81,
-"rating": "BUY",
-"upside": 0.61,
-"price": 45.56
-},
-{
-"ticker": "AOS",
-"name": "A. O. Smith Corporation",
-"sector": "Industrials",
-"score": 81,
-"rating": "BUY",
-"upside": 0.21,
-"price": 61.74
-},
-{
-"ticker": "DLB",
-"name": "Dolby Laboratories, Inc.",
-"sector": "Industrials",
-"score": 81,
-"rating": "BUY",
-"upside": 0.33,
-"price": 61.44
-},
-{
-"ticker": "GNTX",
-"name": "Gentex Corporation",
-"sector": "Consumer Cyclical",
-"score": 80,
-"rating": "BUY",
-"upside": 0.21,
-"price": 23.95
-},
-{
-"ticker": "HIG",
-"name": "The Hartford Insurance Group, Inc.",
-"sector": "Financial Services",
-"score": 80,
-"rating": "BUY",
-"upside": 0.54,
-"price": 137.06
-},
-{
-"ticker": "PGR",
-"name": "The Progressive Corporation",
-"sector": "Financial Services",
-"score": 80,
-"rating": "BUY",
-"upside": 0.18,
-"price": 203.82
-}
-],
-"note": "Older Yahoo-only run (before the EDGAR deep-verify + SimFin cross-check). Some deltas vs later weeks reflect that methodology upgrade rather than fundamentals \u2014 e.g. DLO's removal is the data cross-check working, not a real deterioration. First fully like-for-like comparison is the next run."
-},
-{
-"date": "2026-08-20",
-"min_score": 80,
-"count": 15,
-"winners": [
-{
-"ticker": "DECK",
-"name": "Deckers Outdoor Corporation",
-"sector": "Consumer Cyclical",
-"score": 98,
-"rating": "BUY",
-"upside": 0.48092874405268343,
-"price": 91.57
-},
-{
-"ticker": "LOPE",
-"name": "Grand Canyon Education, Inc.",
-"sector": "Consumer Defensive",
-"score": 93,
-"rating": "BUY",
-"upside": 0.37032436637901195,
-"price": 146.92
-},
-{
-"ticker": "HG",
-"name": "Hamilton Insurance Group, Ltd.",
-"sector": "Financial Services",
-"score": 92,
-"rating": "BUY",
-"upside": 0.6728129224458818,
-"price": 34.4
-},
-{
-"ticker": "LOGI",
-"name": "Logitech International S.A.",
-"sector": "Technology",
-"score": 92,
-"rating": "BUY",
-"upside": 0.4328656214251774,
-"price": 100.47
-},
-{
-"ticker": "SLDE",
-"name": "Slide Insurance Holdings, Inc.",
-"sector": "Financial Services",
-"score": 92,
-"rating": "BUY",
-"upside": 0.5923858183114993,
-"price": 22.48
-},
-{
-"ticker": "CTSH",
-"name": "Cognizant Technology Solutions Corporation",
-"sector": "Technology",
-"score": 91,
-"rating": "BUY",
-"upside": 0.6659481860034724,
-"price": 60.93
-},
-{
-"ticker": "PGR",
-"name": "The Progressive Corporation",
-"sector": "Financial Services",
-"score": 87,
-"rating": "BUY",
-"upside": 0.37823498378051507,
-"price": 217.27
-},
-{
-"ticker": "CRUS",
-"name": "Cirrus Logic, Inc.",
-"sector": "Technology",
-"score": 85,
-"rating": "BUY",
-"upside": 0.14088366012948603,
-"price": 118.07
-},
-{
-"ticker": "GNTX",
-"name": "Gentex Corporation",
-"sector": "Consumer Cyclical",
-"score": 85,
-"rating": "BUY",
-"upside": 0.39005410959835324,
-"price": 23.64
-},
-{
-"ticker": "HRMY",
-"name": "Harmony Biosciences Holdings, Inc.",
-"sector": "Healthcare",
-"score": 85,
-"rating": "BUY",
-"upside": 0.6500766883395876,
-"price": 39.93
-},
-{
-"ticker": "RMD",
-"name": "ResMed Inc.",
-"sector": "Healthcare",
-"score": 85,
-"rating": "BUY",
-"upside": 0.05717174146283026,
-"price": 230.65
-},
-{
-"ticker": "ZTS",
-"name": "Zoetis Inc.",
-"sector": "Healthcare",
-"score": 84,
-"rating": "BUY",
-"upside": 0.45474835604161745,
-"price": 76.68
-},
-{
-"ticker": "CINF",
-"name": "Cincinnati Financial Corporation",
-"sector": "Financial Services",
-"score": 81,
-"rating": "BUY",
-"upside": 0.48601274192642374,
-"price": 168.49
-},
-{
-"ticker": "DOCS",
-"name": "Doximity, Inc.",
-"sector": "Healthcare",
-"score": 81,
-"rating": "BUY",
-"upside": 0.0763318787632079,
-"price": 25.75
-},
-{
-"ticker": "BAH",
-"name": "Booz Allen Hamilton Holding Cor",
-"sector": "Industrials",
-"score": 80,
-"rating": "BUY",
-"upside": 0.7343165665584268,
-"price": 78.84
-}
-]
-},
-{
-"date": "2026-08-21",
-"min_score": 80,
-"count": 14,
-"winners": [
-{
-"ticker": "DECK",
-"name": "Deckers Outdoor Corporation",
-"sector": "Consumer Cyclical",
-"score": 98,
-"rating": "BUY",
-"upside": 0.7282389066131957,
-"price": 91.68
-},
-{
-"ticker": "DOCS",
-"name": "Doximity, Inc.",
-"sector": "Healthcare",
-"score": 96,
-"rating": "BUY",
-"upside": 0.40195502124771165,
-"price": 25.33
-},
-{
-"ticker": "CRUS",
-"name": "Cirrus Logic, Inc.",
-"sector": "Technology",
-"score": 93,
-"rating": "BUY",
-"upside": 0.29009778304598016,
-"price": 115.33
-},
-{
-"ticker": "EPAM",
-"name": "EPAM Systems, Inc.",
-"sector": "Technology",
-"score": 93,
-"rating": "BUY",
-"upside": 0.5302695763748659,
-"price": 110.34
-},
-{
-"ticker": "SLDE",
-"name": "Slide Insurance Holdings, Inc.",
-"sector": "Financial Services",
-"score": 92,
-"rating": "BUY",
-"upside": 0.7664204316480943,
-"price": 22.74
-},
-{
-"ticker": "HG",
-"name": "Hamilton Insurance Group, Ltd.",
-"sector": "Financial Services",
-"score": 92,
-"rating": "BUY",
-"upside": 0.44016309187825897,
-"price": 34.96
-},
-{
-"ticker": "CTSH",
-"name": "Cognizant Technology Solutions Corporation",
-"sector": "Technology",
-"score": 91,
-"rating": "BUY",
-"upside": 0.5756495949746337,
-"price": 61.87
-},
-{
-"ticker": "ACN",
-"name": "Accenture plc",
-"sector": "Technology",
-"score": 88,
-"rating": "BUY",
-"upside": 0.41622720681491854,
-"price": 185.28
-},
-{
-"ticker": "BMA",
-"name": "Banco Macro S.A.",
-"sector": "Financial Services",
-"score": 87,
-"rating": "BUY",
-"upside": 0.7137938596789619,
-"price": 72.84
-},
-{
-"ticker": "TROW",
-"name": "T. Rowe Price Group, Inc.",
-"sector": "Financial Services",
-"score": 86,
-"rating": "BUY",
-"upside": 0.3544463704352384,
-"price": 111.51
-},
-{
-"ticker": "HRMY",
-"name": "Harmony Biosciences Holdings, Inc.",
-"sector": "Healthcare",
-"score": 85,
-"rating": "BUY",
-"upside": 0.38920591870739557,
-"price": 38.15
-},
-{
-"ticker": "LOGI",
-"name": "Logitech International S.A.",
-"sector": "Technology",
-"score": 85,
-"rating": "BUY",
-"upside": 0.21928059821893375,
-"price": 96.03
-},
-{
-"ticker": "AOS",
-"name": "A. O. Smith Corporation",
-"sector": "Industrials",
-"score": 83,
-"rating": "BUY",
-"upside": 0.21993067717816867,
-"price": 63.08
-},
-{
-"ticker": "LRN",
-"name": "Stride, Inc.",
-"sector": "Consumer Defensive",
-"score": 82,
-"rating": "BUY",
-"upside": 0.9640873509567547,
-"price": 84.36
-}
-]
-},
-{
-"date": "2026-08-24",
-"min_score": 80,
-"count": 8,
-"winners": [
-{
-"ticker": "DECK",
-"name": "Deckers Outdoor Corporation",
-"sector": "Consumer Cyclical",
-"score": 98,
-"rating": "BUY",
-"upside": 0.7421104228509926,
-"price": 90.95
-},
-{
-"ticker": "DOCS",
-"name": "Doximity, Inc.",
-"sector": "Healthcare",
-"score": 96,
-"rating": "BUY",
-"upside": 0.39042759155068657,
-"price": 25.54
-},
-{
-"ticker": "CRUS",
-"name": "Cirrus Logic, Inc.",
-"sector": "Technology",
-"score": 93,
-"rating": "BUY",
-"upside": 0.3164659115085197,
-"price": 113.02
-},
-{
-"ticker": "CTSH",
-"name": "Cognizant Technology Solutions Corporation",
-"sector": "Technology",
-"score": 91,
-"rating": "BUY",
-"upside": 0.5802470488098652,
-"price": 61.69
-},
-{
-"ticker": "ACN",
-"name": "Accenture plc",
-"sector": "Technology",
-"score": 88,
-"rating": "BUY",
-"upside": 0.4182940212889472,
-"price": 185.01
-},
-{
-"ticker": "SAM",
-"name": "The Boston Beer Company, Inc.",
-"sector": "Consumer Defensive",
-"score": 87,
-"rating": "BUY",
-"upside": 0.469651219620073,
-"price": 186.6143
-},
-{
-"ticker": "TROW",
-"name": "T. Rowe Price Group, Inc.",
-"sector": "Financial Services",
-"score": 86,
-"rating": "BUY",
-"upside": 0.3621420884490751,
-"price": 110.88
-},
-{
-"ticker": "AOS",
-"name": "A. O. Smith Corporation",
-"sector": "Industrials",
-"score": 83,
-"rating": "BUY",
-"upside": 0.23560094920357863,
-"price": 62.28
-}
-]
-}
-]
+  "large": [
+    {
+      "date": "2026-08-17",
+      "min_score": 80,
+      "count": 18,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 100,
+          "rating": "BUY",
+          "upside": 0.5,
+          "price": 90.38,
+          "certainty": 0.64,
+          "mos": 0.20881349512531827,
+          "buy_below": 125.35950063424394,
+          "below_buy": true
+        },
+        {
+          "ticker": "DLO",
+          "name": "DLocal Limited",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.38,
+          "price": 13.98,
+          "certainty": 0.56,
+          "mos": 0.23086914915949774,
+          "buy_below": 38.30507016894933,
+          "below_buy": true
+        },
+        {
+          "ticker": "HRMY",
+          "name": "Harmony Biosciences Holdings, Inc.",
+          "sector": "Healthcare",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.43,
+          "price": 37.78,
+          "certainty": 0.49,
+          "mos": 0.2542324407178621,
+          "buy_below": 39.52434258481935,
+          "below_buy": true
+        },
+        {
+          "ticker": "SLDE",
+          "name": "Slide Insurance Holdings, Inc.",
+          "sector": "Financial Services",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.87,
+          "price": 21.6,
+          "certainty": 0.65,
+          "mos": 0.20597475358225267,
+          "buy_below": 31.894724197070246,
+          "below_buy": true
+        },
+        {
+          "ticker": "LRN",
+          "name": "Stride, Inc.",
+          "sector": "Consumer Defensive",
+          "score": 91,
+          "rating": "BUY",
+          "upside": 0.53,
+          "price": 83.5,
+          "certainty": 0.63,
+          "mos": 0.21017055187636446,
+          "buy_below": 130.8671642419643,
+          "below_buy": true
+        },
+        {
+          "ticker": "PRDO",
+          "name": "Perdoceo Education Corporation",
+          "sector": "Consumer Defensive",
+          "score": 90,
+          "rating": "BUY",
+          "upside": 0.46,
+          "price": 32.04,
+          "certainty": 0.33,
+          "mos": 0.30025,
+          "buy_below": 21.32025599633012,
+          "below_buy": false
+        },
+        {
+          "ticker": "DOCS",
+          "name": "Doximity, Inc.",
+          "sector": "Healthcare",
+          "score": 89,
+          "rating": "BUY",
+          "upside": 0.17,
+          "price": 24.41,
+          "certainty": 0.78,
+          "mos": 0.16552820885541714,
+          "buy_below": 29.63336227495395,
+          "below_buy": true
+        },
+        {
+          "ticker": "ACGL",
+          "name": "Arch Capital Group Ltd.",
+          "sector": "Financial Services",
+          "score": 89,
+          "rating": "BUY",
+          "upside": 0.89,
+          "price": 98.47,
+          "certainty": 0.57,
+          "mos": 0.22954643579126527,
+          "buy_below": 77.27836462191328,
+          "below_buy": false
+        },
+        {
+          "ticker": "BMA",
+          "name": "Banco Macro S.A.",
+          "sector": "Financial Services",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.45,
+          "price": 79.25,
+          "certainty": 0.65,
+          "mos": 0.20569757291384214,
+          "buy_below": 99.15495212602688,
+          "below_buy": true
+        },
+        {
+          "ticker": "VC",
+          "name": "Visteon Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 86,
+          "rating": "BUY",
+          "upside": 0.32,
+          "price": 107.8,
+          "certainty": 0.72,
+          "mos": 0.1825,
+          "buy_below": 76.93021266085552,
+          "below_buy": false
+        },
+        {
+          "ticker": "GDDY",
+          "name": "GoDaddy Inc.",
+          "sector": "Technology",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.44,
+          "price": 93.17,
+          "certainty": 0.2,
+          "mos": 0.3410725716162832,
+          "buy_below": 49.90454457642484,
+          "below_buy": false
+        },
+        {
+          "ticker": "PYPL",
+          "name": "PayPal Holdings, Inc.",
+          "sector": "Financial Services",
+          "score": 83,
+          "rating": "BUY",
+          "upside": 0.55,
+          "price": 60.47,
+          "certainty": 0.78,
+          "mos": 0.16624401179730583,
+          "buy_below": 46.159620284012455,
+          "below_buy": false
+        },
+        {
+          "ticker": "NMIH",
+          "name": "NMI Holdings Inc. Class A Common Stock",
+          "sector": "Financial Services",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.61,
+          "price": 45.56,
+          "certainty": 0.38,
+          "mos": 0.2871213849154868,
+          "buy_below": 30.68416426322629,
+          "below_buy": false
+        },
+        {
+          "ticker": "AOS",
+          "name": "A. O. Smith Corporation",
+          "sector": "Industrials",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.21,
+          "price": 61.74,
+          "certainty": 0.86,
+          "mos": 0.1414079545501885,
+          "buy_below": 66.07142867383281,
+          "below_buy": true
+        },
+        {
+          "ticker": "DLB",
+          "name": "Dolby Laboratories, Inc.",
+          "sector": "Industrials",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.33,
+          "price": 61.44,
+          "certainty": 0.55,
+          "mos": 0.23405724349179846,
+          "buy_below": 52.87206721766845,
+          "below_buy": false
+        },
+        {
+          "ticker": "GNTX",
+          "name": "Gentex Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 80,
+          "rating": "BUY",
+          "upside": 0.21,
+          "price": 23.95,
+          "certainty": 0.88,
+          "mos": 0.13484806457916315,
+          "buy_below": 27.056246940551535,
+          "below_buy": true
+        },
+        {
+          "ticker": "HIG",
+          "name": "The Hartford Insurance Group, Inc.",
+          "sector": "Financial Services",
+          "score": 80,
+          "rating": "BUY",
+          "upside": 0.54,
+          "price": 137.06,
+          "certainty": 0.49,
+          "mos": 0.25245018144229087,
+          "buy_below": 56.654637640922154,
+          "below_buy": false
+        },
+        {
+          "ticker": "PGR",
+          "name": "The Progressive Corporation",
+          "sector": "Financial Services",
+          "score": 80,
+          "rating": "BUY",
+          "upside": 0.18,
+          "price": 203.82,
+          "certainty": 0.79,
+          "mos": 0.16278380735324488,
+          "buy_below": 154.50692621962227,
+          "below_buy": false
+        }
+      ],
+      "note": "Older Yahoo-only run (before the EDGAR deep-verify + SimFin cross-check). Some deltas vs later weeks reflect that methodology upgrade rather than fundamentals \u2014 e.g. DLO's removal is the data cross-check working, not a real deterioration. First fully like-for-like comparison is the next run."
+    },
+    {
+      "date": "2026-08-20",
+      "min_score": 80,
+      "count": 15,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 98,
+          "rating": "BUY",
+          "upside": 0.48092874405268343,
+          "price": 91.57,
+          "certainty": 0.64,
+          "mos": 0.20881349512531827,
+          "buy_below": 125.35950063424394,
+          "below_buy": true
+        },
+        {
+          "ticker": "LOPE",
+          "name": "Grand Canyon Education, Inc.",
+          "sector": "Consumer Defensive",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.37032436637901195,
+          "price": 146.92,
+          "certainty": 0.64,
+          "mos": 0.2074841924473897,
+          "buy_below": 127.8188969823825,
+          "below_buy": false
+        },
+        {
+          "ticker": "HG",
+          "name": "Hamilton Insurance Group, Ltd.",
+          "sector": "Financial Services",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.6728129224458818,
+          "price": 34.4,
+          "certainty": 0.54,
+          "mos": 0.23724341182458838,
+          "buy_below": 38.40334626774735,
+          "below_buy": true
+        },
+        {
+          "ticker": "LOGI",
+          "name": "Logitech International S.A.",
+          "sector": "Technology",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.4328656214251774,
+          "price": 100.47,
+          "certainty": 0.62,
+          "mos": 0.2136815734875358,
+          "buy_below": 92.06807122503811,
+          "below_buy": false
+        },
+        {
+          "ticker": "SLDE",
+          "name": "Slide Insurance Holdings, Inc.",
+          "sector": "Financial Services",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.5923858183114993,
+          "price": 22.48,
+          "certainty": 0.65,
+          "mos": 0.20597475358225267,
+          "buy_below": 31.894724197070246,
+          "below_buy": true
+        },
+        {
+          "ticker": "CTSH",
+          "name": "Cognizant Technology Solutions Corporation",
+          "sector": "Technology",
+          "score": 91,
+          "rating": "BUY",
+          "upside": 0.6659481860034724,
+          "price": 60.93,
+          "certainty": 0.91,
+          "mos": 0.12815659366495877,
+          "buy_below": 84.99203846222348,
+          "below_buy": true
+        },
+        {
+          "ticker": "PGR",
+          "name": "The Progressive Corporation",
+          "sector": "Financial Services",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.37823498378051507,
+          "price": 217.27,
+          "certainty": 0.79,
+          "mos": 0.16278380735324488,
+          "buy_below": 154.50692621962227,
+          "below_buy": false
+        },
+        {
+          "ticker": "CRUS",
+          "name": "Cirrus Logic, Inc.",
+          "sector": "Technology",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.14088366012948603,
+          "price": 118.07,
+          "certainty": 0.58,
+          "mos": 0.22514333956725455,
+          "buy_below": 115.28858036104502,
+          "below_buy": false
+        },
+        {
+          "ticker": "GNTX",
+          "name": "Gentex Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.39005410959835324,
+          "price": 23.64,
+          "certainty": 0.88,
+          "mos": 0.13484806457916315,
+          "buy_below": 27.056246940551535,
+          "below_buy": true
+        },
+        {
+          "ticker": "HRMY",
+          "name": "Harmony Biosciences Holdings, Inc.",
+          "sector": "Healthcare",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.6500766883395876,
+          "price": 39.93,
+          "certainty": 0.49,
+          "mos": 0.2542324407178621,
+          "buy_below": 39.52434258481935,
+          "below_buy": false
+        },
+        {
+          "ticker": "RMD",
+          "name": "ResMed Inc.",
+          "sector": "Healthcare",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.05717174146283026,
+          "price": 230.65,
+          "certainty": 0.87,
+          "mos": 0.13876175671937024,
+          "buy_below": 190.5849823341489,
+          "below_buy": false
+        },
+        {
+          "ticker": "ZTS",
+          "name": "Zoetis Inc.",
+          "sector": "Healthcare",
+          "score": 84,
+          "rating": "BUY",
+          "upside": 0.45474835604161745,
+          "price": 76.68,
+          "certainty": 0.62,
+          "mos": 0.2154648692006606,
+          "buy_below": 46.58571861410295,
+          "below_buy": false
+        },
+        {
+          "ticker": "CINF",
+          "name": "Cincinnati Financial Corporation",
+          "sector": "Financial Services",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.48601274192642374,
+          "price": 168.49,
+          "certainty": 0.67,
+          "mos": 0.19947441153030493,
+          "buy_below": 150.9699856834178,
+          "below_buy": false
+        },
+        {
+          "ticker": "DOCS",
+          "name": "Doximity, Inc.",
+          "sector": "Healthcare",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.0763318787632079,
+          "price": 25.75,
+          "certainty": 0.78,
+          "mos": 0.16552820885541714,
+          "buy_below": 29.63336227495395,
+          "below_buy": true
+        },
+        {
+          "ticker": "BAH",
+          "name": "Booz Allen Hamilton Holding Cor",
+          "sector": "Industrials",
+          "score": 80,
+          "rating": "BUY",
+          "upside": 0.7343165665584268,
+          "price": 78.84,
+          "certainty": 0.53,
+          "mos": 0.24182683579093298,
+          "buy_below": 36.81317204315849,
+          "below_buy": false
+        }
+      ]
+    },
+    {
+      "date": "2026-08-21",
+      "min_score": 80,
+      "count": 14,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 98,
+          "rating": "BUY",
+          "upside": 0.7282389066131957,
+          "price": 91.68,
+          "certainty": 0.64,
+          "mos": 0.20881349512531827,
+          "buy_below": 125.35950063424394,
+          "below_buy": true
+        },
+        {
+          "ticker": "DOCS",
+          "name": "Doximity, Inc.",
+          "sector": "Healthcare",
+          "score": 96,
+          "rating": "BUY",
+          "upside": 0.40195502124771165,
+          "price": 25.33,
+          "certainty": 0.78,
+          "mos": 0.16552820885541714,
+          "buy_below": 29.63336227495395,
+          "below_buy": true
+        },
+        {
+          "ticker": "CRUS",
+          "name": "Cirrus Logic, Inc.",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.29009778304598016,
+          "price": 115.33,
+          "certainty": 0.58,
+          "mos": 0.22514333956725455,
+          "buy_below": 115.28858036104502,
+          "below_buy": false
+        },
+        {
+          "ticker": "EPAM",
+          "name": "EPAM Systems, Inc.",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.5302695763748659,
+          "price": 110.34,
+          "certainty": 0.91,
+          "mos": 0.12740282866892583,
+          "buy_below": 147.3379844363224,
+          "below_buy": true
+        },
+        {
+          "ticker": "SLDE",
+          "name": "Slide Insurance Holdings, Inc.",
+          "sector": "Financial Services",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.7664204316480943,
+          "price": 22.74,
+          "certainty": 0.65,
+          "mos": 0.20597475358225267,
+          "buy_below": 31.894724197070246,
+          "below_buy": true
+        },
+        {
+          "ticker": "HG",
+          "name": "Hamilton Insurance Group, Ltd.",
+          "sector": "Financial Services",
+          "score": 92,
+          "rating": "BUY",
+          "upside": 0.44016309187825897,
+          "price": 34.96,
+          "certainty": 0.54,
+          "mos": 0.23724341182458838,
+          "buy_below": 38.40334626774735,
+          "below_buy": true
+        },
+        {
+          "ticker": "CTSH",
+          "name": "Cognizant Technology Solutions Corporation",
+          "sector": "Technology",
+          "score": 91,
+          "rating": "BUY",
+          "upside": 0.5756495949746337,
+          "price": 61.87,
+          "certainty": 0.91,
+          "mos": 0.12815659366495877,
+          "buy_below": 84.99203846222348,
+          "below_buy": true
+        },
+        {
+          "ticker": "ACN",
+          "name": "Accenture plc",
+          "sector": "Technology",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 0.41622720681491854,
+          "price": 185.28,
+          "certainty": 0.95,
+          "mos": 0.12,
+          "buy_below": 230.91074765322793,
+          "below_buy": true
+        },
+        {
+          "ticker": "BMA",
+          "name": "Banco Macro S.A.",
+          "sector": "Financial Services",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.7137938596789619,
+          "price": 72.84,
+          "certainty": 0.65,
+          "mos": 0.20569757291384214,
+          "buy_below": 99.15495212602688,
+          "below_buy": true
+        },
+        {
+          "ticker": "TROW",
+          "name": "T. Rowe Price Group, Inc.",
+          "sector": "Financial Services",
+          "score": 86,
+          "rating": "BUY",
+          "upside": 0.3544463704352384,
+          "price": 111.51,
+          "certainty": 0.95,
+          "mos": 0.12,
+          "buy_below": 132.91019699516542,
+          "below_buy": true
+        },
+        {
+          "ticker": "HRMY",
+          "name": "Harmony Biosciences Holdings, Inc.",
+          "sector": "Healthcare",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.38920591870739557,
+          "price": 38.15,
+          "certainty": 0.49,
+          "mos": 0.2542324407178621,
+          "buy_below": 39.52434258481935,
+          "below_buy": true
+        },
+        {
+          "ticker": "LOGI",
+          "name": "Logitech International S.A.",
+          "sector": "Technology",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.21928059821893375,
+          "price": 96.03,
+          "certainty": 0.62,
+          "mos": 0.2136815734875358,
+          "buy_below": 92.06807122503811,
+          "below_buy": false
+        },
+        {
+          "ticker": "AOS",
+          "name": "A. O. Smith Corporation",
+          "sector": "Industrials",
+          "score": 83,
+          "rating": "BUY",
+          "upside": 0.21993067717816867,
+          "price": 63.08,
+          "certainty": 0.86,
+          "mos": 0.1414079545501885,
+          "buy_below": 66.07142867383281,
+          "below_buy": true
+        },
+        {
+          "ticker": "LRN",
+          "name": "Stride, Inc.",
+          "sector": "Consumer Defensive",
+          "score": 82,
+          "rating": "BUY",
+          "upside": 0.9640873509567547,
+          "price": 84.36,
+          "certainty": 0.63,
+          "mos": 0.21017055187636446,
+          "buy_below": 130.8671642419643,
+          "below_buy": true
+        }
+      ]
+    },
+    {
+      "date": "2026-08-24",
+      "min_score": 80,
+      "count": 8,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 98,
+          "rating": "BUY",
+          "upside": 0.7421104228509926,
+          "price": 90.95,
+          "certainty": 0.64,
+          "mos": 0.20881349512531827,
+          "buy_below": 125.35950063424394,
+          "below_buy": true
+        },
+        {
+          "ticker": "DOCS",
+          "name": "Doximity, Inc.",
+          "sector": "Healthcare",
+          "score": 96,
+          "rating": "BUY",
+          "upside": 0.39042759155068657,
+          "price": 25.54,
+          "certainty": 0.78,
+          "mos": 0.16552820885541714,
+          "buy_below": 29.63336227495395,
+          "below_buy": true
+        },
+        {
+          "ticker": "CRUS",
+          "name": "Cirrus Logic, Inc.",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.3164659115085197,
+          "price": 113.02,
+          "certainty": 0.58,
+          "mos": 0.22514333956725455,
+          "buy_below": 115.28858036104502,
+          "below_buy": true
+        },
+        {
+          "ticker": "CTSH",
+          "name": "Cognizant Technology Solutions Corporation",
+          "sector": "Technology",
+          "score": 91,
+          "rating": "BUY",
+          "upside": 0.5802470488098652,
+          "price": 61.69,
+          "certainty": 0.91,
+          "mos": 0.12815659366495877,
+          "buy_below": 84.99203846222348,
+          "below_buy": true
+        },
+        {
+          "ticker": "ACN",
+          "name": "Accenture plc",
+          "sector": "Technology",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 0.4182940212889472,
+          "price": 185.01,
+          "certainty": 0.95,
+          "mos": 0.12,
+          "buy_below": 230.91074765322793,
+          "below_buy": true
+        },
+        {
+          "ticker": "SAM",
+          "name": "The Boston Beer Company, Inc.",
+          "sector": "Consumer Defensive",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.469651219620073,
+          "price": 186.6143,
+          "certainty": 0.87,
+          "mos": 0.13809772660108627,
+          "buy_below": 236.38353646196575,
+          "below_buy": true
+        },
+        {
+          "ticker": "TROW",
+          "name": "T. Rowe Price Group, Inc.",
+          "sector": "Financial Services",
+          "score": 86,
+          "rating": "BUY",
+          "upside": 0.3621420884490751,
+          "price": 110.88,
+          "certainty": 0.95,
+          "mos": 0.12,
+          "buy_below": 132.91019699516542,
+          "below_buy": true
+        },
+        {
+          "ticker": "AOS",
+          "name": "A. O. Smith Corporation",
+          "sector": "Industrials",
+          "score": 83,
+          "rating": "BUY",
+          "upside": 0.23560094920357863,
+          "price": 62.28,
+          "certainty": 0.86,
+          "mos": 0.1414079545501885,
+          "buy_below": 66.07142867383281,
+          "below_buy": true
+        }
+      ]
+    }
+  ]
 }

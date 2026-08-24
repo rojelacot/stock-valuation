@@ -71,6 +71,8 @@ def _analyze(sym, assumptions, deep=False):
         "iv_high": val.get("high"),
         "buy_below": val.get("buy_below"),
         "upside": val.get("upside_mid"),
+        "certainty": (m.get("margin_of_safety_scaling") or {}).get("certainty"),
+        "mos": (m.get("margin_of_safety_scaling") or {}).get("effective"),
         "heavy_capex": m.get("earnings_quality", {}).get("heavy_capex"),
         "suspect": val.get("suspect", False),
         "method": val.get("method"),

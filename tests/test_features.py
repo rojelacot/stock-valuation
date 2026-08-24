@@ -622,6 +622,21 @@ cb = divc.assess(dvstmt({y: -40 for y in DY}, {y: 100 for y in DY}, bb={y: -80 f
 ok(cb["level"] == "comfortable" and cb["positive"] and cb["reasons"],
    "dividend: comfortable keeps its ✓ alongside a buyback note")
 
+# history: new-thesis enrichment — _winner carries certainty/mos/buy_below and
+# derives below_buy from that week's own price vs the buy-below.
+import history as _hist  # noqa: E402
+w_below = _hist._winner({"ticker": "X", "price": 90, "buy_below": 100,
+                         "certainty": 0.9, "mos": 0.12})
+ok(w_below["below_buy"] is True and w_below["certainty"] == 0.9 and w_below["mos"] == 0.12,
+   "history: winner below buy-below flagged in-zone with certainty/mos carried")
+w_above = _hist._winner({"ticker": "Y", "price": 120, "buy_below": 100})
+ok(w_above["below_buy"] is False, "history: winner above buy-below not in-zone")
+# falls back to nested margin_of_safety_scaling when flat fields absent
+w_nest = _hist._winner({"ticker": "Z", "price": 50, "buy_below": 60,
+                        "margin_of_safety_scaling": {"certainty": 0.8, "effective": 0.15}})
+ok(w_nest["certainty"] == 0.8 and w_nest["mos"] == 0.15,
+   "history: winner reads certainty/mos from margin_of_safety_scaling fallback")
+
 # ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
