@@ -601,13 +601,14 @@ def compute_metrics(stock: dict[str, Any],
     val_base_cf = earnings_base if valuation.get("is_financial") else base_fcf
     base_growth = (dcf_owner if valuation.get("is_financial") else dcf) \
         .get("assumptions", {}).get("stage1_growth", 0.05)
-    # Earnings-decline bear: only when the company earns ABOVE its through-cycle
-    # net margin (a cyclical peak the growth-only bear can't capture). The haircut
-    # rebases proportionally to that average margin — a mild premium cuts little, a
-    # steep one cuts more (capped at 50%). A company at or below its normal margin
-    # has no peak to revert, so the scenario is omitted rather than forced.
+    # Earnings-decline bear: only when the tool has flagged a possible cyclical
+    # peak (elevated margin or ROE vs the company's own history) AND current margins
+    # actually sit above the through-cycle average — so the row appears exactly when
+    # the PEAK badge does, and never on a stable name whose margin merely wobbled a
+    # point (e.g. WMT). The haircut rebases proportionally to the average margin: a
+    # mild premium cuts little, a steep one cuts more (capped at 50%).
     _nm_l, _nm_a = net_margin.get("latest"), net_margin.get("avg")
-    if _nm_l and _nm_a and _nm_a > 0 and _nm_l > _nm_a * 1.05:
+    if cyclical.get("peak") and _nm_l and _nm_a and _nm_a > 0 and _nm_l > _nm_a:
         _haircut = max(_nm_a / _nm_l, 0.50)
         _dec_note = (f"earnings rebased to the {_nm_a*100:.0f}% through-cycle net "
                      f"margin (now {_nm_l*100:.0f}%)")

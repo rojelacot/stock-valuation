@@ -677,6 +677,29 @@ ok(all((r["fair_value"] is None or r["fair_value"] >= 0) for r in _rows),
    "scenario: bear/base/bull fair values are never negative")
 ok(any(r.get("wiped_out") for r in _rows),
    "scenario: a wiped-out bear/base/bull row is flagged")
+# The earnings-decline row is coupled to the cyclical-peak flag: a company whose
+# latest margin towers over its own history gets it; a stable-margin one doesn't.
+def _mk_peak_metrics(ni_last):
+    _y = [2019, 2020, 2021, 2022, 2023, 2024]
+    _st = {k: {} for k in STATEMENT_KEYS}
+    _st.update({"revenue": {str(y): 1000e6 for y in _y},
+                "net_income": {**{str(y): 100e6 for y in _y[:-1]}, "2024": ni_last},
+                "total_equity": {str(y): 1000e6 for y in _y},
+                "cash": {str(y): 500e6 for y in _y},
+                "operating_cashflow": {**{str(y): 120e6 for y in _y[:-1]}, "2024": ni_last * 1.2},
+                "capex": {str(y): -20e6 for y in _y}})
+    _inf = {"name": "P", "currency": "USD", "financial_currency": "USD",
+            "currency_converted": False, "currency_unresolved": False, "fx_rate": 1.0,
+            "shares_outstanding": 1_000_000.0, "current_price": 100.0,
+            "total_debt": 0.0, "total_cash": 500e6}
+    return compute_metrics({"ticker": "P", "error": None, "info": _inf,
+                            "statements": _st, "price_history": []}, resolve_assumptions())
+_peaked = _mk_peak_metrics(250e6)   # latest ~25% margin vs ~10% history -> peak
+_stable = _mk_peak_metrics(100e6)   # flat ~10% margin -> not a peak
+ok(_peaked["cyclical_peak"]["peak"] and _peaked["scenarios"]["earnings_decline"] is not None,
+   "scenario: a cyclical-peak company gets an earnings-decline row")
+ok(not _stable["cyclical_peak"]["peak"] and _stable["scenarios"]["earnings_decline"] is None,
+   "scenario: a stable-margin company gets no earnings-decline row")
 
 # net-cash reconciliation: the card (balance) and the DCF (info) must agree on
 # net cash — take the MORE COMPLETE debt (larger of EDGAR statements vs Yahoo
