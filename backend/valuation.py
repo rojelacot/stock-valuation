@@ -601,16 +601,18 @@ def compute_metrics(stock: dict[str, Any],
     val_base_cf = earnings_base if valuation.get("is_financial") else base_fcf
     base_growth = (dcf_owner if valuation.get("is_financial") else dcf) \
         .get("assumptions", {}).get("stage1_growth", 0.05)
-    # Earnings-decline bear: rebase to through-cycle earnings. Deeper haircut when
-    # margins sit above their own history (a cyclical peak — the DCF's growth-only
-    # bear can't capture "these margins don't last"); a 20% floor stress otherwise.
+    # Earnings-decline bear: only when the company earns ABOVE its through-cycle
+    # net margin (a cyclical peak the growth-only bear can't capture). The haircut
+    # rebases proportionally to that average margin — a mild premium cuts little, a
+    # steep one cuts more (capped at 50%). A company at or below its normal margin
+    # has no peak to revert, so the scenario is omitted rather than forced.
     _nm_l, _nm_a = net_margin.get("latest"), net_margin.get("avg")
-    if _nm_l and _nm_a and _nm_l > _nm_a > 0:
-        _haircut = max(min(_nm_a / _nm_l, 0.80), 0.50)
+    if _nm_l and _nm_a and _nm_a > 0 and _nm_l > _nm_a * 1.05:
+        _haircut = max(_nm_a / _nm_l, 0.50)
         _dec_note = (f"earnings rebased to the {_nm_a*100:.0f}% through-cycle net "
                      f"margin (now {_nm_l*100:.0f}%)")
     else:
-        _haircut, _dec_note = 0.80, "a 20% cyclical earnings stress"
+        _haircut, _dec_note = None, None
     scenarios = scenario_values(val_base_cf, info, base_growth, eff_discount,
                                 A["terminal_growth"], A["projection_years"],
                                 A["margin_of_safety"],
@@ -992,19 +994,22 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
                     base_growth: float, discount_rate: float, terminal_growth: float,
                     years: int, margin_of_safety: float,
                     add_net_cash: bool = True,
-                    decline_haircut: float = 0.80,
+                    decline_haircut: Optional[float] = None,
                     decline_note: Optional[str] = None) -> dict[str, Any]:
     """Bear / base / bull fair values by flexing growth, discount and terminal
-    (checklist #14, #17), plus an *earnings-decline* bear.
+    (checklist #14, #17), plus an optional *earnings-decline* bear.
 
     The bear/base/bull cases only flex the growth RATE — they can't let earnings
     actually fall, because the DCF floors stage-1 growth at zero. That understates
-    downside for a company earning above its through-cycle norm (a cyclical peak).
-    The earnings-decline case rebases cash flow DOWN by `decline_haircut` (e.g. to
-    normalized margins), lets it grow only modestly off that lower base, and adds
-    +1% to the discount rate — the "what if this isn't the real earnings power?"
-    scenario. `decline_note` explains the haircut (peak-margin reversion vs a
-    generic cyclical stress)."""
+    downside for a company earning ABOVE its through-cycle norm (a cyclical peak),
+    where the real risk is "these margins don't last." The earnings-decline case
+    rebases cash flow DOWN by `decline_haircut` (to normalized margins), lets it
+    grow only modestly off that lower base, and adds +1% to the discount rate.
+
+    It is only meaningful when earnings are above normal, so the CALLER decides:
+    pass a `decline_haircut` (< 1.0) to include it, or leave it None to omit the
+    row entirely (a company at or below its through-cycle margin has no peak to
+    revert, and forcing a decline there is misleading)."""
     price = info.get("current_price")
 
     def run(gmult, ddelta, tdelta):
@@ -1019,8 +1024,8 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
         return {"fair_value": iv, "upside": ((iv - price) / price) if (iv and price) else None}
 
     def run_decline(haircut):
-        if not base_cf or base_cf <= 0:
-            return {"fair_value": None, "upside": None, "haircut": haircut, "note": decline_note}
+        if not haircut or not base_cf or base_cf <= 0:
+            return None
         d = discounted_cash_flow(
             base_cf * haircut, info, None, None,
             discount_rate=min(max(discount_rate + 0.01, 0.05), 0.25),
@@ -1030,8 +1035,14 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
             growth_estimate=max(terminal_growth, 0.02),
             max_stage1_growth=0.25, add_net_cash=add_net_cash)
         iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
-        return {"fair_value": iv, "upside": ((iv - price) / price) if (iv and price) else None,
-                "haircut": haircut, "note": decline_note}
+        note = decline_note
+        # A stressed equity value below zero means net debt swamps the shrunken
+        # enterprise value — floor it at zero rather than show a negative price.
+        if iv is not None and iv < 0:
+            iv = 0.0
+            note = (decline_note or "") + " — equity value is wiped out (net debt exceeds the stressed enterprise value)"
+        return {"fair_value": iv, "upside": ((iv - price) / price) if (iv is not None and price) else None,
+                "haircut": haircut, "note": note}
 
     return {
         "bear": run(0.4, +0.02, -0.01),

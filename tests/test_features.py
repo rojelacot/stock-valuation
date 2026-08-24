@@ -655,6 +655,21 @@ _sc_mild = _val.scenario_values(base_cf=10_000_000.0, info=_info, base_growth=0.
                                 margin_of_safety=0.25, decline_haircut=0.80)
 ok(_sc["earnings_decline"]["fair_value"] < _sc_mild["earnings_decline"]["fair_value"],
    "scenario: a deeper haircut yields a lower earnings-decline fair value")
+# No haircut (company not above its through-cycle margin) -> no decline row at all.
+_sc_none = _val.scenario_values(base_cf=10_000_000.0, info=_info, base_growth=0.10,
+                                discount_rate=0.09, terminal_growth=0.025, years=10,
+                                margin_of_safety=0.25, decline_haircut=None)
+ok(_sc_none["earnings_decline"] is None,
+   "scenario: earnings-decline omitted when no haircut is supplied")
+# Heavy net debt -> stressed equity below zero is floored at 0, not shown negative.
+_info_debt = {**_info, "total_cash": 0.0, "total_debt": 500_000_000.0}
+_sc_wipe = _val.scenario_values(base_cf=10_000_000.0, info=_info_debt, base_growth=0.10,
+                                discount_rate=0.09, terminal_growth=0.025, years=10,
+                                margin_of_safety=0.25, decline_haircut=0.5,
+                                decline_note="rebased")
+ok(_sc_wipe["earnings_decline"]["fair_value"] == 0.0
+   and "wiped out" in _sc_wipe["earnings_decline"]["note"],
+   "scenario: negative stressed equity is floored at zero with a wipeout note")
 
 # net-cash reconciliation: the card (balance) and the DCF (info) must agree on
 # net cash — take the MORE COMPLETE debt (larger of EDGAR statements vs Yahoo
