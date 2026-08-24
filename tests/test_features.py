@@ -553,6 +553,33 @@ ok("query2.finance.yahoo.com" in
    "query1 URL maps to the query2 mirror")
 
 # ---------------------------------------------------------------------------
+# 7g) certainty score -> certainty-scaled margin of safety
+# ---------------------------------------------------------------------------
+print("certainty-scaled margin of safety:")
+from valuation import certainty_score  # noqa: E402
+
+fortress_c = certainty_score(stability=0.95, returns={"roic_avg": 0.25},
+                             balance={"net_cash": 5e10, "debt_to_equity": 0.2, "interest_coverage": 40},
+                             years=19)
+fragile_c = certainty_score(stability=0.2, returns={"roic_avg": 0.03},
+                            balance={"net_cash": -1e9, "debt_to_equity": 3.0, "interest_coverage": 1.2},
+                            years=5, debt_estimated=True)
+ok(fortress_c > 0.8, f"fortress compounder -> high certainty ({fortress_c:.2f})")
+ok(fragile_c < 0.4, f"fragile levered name -> low certainty ({fragile_c:.2f})")
+ok(fortress_c > fragile_c, "certainty separates fortress from fragile")
+
+# The scaling maps certainty -> effective MoS (base 0.25): high certainty tightens,
+# low widens. (mirrors compute_metrics: base + (0.5 - certainty)*0.30, clamped)
+def _mos(base, c): return min(max(base + (0.5 - c) * 0.30, 0.12), 0.45)
+ok(_mos(0.25, fortress_c) < 0.18, "fortress -> tighter required discount (<18%)")
+ok(_mos(0.25, fragile_c) > 0.32, "fragile -> deeper required discount (>32%)")
+
+# Data-reliability haircut: same fundamentals, but estimated debt lowers certainty.
+clean = certainty_score(0.8, {"roic_avg": 0.18}, {"net_cash": 1e9}, 15)
+shaky = certainty_score(0.8, {"roic_avg": 0.18}, {"net_cash": 1e9}, 15, debt_estimated=True)
+ok(shaky < clean, "estimated-debt haircut lowers certainty")
+
+# ---------------------------------------------------------------------------
 # 8) Regressions for the code-review findings
 # ---------------------------------------------------------------------------
 print("review-fix regressions:")

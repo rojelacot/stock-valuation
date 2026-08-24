@@ -155,7 +155,12 @@ async function loadGuide() {
         ${chip("All US-listed", (un.all_us_listed || "—") + " names")}
       </div>
       <div class="text-sm font-medium mb-2">Scoring pillars (weights, out of 100)</div>
-      <div class="grid sm:grid-cols-2 gap-2">${pills || '<span class="text-muted text-xs">n/a</span>'}</div>
+      <div class="grid sm:grid-cols-2 gap-2 mb-5">${pills || '<span class="text-muted text-xs">n/a</span>'}</div>
+      <div class="text-sm font-medium mb-1">Decision thresholds — the parameters that turn analysis into a verdict</div>
+      <p class="text-[11px] text-muted mb-2">Read live from the code. It's DCF- and score-driven, so there's no fixed "P/E 10–15 = buy" rule; these are the actual bars.</p>
+      <div class="divide-y divide-line/50">
+        ${(live.decision_thresholds || []).map(t => `<div class="flex flex-col sm:flex-row sm:justify-between gap-0.5 sm:gap-4 py-1.5"><span class="text-xs font-medium shrink-0 sm:w-56">${t.name}</span><span class="text-xs text-muted sm:text-right">${t.value}</span></div>`).join("")}
+      </div>
     </section>`;
   el.innerHTML = "";
   const wrap = document.createElement("div");
@@ -417,6 +422,7 @@ function dcfSection(d, cur) {
         <div class="bg-ink/40 rounded-lg p-2"><div class="text-muted">Years</div><div>${a.years}</div></div>
       </div>
       ${(d.metrics.risk_premium && Math.abs(d.metrics.risk_premium.premium) >= 0.001) ? `<p class="text-[11px] text-muted mt-2">Discount rate is risk-adjusted per stock by fundamental risk (not beta): base ${fmtPct((d.metrics.assumptions_used || {}).discount_rate, 0)} ${d.metrics.risk_premium.premium >= 0 ? "+" : "−"} ${fmtPct(Math.abs(d.metrics.risk_premium.premium), 1)} (${d.metrics.risk_premium.reasons.join(", ")}) = ${fmtPct(d.metrics.effective_discount_rate, 1)}.</p>` : ""}
+      ${(() => { const m = d.metrics.margin_of_safety_scaling; if (!m || Math.abs(m.effective - m.base) < 0.005) return ""; const dir = m.effective < m.base ? "tightened" : "widened"; return `<p class="text-[11px] text-muted mt-1">Margin of safety ${dir} to ${fmtPct(m.effective, 0)} (from ${fmtPct(m.base, 0)}) — certainty ${m.certainty}${m.reasons && m.reasons.length ? " (" + m.reasons.join(", ") + ")" : ""}. Higher-certainty businesses need less discount; shakier ones need more.</p>`; })()}
       ${(dcf.ok && dcf.terminal_pct != null) ? `<p class="text-[11px] ${dcf.terminal_pct >= 0.7 ? "text-warn" : "text-muted"} mt-1"><span class="font-medium">${fmtPct(dcf.terminal_pct, 0)}</span> of the estimate comes from the terminal value${dcf.terminal_pct >= 0.7 ? " — most of the value sits beyond the projection window, so it's highly sensitive to the terminal-growth and discount-rate assumptions." : " (the rest from the explicitly projected years)."}</p>` : ""}
     </details>
   </section>`);

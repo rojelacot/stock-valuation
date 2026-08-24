@@ -113,22 +113,44 @@ CAPABILITIES = [
 ]
 
 THESIS = [
-    {"title": "Hold 10–15 years",
-     "items": ["Durability and returns on capital matter far more than this "
-               "quarter. We want businesses you could own for a decade without "
-               "watching the ticker."]},
-    {"title": "Beat inflation — not an index",
-     "items": ["The benchmark is inflation (~3%), not the S&P. The goal is a real "
-               "return on a concentrated set of understandable, high-quality "
-               "businesses — deliberately NOT hugging an index."]},
-    {"title": "Quality at a fair price",
-     "items": ["A wonderful business at a fair price beats a fair business at a "
-               "wonderful price. High returns on capital, a durable moat, a strong "
-               "balance sheet — bought with a margin of safety."]},
-    {"title": "Margin of safety",
-     "items": ["Prefer paying ≤ 75% of estimated intrinsic value, so the thesis "
-               "can be somewhat wrong and still work out. Price is what you pay; "
-               "value is what you get."]},
+    {"title": "Don't lose money permanently",
+     "items": ["Avoiding a permanent loss of capital is the first job — a 50% loss "
+               "needs a 100% gain to recover, so the disasters you dodge matter more "
+               "than the winners you catch. Distress, cooked books, a refinancing "
+               "wall, deteriorating leverage, an uncovered dividend, or a goodwill-"
+               "impairment setup disqualify a name however cheap it looks."]},
+    {"title": "Stay in your circle of competence",
+     "items": ["Only own businesses you understand well enough to name what would "
+               "break the thesis. If you can't state the two or three things that "
+               "would prove you wrong, you don't understand it well enough to own it."]},
+    {"title": "Own quality — including how it's run",
+     "items": ["High returns on capital, a durable moat, and a strong balance sheet "
+               "— plus management that allocates capital sensibly (buys back stock "
+               "cheaply, avoids empire-building M&A). Great economics run by poor "
+               "allocators still destroy value."]},
+    {"title": "A margin of safety that scales with certainty",
+     "items": ["Price is what you pay; value is what you get. Demand a deep discount "
+               "(pay ≤ ~75% of intrinsic value) for cyclical, levered or uncertain "
+               "names; accept closer to fair value only for the most predictable, "
+               "fortress-quality compounders — for them the certainty itself is the "
+               "safety. The required discount is set per stock accordingly."]},
+    {"title": "Beat inflation at minimum — aim to beat the index",
+     "items": ["Beating inflation (~3%) is the floor a real return must clear; the "
+               "goal is to outperform a low-cost index fund — the alternative you "
+               "could hold for free. If you can't reasonably expect to beat the "
+               "index, own the index. Run a concentrated, hand-picked book only "
+               "where you have real reason to clear that higher bar, and size each "
+               "position to conviction × certainty."]},
+    {"title": "Hold while the thesis holds; sell when it breaks",
+     "items": ["Buy to own for a decade, so durability outweighs this quarter — but "
+               "'hold' is conditional, not a vow. Monitor the thesis-breakers, act "
+               "when the moat erodes or the facts change, and remember that holding "
+               "cash and waiting for a fat pitch is a legitimate position."]},
+    {"title": "Judge decisions by process, not outcome",
+     "items": ["Track your calls, actively seek the evidence that would make you "
+               "wrong, and update when it appears. A good outcome from a bad process "
+               "is luck; the aim is a sound process, honestly measured — including "
+               "admitting when a check or the score has no real edge."]},
 ]
 
 GUARDRAILS = [
@@ -322,5 +344,41 @@ def build() -> dict[str, Any]:
                 "altman_safe": "> 2.99", "altman_distress": "< 1.81",
                 "beneish_manipulation_flag": "> -1.78",
             },
+            "decision_thresholds": _decision_thresholds(scoring, valuation, A),
         },
     }
+
+
+def _decision_thresholds(scoring, valuation, A) -> list[dict[str, str]]:
+    """The concrete parameter values that turn analysis into a verdict — read live
+    from the code so this list can't drift from what the app actually does."""
+    import leverage_trend as lt, refinancing as rf, working_capital as wc
+    import dividend_coverage as dc, intangibles as ig
+
+    def pct(x): return f"{x*100:.0f}%"
+    rows = [
+        ("Rating: BUY", f"score ≥ {scoring.BUY_THRESHOLD}"),
+        ("Rating: HOLD / WATCH", f"score {scoring.HOLD_THRESHOLD}–{scoring.BUY_THRESHOLD - 1}"),
+        ("Rating: AVOID", f"score < {scoring.HOLD_THRESHOLD}"),
+        ("Overvaluation override", "a would-be BUY trading > 30% above intrinsic value is cut to HOLD"),
+        ("Margin of safety (base)", f"pay ≤ {pct(1 - A['margin_of_safety'])} of intrinsic value "
+                                    f"({pct(A['margin_of_safety'])} discount)"),
+        ("Margin of safety (scaled)", "12% for fortress-certain names → 45% for the least certain — "
+                                      "set per stock by a certainty score"),
+        ("DCF discount rate", f"{pct(A['discount_rate'])} base, risk-adjusted 6–25% by fundamental risk"),
+        ("DCF terminal growth", pct(A['terminal_growth']) + " (≈ GDP + inflation)"),
+        ("DCF growth fade", f"excess growth decays ×{valuation.GROWTH_FADE}/yr toward terminal"),
+        ("Inflation hurdle", pct(A['inflation_hurdle']) + " minimum real return"),
+        ("Forensics", "Altman Z: safe > 2.99, distress < 1.81 · Beneish M: flag > −1.78"),
+        ("Leverage trend", f"Net Debt/EBITDA elevated ≥ {lt.LEV_ELEVATED:.0f}×, stressed ≥ "
+                           f"{lt.LEV_STRESS:.0f}×; coverage floor {lt.COV_FLOOR:.1f}×"),
+        ("Refinancing stress", f"near-term = due ≤ {rf.NEAR_TERM_YEARS}yr; re-tested at "
+                              f"+{rf.STRESS_BPS*10000:.0f}bps"),
+        ("Working-capital build", f"receivables/inventory intensity ≥ {wc.RISE_ELEVATED:.2f}× "
+                                 "its recent norm = elevated"),
+        ("Dividend coverage", f"free cash flow ≥ {dc.COMFORTABLE:.1f}× dividends = comfortable, "
+                             f"< 1.0× = uncovered"),
+        ("Impairment / roll-up", f"goodwill+intangibles ≥ {ig.CONCENTRATED*100:.0f}% of assets AND "
+                                "negative tangible book = high"),
+    ]
+    return [{"name": n, "value": v} for n, v in rows]

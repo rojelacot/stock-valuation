@@ -149,6 +149,38 @@ def _earnings_stability(net_income: list, revenue: list) -> Optional[float]:
     return max(0.0, min(1.0, score))
 
 
+def certainty_score(stability: Optional[float], returns: Optional[dict],
+                    balance: Optional[dict], years: Optional[int],
+                    data_low: bool = False, debt_estimated: bool = False) -> float:
+    """0 (unpredictable) .. 1 (fortress-certain): how knowable a business's future
+    is, from earnings steadiness, returns on capital, balance-sheet strength, and
+    length of record. Drives the certainty-scaled margin of safety (thesis
+    principle 4) — the more certain, the less discount we need to demand."""
+    returns, balance = returns or {}, balance or {}
+    parts: list[float] = []
+    if stability is not None:
+        parts.append(stability)
+    roic = returns.get("roic_avg") or returns.get("roic_latest")
+    if roic is not None:
+        parts.append(min(max((roic - 0.04) / 0.16, 0.0), 1.0))          # 4%→0, 20%→1
+    de, nc, cov = balance.get("debt_to_equity"), balance.get("net_cash"), balance.get("interest_coverage")
+    if nc is not None and nc > 0:
+        bs = 0.9
+    elif de is not None:
+        bs = min(max(1.0 - de / 3.0, 0.0), 1.0)                          # D/E 0→1, 3→0
+    else:
+        bs = 0.5
+    if cov is not None and cov < 3:
+        bs = min(bs, 0.4)
+    parts.append(bs)
+    if years is not None:
+        parts.append(min(max((years - 4) / 8.0, 0.0), 1.0))             # 4yr→0, 12yr→1
+    c = sum(parts) / len(parts) if parts else 0.5
+    if data_low or debt_estimated:
+        c *= 0.7                                                         # can't be certain on shaky data
+    return min(max(c, 0.0), 1.0)
+
+
 def risk_premium(info: dict[str, Any], returns: Optional[dict] = None,
                  balance: Optional[dict] = None,
                  stability: Optional[float] = None) -> dict[str, Any]:
@@ -379,6 +411,33 @@ def compute_metrics(stock: dict[str, Any],
     # Risk-adjusted discount rate, floored at 6% (a defensive name still can't be
     # discounted below a sane minimum) and capped at 25%.
     eff_discount = min(max(A["discount_rate"] + rp["premium"], 0.06), 0.25)
+
+    # Guardrail 4b: margin of safety scales with certainty (thesis principle 4).
+    # A fortress-certain compounder can be bought closer to fair value; a
+    # cyclical / levered / short-record name must be genuinely cheap. The user's
+    # setting anchors it; certainty tightens or widens the required discount.
+    base_mos = A["margin_of_safety"]
+    data_low = bool((stock.get("source_divergence") or {}).get("material"))
+    debt_est = bool(stock.get("debt_estimated"))
+    certainty = certainty_score(stability, returns, balance,
+                                growth.get("years_of_data"), data_low, debt_est)
+    effective_mos = min(max(base_mos + (0.5 - certainty) * 0.30, 0.12), 0.45)
+    A["margin_of_safety"] = effective_mos                 # all downstream calcs use it
+    mos_reasons: list[str] = []
+    roic_c = returns.get("roic_avg") or returns.get("roic_latest")
+    if effective_mos < base_mos - 0.005:                 # tightened — high certainty
+        if stability is not None and stability > 0.7: mos_reasons.append("steady earnings")
+        if balance.get("net_cash") and balance["net_cash"] > 0: mos_reasons.append("net cash")
+        if roic_c is not None and roic_c > 0.15: mos_reasons.append("high returns on capital")
+        if (growth.get("years_of_data") or 0) >= 12: mos_reasons.append("long track record")
+    elif effective_mos > base_mos + 0.005:               # widened — low certainty
+        if stability is not None and stability < 0.4: mos_reasons.append("erratic earnings")
+        de_c = balance.get("debt_to_equity")
+        if de_c is not None and de_c > 1.5: mos_reasons.append("elevated leverage")
+        cov_c = balance.get("interest_coverage")
+        if cov_c is not None and cov_c < 3: mos_reasons.append("thin interest coverage")
+        if (growth.get("years_of_data") or 0) < 6: mos_reasons.append("short record")
+        if debt_est: mos_reasons.append("debt figures estimated")
 
     # ---- DCF #1: conservative, on free cash flow (penalizes all capex) ----
     dcf = discounted_cash_flow(
@@ -615,6 +674,10 @@ def compute_metrics(stock: dict[str, Any],
         # Confidence gate: CAGRs, medians and the DCF need a few years to be
         # stable. Thin history (foreign filers on Yahoo, recent IPOs) is flagged
         # so a sparse-data score isn't over-trusted.
+        "margin_of_safety_scaling": {
+            "base": base_mos, "effective": effective_mos,
+            "certainty": round(certainty, 2), "reasons": mos_reasons,
+        },
         "data_confidence": {
             "years": growth.get("years_of_data"),
             "low": ((growth.get("years_of_data") or 0) < 6
