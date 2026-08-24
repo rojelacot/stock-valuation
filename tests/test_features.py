@@ -637,6 +637,25 @@ w_nest = _hist._winner({"ticker": "Z", "price": 50, "buy_below": 60,
 ok(w_nest["certainty"] == 0.8 and w_nest["mos"] == 0.15,
    "history: winner reads certainty/mos from margin_of_safety_scaling fallback")
 
+# scenario_values: the earnings-decline bear rebases cash flow down and must
+# land below the base case; a deeper haircut must produce a lower fair value.
+import valuation as _val  # noqa: E402
+_info = {"current_price": 100.0, "shares_outstanding": 1_000_000.0,
+         "total_cash": 0.0, "total_debt": 0.0}
+_sc = _val.scenario_values(base_cf=10_000_000.0, info=_info, base_growth=0.10,
+                           discount_rate=0.09, terminal_growth=0.025, years=10,
+                           margin_of_safety=0.25, decline_haircut=0.65,
+                           decline_note="rebased to through-cycle margin")
+ok("earnings_decline" in _sc and _sc["earnings_decline"]["fair_value"] is not None,
+   "scenario: earnings-decline case is produced")
+ok(_sc["earnings_decline"]["fair_value"] < _sc["base"]["fair_value"],
+   "scenario: earnings-decline fair value sits below the base case")
+_sc_mild = _val.scenario_values(base_cf=10_000_000.0, info=_info, base_growth=0.10,
+                                discount_rate=0.09, terminal_growth=0.025, years=10,
+                                margin_of_safety=0.25, decline_haircut=0.80)
+ok(_sc["earnings_decline"]["fair_value"] < _sc_mild["earnings_decline"]["fair_value"],
+   "scenario: a deeper haircut yields a lower earnings-decline fair value")
+
 # ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")

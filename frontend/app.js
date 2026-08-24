@@ -441,6 +441,18 @@ function scenariosSection(d, cur) {
       <td class="text-right px-2 text-${upc}">${up == null ? "—" : signPct(up)}</td></tr>`;
   };
   const impl = r && r.ok ? r.implied_growth : null;
+  // Earnings-decline bear: lets earnings actually fall (rebased to through-cycle
+  // margins), unlike bear/base/bull which only flex the growth rate.
+  const dec = s.earnings_decline;
+  const declineRow = (sc) => {
+    if (!sc || sc.fair_value == null) return "";
+    const up = sc.upside, upc = up == null ? "muted" : up >= 0 ? "good" : "bad";
+    return `<tr class="border-b border-line/40 text-sm bg-warn/5">
+      <td class="py-2 font-medium text-bad align-top">⚠ Earnings decline
+        <div class="text-[10px] text-muted font-normal leading-tight max-w-[190px]">${sc.note || ""}</div></td>
+      <td class="text-right px-2 align-top">${price(sc.fair_value, cur)}</td>
+      <td class="text-right px-2 align-top text-${upc}">${up == null ? "—" : signPct(up)}</td></tr>`;
+  };
   return h(`
   <section class="card rounded-2xl p-6">
     <h3 class="font-semibold mb-4">Scenarios &amp; reverse DCF</h3>
@@ -452,9 +464,10 @@ function scenariosSection(d, cur) {
           ${row("Bear", s.bear, "bad")}
           ${row("Base", s.base, "brand")}
           ${row("Bull", s.bull, "good")}
+          ${declineRow(dec)}
           <tr class="text-sm"><td class="py-2 text-muted">Current price</td><td class="text-right px-2 font-semibold">${price(px, cur)}</td><td></td></tr>
         </table>
-        <p class="text-[11px] text-muted mt-2">Bear/bull flex growth, discount rate &amp; terminal growth around the base case.</p>
+        <p class="text-[11px] text-muted mt-2">Bear/bull flex growth, discount rate &amp; terminal growth around the base case. <b>Earnings decline</b> is the sterner test — it rebases cash flow down (to through-cycle margins) and lets it fall, not just grow slower.</p>
       </div>
       ${r && r.method === "book-value" ? `
       <div>

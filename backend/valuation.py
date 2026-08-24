@@ -582,9 +582,20 @@ def compute_metrics(stock: dict[str, Any],
     val_base_cf = earnings_base if valuation.get("is_financial") else base_fcf
     base_growth = (dcf_owner if valuation.get("is_financial") else dcf) \
         .get("assumptions", {}).get("stage1_growth", 0.05)
+    # Earnings-decline bear: rebase to through-cycle earnings. Deeper haircut when
+    # margins sit above their own history (a cyclical peak — the DCF's growth-only
+    # bear can't capture "these margins don't last"); a 20% floor stress otherwise.
+    _nm_l, _nm_a = net_margin.get("latest"), net_margin.get("avg")
+    if _nm_l and _nm_a and _nm_l > _nm_a > 0:
+        _haircut = max(min(_nm_a / _nm_l, 0.80), 0.50)
+        _dec_note = (f"earnings rebased to the {_nm_a*100:.0f}% through-cycle net "
+                     f"margin (now {_nm_l*100:.0f}%)")
+    else:
+        _haircut, _dec_note = 0.80, "a 20% cyclical earnings stress"
     scenarios = scenario_values(val_base_cf, info, base_growth, eff_discount,
                                 A["terminal_growth"], A["projection_years"],
-                                A["margin_of_safety"])
+                                A["margin_of_safety"],
+                                decline_haircut=_haircut, decline_note=_dec_note)
     reverse = reverse_dcf(val_base_cf, info, eff_discount, A["terminal_growth"],
                           A["projection_years"])
     sensitivity = sensitivity_grid(val_base_cf, info, base_growth, eff_discount,
@@ -596,7 +607,8 @@ def compute_metrics(stock: dict[str, Any],
     if reit_valuation:
         _ffo, _g = reit_valuation["ffo_total"], (reit_valuation["ffo_growth"] or 0.04)
         scenarios = scenario_values(_ffo, info, _g, eff_discount, A["terminal_growth"],
-                                    A["projection_years"], A["margin_of_safety"], add_net_cash=False)
+                                    A["projection_years"], A["margin_of_safety"], add_net_cash=False,
+                                    decline_haircut=0.80, decline_note="a 20% FFO stress (occupancy/rent downturn)")
         reverse = reverse_dcf(_ffo, info, eff_discount, A["terminal_growth"],
                               A["projection_years"], add_net_cash=False)
         sensitivity = sensitivity_grid(_ffo, info, _g, eff_discount, A["terminal_growth"],
@@ -960,9 +972,20 @@ def reverse_dcf(base_cf: Optional[float], info: dict[str, Any],
 def scenario_values(base_cf: Optional[float], info: dict[str, Any],
                     base_growth: float, discount_rate: float, terminal_growth: float,
                     years: int, margin_of_safety: float,
-                    add_net_cash: bool = True) -> dict[str, Any]:
+                    add_net_cash: bool = True,
+                    decline_haircut: float = 0.80,
+                    decline_note: Optional[str] = None) -> dict[str, Any]:
     """Bear / base / bull fair values by flexing growth, discount and terminal
-    (checklist #14, #17)."""
+    (checklist #14, #17), plus an *earnings-decline* bear.
+
+    The bear/base/bull cases only flex the growth RATE — they can't let earnings
+    actually fall, because the DCF floors stage-1 growth at zero. That understates
+    downside for a company earning above its through-cycle norm (a cyclical peak).
+    The earnings-decline case rebases cash flow DOWN by `decline_haircut` (e.g. to
+    normalized margins), lets it grow only modestly off that lower base, and adds
+    +1% to the discount rate — the "what if this isn't the real earnings power?"
+    scenario. `decline_note` explains the haircut (peak-margin reversion vs a
+    generic cyclical stress)."""
     price = info.get("current_price")
 
     def run(gmult, ddelta, tdelta):
@@ -976,10 +999,26 @@ def scenario_values(base_cf: Optional[float], info: dict[str, Any],
         iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
         return {"fair_value": iv, "upside": ((iv - price) / price) if (iv and price) else None}
 
+    def run_decline(haircut):
+        if not base_cf or base_cf <= 0:
+            return {"fair_value": None, "upside": None, "haircut": haircut, "note": decline_note}
+        d = discounted_cash_flow(
+            base_cf * haircut, info, None, None,
+            discount_rate=min(max(discount_rate + 0.01, 0.05), 0.25),
+            terminal_growth=max(min(terminal_growth - 0.005, 0.04), 0.0),
+            years=years, margin_of_safety=margin_of_safety,
+            # After the reset, earnings grow only modestly off the lower base.
+            growth_estimate=max(terminal_growth, 0.02),
+            max_stage1_growth=0.25, add_net_cash=add_net_cash)
+        iv = d.get("intrinsic_value_per_share") if d.get("ok") else None
+        return {"fair_value": iv, "upside": ((iv - price) / price) if (iv and price) else None,
+                "haircut": haircut, "note": decline_note}
+
     return {
         "bear": run(0.4, +0.02, -0.01),
         "base": run(1.0, 0.0, 0.0),
         "bull": run(1.6, -0.01, +0.005),
+        "earnings_decline": run_decline(decline_haircut),
         "current_price": price,
     }
 
