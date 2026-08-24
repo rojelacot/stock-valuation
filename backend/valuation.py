@@ -369,10 +369,29 @@ def compute_metrics(stock: dict[str, Any],
         "roic_avg": _avg(roic_vals),
     }
 
+    # ---- Reconcile debt & cash to ONE figure everything uses ----
+    # The card, the DCF (net cash added to equity value), due-diligence and
+    # refinancing all need "how much debt / cash". They used to read different
+    # sources — the card took EDGAR's total_debt (often financial debt only),
+    # the DCF took Yahoo's info.total_debt (which folds in operating-lease
+    # liabilities) — so a lease-heavy name (e.g. DECK) showed net cash on the
+    # card that the DCF didn't credit. Take the MORE COMPLETE debt so we never
+    # understate leverage (Yahoo catches leases EDGAR reports separately; EDGAR's
+    # hardening catches finance-arm debt Yahoo misses), then write it back to
+    # info so every downstream consumer agrees.
+    _edgar_debt, _yahoo_debt = _latest(st["total_debt"]), info.get("total_debt")
+    _debts = [d for d in (_edgar_debt, _yahoo_debt) if d is not None]
+    recon_debt = max(_debts) if _debts else None
+    recon_cash = _latest(st["cash"])
+    if recon_cash is None:
+        recon_cash = info.get("total_cash")
+    info["total_debt"] = recon_debt
+    info["total_cash"] = recon_cash
+
     # ---- Balance sheet health ----
-    latest_debt = _latest(st["total_debt"]) or info.get("total_debt")
+    latest_debt = recon_debt
     latest_equity = _latest(st["total_equity"])
-    latest_cash = _latest(st["cash"]) or info.get("total_cash")
+    latest_cash = recon_cash
     latest_op_income = _latest(st["operating_income"])
     latest_interest = _latest(st["interest_expense"])
     cur_assets = _latest(st["current_assets"])

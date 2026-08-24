@@ -656,6 +656,33 @@ _sc_mild = _val.scenario_values(base_cf=10_000_000.0, info=_info, base_growth=0.
 ok(_sc["earnings_decline"]["fair_value"] < _sc_mild["earnings_decline"]["fair_value"],
    "scenario: a deeper haircut yields a lower earnings-decline fair value")
 
+# net-cash reconciliation: the card (balance) and the DCF (info) must agree on
+# net cash — take the MORE COMPLETE debt (larger of EDGAR statements vs Yahoo
+# info), and write it back to info so downstream consumers match.
+_A = resolve_assumptions()
+def _mk(statements, info):
+    st = {k: {} for k in STATEMENT_KEYS}
+    st.update(statements)
+    inf = {"name": "T", "currency": "USD", "financial_currency": "USD",
+           "currency_converted": False, "currency_unresolved": False, "fx_rate": 1.0,
+           "shares_outstanding": 1_000_000.0, "current_price": 100.0}
+    inf.update(info)
+    return {"ticker": "T", "error": None, "info": inf, "statements": st, "price_history": []}
+
+_yrs = lambda s, vals: {str(s + i): v for i, v in enumerate(vals)}
+# EDGAR reports only $46M financial debt; Yahoo's $777M folds in leases.
+_stmts = {"revenue": _yrs(2019, [1000e6]*6), "net_income": _yrs(2019, [180e6]*6),
+          "total_equity": _yrs(2019, [2000e6]*6), "cash": _yrs(2019, [1900e6]*6),
+          "total_debt": _yrs(2019, [46e6]*6),
+          "operating_cashflow": _yrs(2019, [220e6]*6), "capex": _yrs(2019, [-30e6]*6)}
+_stock = _mk(_stmts, {"total_debt": 777e6, "total_cash": 1900e6})
+_m = compute_metrics(_stock, _A)
+_bal = _m["balance"]
+ok(_bal["total_debt"] == 777e6, "net-cash: reconciles to the more complete (larger) debt figure")
+_dcf_nc = (_stock["info"]["total_cash"] or 0) - (_stock["info"]["total_debt"] or 0)
+ok(abs(_bal["net_cash"] - _dcf_nc) < 1.0, "net-cash: card figure matches the DCF's net-cash basis")
+ok(_stock["info"]["total_debt"] == 777e6, "net-cash: info is written back so downstream consumers agree")
+
 # ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")

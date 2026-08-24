@@ -333,7 +333,10 @@ function metricsGrid(d, cur) {
       ${cell("Debt / Equity", fmtNum(b.debt_to_equity, 2))}
       ${cell("Interest cov.", b.interest_coverage != null ? fmtNum(b.interest_coverage, 1) + "×" : "—")}
       ${cell("Current ratio", fmtNum(b.current_ratio, 2))}
-      ${cell("Net cash", b.net_cash != null ? cur + fmtMoney(b.net_cash) : "—")}
+      ${b.net_cash == null
+        ? cell("Net cash", "—")
+        : cell(b.net_cash < 0 ? "Net debt" : "Net cash", cur + fmtMoney(Math.abs(b.net_cash)),
+               "cash minus all debt, incl. capitalised leases")}
     </div>
   </section>`);
 }
