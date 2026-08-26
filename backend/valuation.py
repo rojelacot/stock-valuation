@@ -128,6 +128,45 @@ def _avg(values: list[Optional[float]]) -> Optional[float]:
     return sum(nums) / len(nums) if nums else None
 
 
+# Transition band for the DCF <-> earnings-power handoff, expressed as the ratio
+# DCF_mid / EPV_mid. At or above HI it's pure DCF; at or below LO it's pure EPV;
+# in between the two are linearly blended. Centred on the old hard cliff (0.8) so
+# average behaviour is preserved while the discontinuity — which let a name whose
+# DCF wobbled across 0.8 jump between two fair values run-to-run — is removed.
+_HANDOFF_HI = 0.90
+_HANDOFF_LO = 0.70
+
+
+def _blend_valuation(dcf: dict, epv: dict, w_epv: float,
+                     price: Optional[float]) -> dict:
+    """Blend two valuation dicts by weight w_epv on the earnings-power estimate
+    (0 -> pure DCF, 1 -> pure EPV). Price-level fields are averaged and the
+    upside/spread fields recomputed so the result stays internally coherent; all
+    other fields (flags, method, is_financial) are inherited from the DCF base."""
+    out = dict(dcf)
+    for k in ("low", "high", "mid", "conservative_iv", "adjusted_iv", "buy_below"):
+        av, bv = dcf.get(k), epv.get(k)
+        if av is not None and bv is not None:
+            out[k] = av * (1 - w_epv) + bv * w_epv
+        elif bv is not None and av is None:
+            out[k] = bv
+    mid, lo, hi = out.get("mid"), out.get("low"), out.get("high")
+    if price and price > 0:
+        if mid is not None:
+            out["upside_mid"] = mid / price - 1
+        if lo is not None:
+            out["upside_low"] = lo / price - 1
+        if hi is not None:
+            out["upside_high"] = hi / price - 1
+    if lo is not None and hi is not None and mid:
+        out["spread"] = (hi - lo) / mid
+    out["method"] = ("earnings-power" if w_epv >= 1.0
+                     else "dcf-range" if w_epv <= 0.0
+                     else "blended")
+    out["blend_weight_epv"] = round(w_epv, 3)
+    return out
+
+
 def _normalized_base_fcf(fcf: list[tuple[int, float]],
                          ttm: Optional[float]) -> Optional[float]:
     """A stable base FCF for the DCF.
@@ -739,11 +778,24 @@ def compute_metrics(stock: dict[str, Any],
                     earnings_power_val = _epv
                     valuation = _epv
                 elif (not valuation.get("suspect") and valuation.get("mid")
-                        and valuation["mid"] < _epv["mid"] * 0.80):
-                    # Floor: step in only when a usable DCF sits materially BELOW the
-                    # earnings-power value (>20%) — that gap is the artifact.
-                    earnings_power_val = _epv
-                    valuation = _epv
+                        and valuation["mid"] > 0 and _epv.get("mid")
+                        and _epv["mid"] > 0):
+                    # Smooth DCF <-> earnings-power handoff. A cash-flow DCF and an
+                    # earnings-power multiple are two independent estimates that rarely
+                    # agree to the dollar. The old hard "use EPV when DCF < 0.8*EPV"
+                    # cliff meant a name whose DCF wobbled across that line jumped
+                    # discretely between the two fair values run-to-run (CTSH: $99 DCF
+                    # <-> $112 EPV, agreeing within 12%). Blend across a band instead:
+                    # pure DCF at ratio >= HI, pure EPV at ratio <= LO, linear between.
+                    # Where the models roughly agree their average is the more robust
+                    # estimate, and the recorded value stops flickering.
+                    _ratio = valuation["mid"] / _epv["mid"]
+                    if _ratio < _HANDOFF_HI:
+                        _w_epv = min(1.0, max(0.0,
+                                     (_HANDOFF_HI - _ratio) / (_HANDOFF_HI - _HANDOFF_LO)))
+                        _blended = _blend_valuation(valuation, _epv, _w_epv, price)
+                        earnings_power_val = _epv
+                        valuation = _blended
 
         # Low-multiple artifact guard (the strict-gate complement): a name the
         # earnings-power floor doesn't cover — a capital-intensive wide-moat below
