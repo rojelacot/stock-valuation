@@ -92,6 +92,32 @@ def cagr(series: list[tuple[int, float]]) -> Optional[float]:
     return (v1 / v0) ** (1 / years) - 1
 
 
+def loglin_growth(series: list[tuple[int, float]]) -> Optional[float]:
+    """Annualized growth from a least-squares fit of ln(value) vs year.
+
+    Unlike cagr() — which reads only the first and last points and so lurches
+    whenever a single endpoint wobbles or an early year is missing from a partial
+    data feed — this uses EVERY positive point, so the estimate is stable against
+    endpoint noise and truncated history. For a clean exponential it equals the
+    CAGR; on noisy real data it returns the best-fit trend. Needs >=4 positive
+    points to be worth trusting; falls back to cagr() below that.
+    """
+    pts = [(y, v) for y, v in series if v is not None and v > 0]
+    if len(pts) < 4:
+        return cagr(series)
+    import math
+    n = len(pts)
+    xs = [y for y, _ in pts]
+    ys = [math.log(v) for _, v in pts]
+    mx = sum(xs) / n
+    my = sum(ys) / n
+    var = sum((x - mx) ** 2 for x in xs)
+    if var <= 0:
+        return None
+    slope = sum((x - mx) * (yv - my) for x, yv in zip(xs, ys)) / var
+    return math.exp(slope) - 1
+
+
 def _latest(d: dict[str, Optional[float]]) -> Optional[float]:
     s = _series(d)
     return s[-1][1] if s else None
@@ -524,6 +550,18 @@ def compute_metrics(stock: dict[str, Any],
                                         growth["revenue_cagr"]) if g is not None]
     oe_growth = (sum(oe_growth_candidates) / len(oe_growth_candidates)
                  ) if oe_growth_candidates else None
+    # A truncation- and endpoint-robust twin of oe_growth, used ONLY to set the
+    # earnings-power justified multiple (below). The endpoint CAGRs above make the
+    # EPV multiple lurch when a data-feed edge serves a slightly different latest
+    # year or a partial history — a compounder flickered between two fair values
+    # run-to-run purely from that. The log-linear fit reads the whole trend, so the
+    # multiple stays put. The DCF keeps oe_growth (it drives a multi-stage fade the
+    # regression trend isn't meant to seed).
+    oe_growth_robust_candidates = [g for g in (loglin_growth(net_income),
+                                               loglin_growth(eps),
+                                               loglin_growth(revenue)) if g is not None]
+    oe_growth_robust = (sum(oe_growth_robust_candidates) / len(oe_growth_robust_candidates)
+                        ) if oe_growth_robust_candidates else oe_growth
     # Base: owner earnings normally; but for financials/REITs (guardrail 2) their
     # capex/D&A are meaningless, so value on normalized net income directly.
     base_ni = _normalized_base_fcf(net_income, None)
@@ -664,7 +702,7 @@ def compute_metrics(stock: dict[str, Any],
         # depressed margins mean-revert UP.
         _latest_ni = net_income[-1][1] if net_income else None
         _nm_l, _nm_a = net_margin.get("latest"), net_margin.get("avg")
-        _epv_growth = oe_growth
+        _epv_growth = oe_growth_robust
         # Fade vs trough: only a MEANINGFUL margin compression (>10% below the
         # through-cycle average) is a trough that mean-reverts up. Flat or slightly-
         # soft margins with declining earnings are a volume/demand fade (UPS: flat
@@ -679,7 +717,7 @@ def compute_metrics(stock: dict[str, Any],
             # peak, yet the 2020-COVID-trough base makes the long CAGR read +34%),
             # so cap the justified-multiple growth to the terminal rate — a fading
             # business gets a fading-business multiple, not a compounder's.
-            _epv_growth = min(oe_growth if oe_growth is not None else 0.0, A["terminal_growth"])
+            _epv_growth = min(oe_growth_robust if oe_growth_robust is not None else 0.0, A["terminal_growth"])
         _epv_eps = (_epv_ni / _epv_shares) if (_epv_ni and _epv_shares and _epv_ni > 0) else None
         # A proven high-ROE, stable, mature compounder is a low-business-risk,
         # bond-like stream; its required return belongs in ~7-10%, so don't let a
