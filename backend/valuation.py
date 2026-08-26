@@ -627,12 +627,22 @@ def compute_metrics(stock: dict[str, Any],
                        if (_epv_roe is not None and _epv_roic is not None) else None)
         _epv_shares = (info.get("shares_outstanding")
                        or ((info["market_cap"] / price) if (info.get("market_cap") and price) else None))
-        # P/E model -> value NORMALIZED net income per share (comparable to the
-        # market's P/E), not owner earnings (which understates a low-capex staple).
-        # Normalized (3-yr average, margin-adjusted) rather than latest, so a name
-        # in a cyclical earnings trough (e.g. TXN, SBUX) isn't valued on a depressed
-        # year — that would understate the floor exactly when it's needed most.
+        # P/E model -> value NORMALIZED net income per share. Normally the 3-yr
+        # average (margin-adjusted), so a name in a cyclical earnings TROUGH (TXN,
+        # SBUX) isn't valued on a depressed year — that would understate the floor
+        # exactly when it's needed most.
         _epv_ni = base_ni * margin_ratio if (base_ni and margin_ratio) else base_ni
+        # BUT a name earning BELOW its 3-yr average with HEALTHY (not depressed)
+        # margins is fading from a demand boom, not sitting in a trough — the
+        # average is inflated by boom years it can't repeat (POOL: COVID pool-
+        # building), so value it on the latest actual instead. A margin trough
+        # (latest margin below the through-cycle average) keeps the average, since
+        # depressed margins mean-revert UP.
+        _latest_ni = net_income[-1][1] if net_income else None
+        _nm_l, _nm_a = net_margin.get("latest"), net_margin.get("avg")
+        if (_epv_ni and _latest_ni and _epv_ni > _latest_ni > 0
+                and _nm_l is not None and _nm_a is not None and _nm_l >= _nm_a):
+            _epv_ni = _latest_ni
         _epv_eps = (_epv_ni / _epv_shares) if (_epv_ni and _epv_shares and _epv_ni > 0) else None
         # A proven high-ROE, stable, mature compounder is a low-business-risk,
         # bond-like stream; its required return belongs in ~7-10%, so don't let a
