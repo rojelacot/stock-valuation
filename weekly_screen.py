@@ -309,6 +309,16 @@ def main():
     # well past the top 80 on its noisy fast score yet deep-verify into a BUY
     # (e.g. SYF, ACN, GL sat at fast ~67-69 but score 73-76 on EDGAR).
     verify_floor = max(45, args.min_score - 15)
+    # STICKY: always deep-verify last week's candidates. The fast (Yahoo-only) score
+    # is noisy — free-tier statement data drifts run-to-run — so a name sitting near
+    # the verify gate can fall below it on pure noise and silently drop off the buy
+    # list without ever being deep-scored (ESNT/MMS: fast 48/44 one week vs a deep
+    # BUY the week before). Re-verifying every prior candidate guarantees a name
+    # leaves the list only when its STABLE deep re-score genuinely falls, never from
+    # fast-pass wobble — the churn fix. Cheap: only ~10-15 extra names.
+    import diffstate as _diffstate
+    _scope_key = "custom" if args.tickers else args.scope
+    _prev_candidates = set(((_diffstate._load().get(_scope_key) or {}).get("candidates") or {}))
     # ALSO deep-verify high-return names below the floor. The earnings-power model
     # (justified P/E) needs 7+ yr of history, which the Yahoo-only fast pass doesn't
     # have — so a mature quality compounder falls back to a shallow 4-yr DCF and
@@ -318,6 +328,8 @@ def main():
     # of fast score. The deep re-score still decides candidacy, so the only cost is a
     # few extra EDGAR fetches.
     def _worth_verifying(r):
+        if r.get("ticker") in _prev_candidates:
+            return True
         if (r.get("score") or 0) >= verify_floor:
             return True
         return ((r.get("roe") or 0) >= 0.15 and (r.get("roic") or 0) >= 0.12
