@@ -657,9 +657,22 @@ def compute_metrics(stock: dict[str, Any],
         # depressed margins mean-revert UP.
         _latest_ni = net_income[-1][1] if net_income else None
         _nm_l, _nm_a = net_margin.get("latest"), net_margin.get("avg")
+        _epv_growth = oe_growth
+        # Fade vs trough: only a MEANINGFUL margin compression (>10% below the
+        # through-cycle average) is a trough that mean-reverts up. Flat or slightly-
+        # soft margins with declining earnings are a volume/demand fade (UPS: flat
+        # ~6% margin, earnings down 57% from the 2021 peak), which should NOT keep the
+        # boom-inflated average or a growth-premium multiple.
         if (_epv_ni and _latest_ni and _epv_ni > _latest_ni > 0
-                and _nm_l is not None and _nm_a is not None and _nm_l >= _nm_a):
+                and _nm_l is not None and _nm_a is not None and _nm_l >= _nm_a * 0.90):
             _epv_ni = _latest_ni
+            # A fading business (earning below its recent average) must NOT also be
+            # handed a growth-premium multiple. Its historical CAGR is often inflated
+            # by a depressed early-window year (UPS: earnings fell 57% from the 2021
+            # peak, yet the 2020-COVID-trough base makes the long CAGR read +34%),
+            # so cap the justified-multiple growth to the terminal rate — a fading
+            # business gets a fading-business multiple, not a compounder's.
+            _epv_growth = min(oe_growth if oe_growth is not None else 0.0, A["terminal_growth"])
         _epv_eps = (_epv_ni / _epv_shares) if (_epv_ni and _epv_shares and _epv_ni > 0) else None
         # A proven high-ROE, stable, mature compounder is a low-business-risk,
         # bond-like stream; its required return belongs in ~7-10%, so don't let a
@@ -672,7 +685,7 @@ def compute_metrics(stock: dict[str, Any],
         if (_epv_eps and _epv_eps > 0 and _epv_stable and _epv_mature
                 and _epv_roic and _epv_roic >= 0.07
                 and _epv_return and _epv_return >= 0.12):
-            _epv = earnings_power.value(_epv_eps, _epv_return, _epv_disc, oe_growth,
+            _epv = earnings_power.value(_epv_eps, _epv_return, _epv_disc, _epv_growth,
                                         price, A["margin_of_safety"])
             if _epv.get("ok"):
                 if not valuation.get("ok"):
@@ -789,10 +802,11 @@ def compute_metrics(stock: dict[str, Any],
         import earnings_power
         _e, _re = earnings_power_val["eps_used"], earnings_power_val["return_used"]
         _rd = earnings_power_val["cost_of_equity"]   # the capped EPV discount rate
-        scenarios = earnings_power.scenarios(_e, _re, _rd, oe_growth, price)
-        monte_carlo = earnings_power.monte_carlo(_e, _re, _rd, oe_growth, price)
-        sensitivity = earnings_power.sensitivity(_e, _re, _rd, oe_growth, price)
-        reverse = earnings_power.reverse(_e, _re, _rd, oe_growth, price)
+        _g = earnings_power_val["growth"]            # the (fade-capped) EPV growth
+        scenarios = earnings_power.scenarios(_e, _re, _rd, _g, price)
+        monte_carlo = earnings_power.monte_carlo(_e, _re, _rd, _g, price)
+        sensitivity = earnings_power.sensitivity(_e, _re, _rd, _g, price)
+        reverse = earnings_power.reverse(_e, _re, _rd, _g, price)
 
     # ---- Forensic scores: Altman Z (distress) + Beneish M (manipulation) ----
     import forensics  # lazy: forensics imports this module (needs_earnings_valuation)
