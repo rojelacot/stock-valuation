@@ -4,7 +4,7 @@
     {
       "name": "valuation-app",
       "runtimeExecutable": "/Users/rojel_acot/stock-valuation/.venv/bin/uvicorn",
-      "runtimeArgs": ["main:app", "--host", "127.0.0.1", "--port", "8077", "--app-dir", "/Users/rojel_acot/stock-valuation/backend"],
+      "runtimeArgs": ["main:app", "--host", "127.0.0.1", "--port", "8077", "--reload", "--app-dir", "/Users/rojel_acot/stock-valuation/backend", "--env-file", "/Users/rojel_acot/stock-valuation/.env"],
       "port": 8077
     }
   ]
