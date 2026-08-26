@@ -36,7 +36,33 @@ _CIK_TTL = 30 * 24 * 3600  # refresh the ticker->CIK map monthly
 # (quarterly), so cache the raw payload to disk. A full-universe screen re-run then
 # skips ~170 multi-MB SEC downloads. Keyed by CIK.
 _FACTS_CACHE = Path(__file__).resolve().parent.parent / "reports" / ".edgar_facts"
-_FACTS_TTL = 7 * 24 * 3600  # a week — well inside the quarterly filing cadence
+_FACTS_TTL = 24 * 3600           # 1 day — a fresh weekly/daily run re-pulls
+_FACTS_MAX_STALE_DAYS = 550      # ~18mo: a current 10-K's latest period end is newer;
+#                                  older than this means a stale CDN edge / partial fetch
+_FRESH_CONCEPTS = ("Assets", "StockholdersEquity", "NetIncomeLoss", "Revenues",
+                   "RevenueFromContractWithCustomerExcludingAssessedTax")
+
+
+def _facts_fresh(payload: Any) -> bool:
+    """True unless the companyfacts look STALE — a concurrent fetch can catch a
+    stale SEC CDN edge (older data, missing the latest filing), and caching that
+    would freeze wrong fundamentals for the whole TTL. Gauge freshness by the most
+    recent reported period-end across a few always-present concepts."""
+    facts = (payload.get("facts") or {}).get("us-gaap") or {}
+    latest = ""
+    for concept in _FRESH_CONCEPTS:
+        for entries in ((facts.get(concept) or {}).get("units") or {}).values():
+            for e in entries:
+                end = e.get("end") or ""
+                if end > latest:
+                    latest = end
+    if not latest:
+        return True  # unusual concept set — don't second-guess it
+    try:
+        import datetime
+        return (datetime.date.today() - datetime.date.fromisoformat(latest)).days <= _FACTS_MAX_STALE_DAYS
+    except Exception:  # noqa: BLE001
+        return True
 
 
 def _facts_cached(cik: int) -> Optional[Any]:
@@ -339,7 +365,8 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
             payload = _get(_session(), FACTS_URL.format(cik=cik))
         except Exception as e:  # noqa: BLE001
             return {"error": f"EDGAR fetch failed: {e}"}
-        if payload:
+        # Only persist data that looks current — never freeze a stale/partial fetch.
+        if payload and _facts_fresh(payload):
             _facts_store(cik, payload)
     if not payload:
         return {"error": f"{ticker}: no company facts"}
