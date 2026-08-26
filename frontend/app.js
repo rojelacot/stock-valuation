@@ -415,13 +415,13 @@ function dcfSection(d, cur) {
     : val.method === "earnings-power"
     ? "Valued on the <span class='text-slate-300'>justified P/E</span> earnings-power model — a strict cash-flow DCF misprices a mature wide-moat compounder on the low side (a depressed trailing growth rate compounded through a full discount and a Gordon terminal). Fair P/E = (1 − g/ROE) / (r − g), on normalized earnings, using through-cycle ROE and a capped growth rate. Used only where the DCF is clearly an artifact; the multiple is clamped so it never justifies a bubble."
     : val.method === "earnings"
-    ? "Valued on <span class='text-slate-300'>earnings power</span> — a free-cash-flow DCF doesn't fit banks / insurers / REITs."
+    ? "Valued on <span class='text-slate-300'>normalized earnings</span> — book value is meaningless for a capital-light financial (a payment network, exchange or data business) and a strict FCF-DCF doesn't fit, so it's valued on its owner-earnings stream."
     : "Two DCFs: <span class='text-slate-300'>conservative</span> discounts free cash flow (penalizes all capex); <span class='text-slate-300'>adjusted</span> discounts owner earnings (credits growth capex). The truth sits between.";
   const mn = d.metrics.margin_normalization || {};
   const mnBanner = mn.applied ? `<div class="text-xs bg-warn/10 border border-warn/40 text-warn rounded-lg p-2.5 my-2 leading-relaxed"><strong>Stress test active:</strong> earnings normalized to a ${fmtPct(mn.target_margin, 1)} net margin (${Math.round(mn.factor * 100)}% of the way from the current ${fmtPct(mn.latest_margin, 1)} toward the ${fmtPct(mn.avg_margin, 1)} long-run average). The earnings base is scaled ${mn.ratio.toFixed(2)}×, so this valuation and the score below reflect that assumption — not as-reported earnings.</div>` : "";
   return h(`
   <section class="card rounded-2xl p-6">
-    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "ffo" ? "(funds from operations)" : val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings-power" ? "(justified P/E)" : val.method === "earnings" ? "(earnings power)" : "(range)"}</h3>
+    <h3 class="font-semibold mb-1">Intrinsic value ${val.method === "ffo" ? "(funds from operations)" : val.method === "book-value" ? "(book value &amp; ROE)" : val.method === "earnings-power" ? "(justified P/E)" : val.method === "earnings" ? "(normalized earnings)" : "(range)"}</h3>
     ${mnBanner}
     ${val.suspect ? `<div class="text-xs bg-bad/10 border border-bad/40 text-bad rounded-lg p-2.5 my-2 leading-relaxed"><strong>Valuation flagged unreliable.</strong> ${val.suspect_reason || "Data or model doesn't fit this company."} It's excluded from buy candidates — verify the numbers yourself before trusting them.</div>` : ""}
     <p class="text-xs text-muted mb-4">${methodNote}</p>
@@ -461,7 +461,7 @@ function dcfSection(d, cur) {
     </div>
     ${val.implied_roe != null ? `<p class="text-[11px] text-muted mb-4 leading-relaxed">At today's ${fmtNum(val.current_pb, 1)}× book, the market is implying a sustainable ROE of about <span class="text-slate-200">${fmtPct(val.implied_roe, 1)}</span> — versus the <span class="text-slate-200">${fmtPct(val.roe_used, 1)}</span> the business has actually earned through the cycle. Above it = the market expects returns to improve; below = it's skeptical.</p>` : ""}` : val.method === "earnings" ? `
     <div class="grid md:grid-cols-2 gap-3 mb-5">
-      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (earnings power)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
+      <div class="bg-ink/40 rounded-xl p-4 border border-brand/40"><div class="text-xs text-muted">Fair value (normalized earnings)</div><div class="text-2xl font-bold text-brand">${price(mid, cur)}</div></div>
       <div class="bg-ink/40 rounded-xl p-4 border border-line/60"><div class="text-xs text-muted">Upside</div><div class="text-2xl font-bold text-${upColor}">${up == null ? "—" : signPct(up)}</div></div>
     </div>` : `
     <div class="grid md:grid-cols-4 gap-3 mb-5">
@@ -1386,7 +1386,7 @@ function summarySection(d) {
   const methodWord = val.method === "ffo" ? "on funds from operations (FFO)"
     : val.method === "book-value" ? "on book value &amp; through-cycle ROE"
     : val.method === "earnings-power" ? "on a justified P/E (earnings power)"
-    : val.method === "earnings" ? "on earnings power" : "on discounted cash flow";
+    : val.method === "earnings" ? "on normalized earnings" : "on discounted cash flow";
   const up = val.upside_mid;
   let valSentence;
   if (val.suspect) {

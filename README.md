@@ -1,7 +1,8 @@
 # Long-Term Value Screener
 
 A local web app that values a stock the way a patient, index-ignoring value investor would:
-pull ~10 years of fundamentals, run a discounted-cash-flow intrinsic value, score business
+pull ~10-19 years of fundamentals, estimate intrinsic value with the model that fits the
+business (DCF, justified-P/E earnings-power, price-to-book, or FFO), score business
 quality / growth / balance-sheet strength, check whether the expected 10–15yr return beats
 inflation, layer in an AI qualitative read (moat, management, risks), and output a
 **Buy / Hold / Avoid** verdict — with all the reasoning shown.
@@ -18,7 +19,7 @@ inflation, layer in an AI qualitative read (moat, management, risks), and output
 ## Philosophy baked in
 - **Hold 10–15 years**, so durability and returns on capital matter more than this quarter.
 - **Beat inflation** (~3% bar) — the benchmark is inflation, *not* an index.
-- **Margin of safety** — prefer paying ≤ 75% of estimated intrinsic value.
+- **Margin of safety that scales with certainty** — from ~12% below intrinsic value for a fortress compounder up to ~45% for the least certain names.
 - **Quality first** — high ROIC, real growth, strong balance sheet, expanding margins.
 
 ## Quick start
@@ -71,7 +72,9 @@ recomputes live (no re-fetch, no re-call to Claude).
 
 ## What the single-stock analysis shows
 - **Verdict** — 0–100 score → Buy / Hold / Avoid, with the reasoning and strengths/watch-outs.
-- **Intrinsic value range** — conservative (FCF) → adjusted (owner-earnings) DCF; scores off the midpoint.
+- **Intrinsic value** — conservative (FCF) → adjusted (owner-earnings) DCF, scored off the midpoint; auto-switches to a **justified-P/E earnings-power** model for mature wide-moat compounders (where a strict DCF extrapolates to an artifact), **justified price-to-book** for banks/insurers, and **FFO** for REITs.
+- **Quality trajectory** — ROIC, margins and free cash flow over the full history, read as *widening moat / mixed / eroding*.
+- **Decision strip** — buy-zone status vs the certainty-scaled buy-below, the fair-value gap, and expected return vs inflation, right under the verdict.
 - **Scenarios & reverse DCF** — bear/base/bull fair values, a discount-rate × growth **sensitivity grid**,
   and the growth rate the current price *implies* ("what does the market expect?").
 - **Monte-Carlo intrinsic value** — 2,000 simulations sampling growth, discount rate, terminal growth
@@ -180,14 +183,19 @@ guardrails keep the ranking honest (see `data.py` and `valuation.py`):
    currency. For ADRs/foreign listings these differ (e.g. TSM reports TWD, trades USD), which would
    otherwise blow up the DCF. We detect `financialCurrency`, fetch the FX rate, and convert monetary
    figures to the trading currency — or flag the stock if we can't.
-2. **Financials & REITs.** Banks, insurers, brokers and REITs have no meaningful "free cash flow", so
-   an FCF-DCF wildly misprices them. These are detected by sector/industry and valued on **earnings
-   power** (normalized net income) instead.
+2. **Financials & REITs.** Banks/insurers/brokers and REITs have no meaningful "free cash flow", so
+   an FCF-DCF wildly misprices them: banks/insurers are valued on **justified price-to-book** (through-
+   cycle ROE), REITs on **FFO**. Capital-light "financials" — exchanges, index/data/ratings shops,
+   payment networks, insurance brokers — carry trivial balance sheets, so book value is meaningless;
+   these are routed to the ordinary DCF → earnings-power path instead.
 3. **Sanity caps.** Growth is extrapolated cautiously (tighter stage-1 cap, extra caution when only
    ~4yr of history exists), and any DCF implying **>100% upside** is flagged *suspect* — its valuation
    pillar is capped, it's downgraded out of BUY, and it's excluded from the buy-candidate list (a
    liquid large-cap rarely trades at half its conservative fair value, so it's almost always an
    artifact). Suspect names still appear in the full ranked list, marked 🚩, for you to verify.
+   The mirror image is caught too: when a profitable, stable-or-growing mature business's DCF implies
+   an **implausibly low** fair value (below ~7× normalized earnings) and the earnings-power model
+   doesn't cover it, the DCF is flagged a likely artifact rather than presented as a real bear case.
 
 ## Conviction refinements
 On top of the guardrails, four adjustments make the ranking more trustworthy:
