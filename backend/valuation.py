@@ -412,19 +412,26 @@ def compute_metrics(stock: dict[str, Any],
     info["total_cash"] = recon_cash
 
     # ---- Reconcile the share count ----
-    # Yahoo's `shares_outstanding` field is often stale; when it disagrees with the
-    # live market_cap / price, that mismatch silently inflates (or deflates) EVERY
-    # per-share figure — EPS, the DCF, the earnings-power value. A stale-LOW count is
-    # the dangerous case (it inflates per-share value into false upside — e.g. AOS
-    # showed 110M shares vs 136M implied, a fake +94%). Take the LARGER of the two:
-    # market_cap/price is derived from two live fields, and the bigger count is the
-    # more conservative per-share value. Write it back so every consumer agrees.
-    _rep_sh = info.get("shares_outstanding")
-    _mc, _px = info.get("market_cap"), info.get("current_price")
-    _impl_sh = (_mc / _px) if (_mc and _px and _px > 0) else None
-    _shs = [s for s in (_rep_sh, _impl_sh) if s and s > 0]
-    if _shs:
-        info["shares_outstanding"] = max(_shs)
+    # PRIMARY: the as-filed diluted share count from the financial statements
+    # (SEC's WeightedAverageNumberOfDilutedSharesOutstanding, or Yahoo's diluted
+    # average on the fast pass). It's a fixed annual figure, so it doesn't drift —
+    # unlike Yahoo's live `shares_outstanding` field, which refreshes intra-day and
+    # made per-share fair values (EPS, DCF, earnings-power) wobble ~15% between runs
+    # (e.g. CTSH flickering 473M<->489M). It lags recent buybacks by up to a filing,
+    # which is a small, conservative price to pay for a stable, authoritative count.
+    _filed_sh = _latest(st["shares"])
+    if _filed_sh and _filed_sh > 0:
+        info["shares_outstanding"] = _filed_sh
+    else:
+        # FALLBACK (foreign / non-10-K filers with no statement share count): reconcile
+        # Yahoo's reported vs market_cap/price, taking the larger (more conservative,
+        # and it catches a stale-LOW reported field — e.g. AOS 110M vs 136M implied).
+        _rep_sh = info.get("shares_outstanding")
+        _mc, _px = info.get("market_cap"), info.get("current_price")
+        _impl_sh = (_mc / _px) if (_mc and _px and _px > 0) else None
+        _shs = [s for s in (_rep_sh, _impl_sh) if s and s > 0]
+        if _shs:
+            info["shares_outstanding"] = max(_shs)
 
     # ---- Balance sheet health ----
     latest_debt = recon_debt
