@@ -299,8 +299,61 @@ function verdictCard(d, rs, cur) {
         </div>
       </div>
     </div>
+    ${decisionStrip(d, cur)}
     ${confidenceBanner(d.metrics.data_confidence)}
   </section>`);
+}
+
+// The decision at a glance — the three numbers that actually drive a buy/hold/pass,
+// so you don't have to scroll 20 sections to act: where the price sits vs the
+// certainty-scaled buy-below, the fair value & gap, and the expected annual return
+// vs inflation.
+function decisionStrip(d, cur) {
+  const v = d.metrics.valuation || {};
+  const er = d.metrics.expected_return || {};
+  const px = d.info.current_price;
+  const tile = (label, value, sub, subCls = "text-muted") => `
+    <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+      <div class="text-[11px] text-muted">${label}</div>
+      <div class="text-lg font-semibold mt-0.5">${value}</div>
+      <div class="text-[11px] ${subCls} mt-0.5 leading-snug">${sub}</div>
+    </div>`;
+
+  // Tile 1 — buy-below / buy-zone status (the actionable number).
+  let t1;
+  if (v.suspect || v.buy_below == null || !px) {
+    t1 = tile("Buy-below", "—", "valuation unreliable — see below");
+  } else {
+    const inZone = px <= v.buy_below;
+    if (inZone) {
+      const below = (1 - px / v.buy_below) * 100;
+      t1 = `<div class="bg-good/10 rounded-xl p-3 border border-good/40">
+        <div class="text-[11px] text-good">✓ In the buy zone</div>
+        <div class="text-lg font-semibold mt-0.5 text-good">at / below ${price(v.buy_below, cur)}</div>
+        <div class="text-[11px] text-muted mt-0.5 leading-snug">price is ${below.toFixed(0)}% under the buy-below (${fmtPct(v.margin_of_safety, 0)} margin of safety)</div></div>`;
+    } else {
+      const above = (px / v.buy_below - 1) * 100;
+      t1 = tile("Buy below", price(v.buy_below, cur),
+        `${above.toFixed(0)}% above it today — wait for a ${fmtPct(v.margin_of_safety, 0)} margin of safety`, "text-warn");
+    }
+  }
+
+  // Tile 2 — fair value & gap.
+  const t2 = (v.suspect || v.mid == null)
+    ? tile("Fair value", "unreliable", "model doesn't fit / data issue")
+    : tile("Fair value", price(v.mid, cur),
+        v.upside_mid == null ? "" : `${signPct(v.upside_mid)} vs today`,
+        v.upside_mid != null && v.upside_mid >= 0 ? "text-good" : "text-bad");
+
+  // Tile 3 — expected annual return vs inflation.
+  const ear = er.expected_annual_return, infl = er.inflation_hurdle;
+  const t3 = ear == null
+    ? tile("Expected return", "—", "")
+    : tile(`Expected return (~${er.horizon_years || 12}yr)`, `${signPct(ear)}/yr`,
+        infl != null ? `${er.beats_inflation ? "beats" : "lags"} ${fmtPct(infl, 0)} inflation` : "",
+        er.beats_inflation ? "text-good" : "text-bad");
+
+  return `<div class="mt-5 pt-5 border-t border-line grid grid-cols-1 sm:grid-cols-3 gap-3">${t1}${t2}${t3}</div>`;
 }
 
 function metricsGrid(d, cur) {
