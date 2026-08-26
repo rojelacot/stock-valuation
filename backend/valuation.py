@@ -132,11 +132,14 @@ DEVELOPED = {"United States", "Canada", "United Kingdom", "Germany", "France",
 def _earnings_stability(net_income: list, revenue: list) -> Optional[float]:
     """0 (erratic / loss-ridden) .. 1 (rock-steady) from the net-MARGIN history.
 
-    Margin (scale-free) rather than raw earnings, so a healthy grower — whose
-    profits rise every year — reads as stable, while a business whose
-    profitability swings reads as risky. Loss years dock it."""
+    Measured as scatter around the TREND, not raw dispersion: a business whose
+    margins rise steadily (a strengthening compounder — LLY, NVDA) is predictable,
+    not volatile, so it should read as stable. Fitting a line and scoring the
+    residuals means a smooth up- (or down-) trend no longer reads as instability,
+    while a margin that genuinely swings up and down still does. Loss years dock it."""
     ni, rev = dict(net_income), dict(revenue)
-    margins = [ni[y] / rev[y] for y in rev if y in ni and rev[y]]
+    years = sorted(y for y in rev if y in ni and rev[y])
+    margins = [ni[y] / rev[y] for y in years]
     if len(margins) < 4:
         return None
     losses = sum(1 for m in margins if m < 0)
@@ -144,7 +147,15 @@ def _earnings_stability(net_income: list, revenue: list) -> Optional[float]:
     if mean <= 0:
         return 0.1
     import statistics
-    cv = statistics.pstdev(margins) / mean          # coefficient of variation
+    n = len(margins)
+    xs = list(range(n))
+    mx = sum(xs) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    slope = (sum((xs[i] - mx) * (margins[i] - mean) for i in range(n)) / sxx) if sxx else 0.0
+    intercept = mean - slope * mx
+    resid = [margins[i] - (slope * xs[i] + intercept) for i in range(n)]
+    # Detrended coefficient of variation: dispersion AROUND the trend line.
+    cv = statistics.pstdev(resid) / mean
     score = (1.0 - min(cv, 1.5) / 1.5) - 0.15 * losses
     return max(0.0, min(1.0, score))
 
@@ -629,22 +640,26 @@ def compute_metrics(stock: dict[str, Any],
                 valuation = _epv
 
         # Low-multiple artifact guard (the strict-gate complement): a name the
-        # earnings-power floor doesn't cover — e.g. a capital-intensive wide-moat
-        # below the ROIC gate (WM) — can still get an artifact-low DCF. A profitable,
-        # stable, mature business almost never has a real fair value below ~7x
-        # normalized earnings, so when the DCF says that, flag it low-confidence
-        # rather than present it as a real bear case. This does NOT hand out a
-        # premium multiple; it just stops a -95% artifact being trusted (and gives
-        # a neutral valuation score instead of a false 'priced for perfection').
+        # earnings-power floor doesn't cover — a capital-intensive wide-moat below
+        # the ROIC gate (WM), or a hyper-growth name whose margin regime-change reads
+        # as unstable (LLY) — can still get an artifact-low DCF. A profitable, mature
+        # business that is stable OR growing almost never has a real fair value below
+        # ~7x normalized earnings, so when the DCF says that, flag it low-confidence
+        # rather than present it as a real bear case. (A genuinely SHRINKING business
+        # can deserve a low multiple, so decline is the one case left un-flagged.)
+        # This does NOT hand out a premium multiple; it just stops a -95% artifact
+        # being trusted (and gives a neutral valuation score, not a false 'priced for
+        # perfection').
         if (earnings_power_val is None and valuation.get("ok")
                 and valuation.get("method") == "dcf-range" and not valuation.get("suspect")
-                and _epv_eps and _epv_eps > 0 and _epv_stable and _epv_mature
+                and _epv_eps and _epv_eps > 0 and _epv_mature
+                and (_epv_stable or (oe_growth and oe_growth > 0.05))
                 and valuation.get("mid") and valuation["mid"] / _epv_eps < 7.0):
             valuation["suspect"] = True
             valuation["low_multiple_artifact"] = True
             valuation["suspect_reason"] = (
                 f"DCF fair value implies only ~{valuation['mid'] / _epv_eps:.0f}x normalized "
-                "earnings — implausibly low for a profitable, stable, mature business, so it's "
+                "earnings — implausibly low for a profitable, mature business, so it's "
                 "likely a growth-extrapolation artifact, not a real bear case. Treated as "
                 "low-confidence (the earnings-power model doesn't cover this business type).")
 

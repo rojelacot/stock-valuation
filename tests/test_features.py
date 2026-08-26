@@ -761,6 +761,21 @@ ok(_nev({"sector": "Financial Services", "industry": "Banks - Diversified"}) is 
 ok(_nev({"sector": "Financial Services", "industry": "Insurance - Property & Casualty"}) is True,
    "classify: a risk-bearing insurer still uses the book-value model")
 
+# detrended stability: a steadily RISING margin should read as stable (predictable),
+# not volatile — the whole point of scoring scatter around the trend.
+from valuation import _earnings_stability as _stab  # noqa: E402
+_sy = [2019, 2020, 2021, 2022, 2023, 2024]
+_rising = _stab([(y, (0.10 + 0.02 * i) * 1000) for i, y in enumerate(_sy)],
+                [(y, 1000) for y in _sy])
+_choppy = _stab([(y, (0.10 if i % 2 == 0 else 0.20) * 1000) for i, y in enumerate(_sy)],
+                [(y, 1000) for y in _sy])
+ok(_rising > _choppy and _rising > 0.8,
+   "stability: a steadily rising margin reads as stable, not volatile")
+# A wild up/down swing (same mean) still scores meaningfully lower than the smooth rise.
+_wild = _stab([(y, (0.02 if i % 2 == 0 else 0.28) * 1000) for i, y in enumerate(_sy)],
+              [(y, 1000) for y in _sy])
+ok(_wild < _rising - 0.3, "stability: a margin that swings hard still reads as unstable")
+
 # ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")
