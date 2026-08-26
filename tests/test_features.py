@@ -701,6 +701,28 @@ ok(_peaked["cyclical_peak"]["peak"] and _peaked["scenarios"]["earnings_decline"]
 ok(not _stable["cyclical_peak"]["peak"] and _stable["scenarios"]["earnings_decline"] is None,
    "scenario: a stable-margin company gets no earnings-decline row")
 
+# DCF-unusable rescue: a profitable, high-return, stable business whose DCF returns
+# a NEGATIVE equity value (acquisition debt swamps a low-FCF-DCF, e.g. CPB) must
+# still be valued on earnings power, not left blank.
+_yy = list(range(2015, 2024))  # 9 years
+_cpb_st = {k: {} for k in STATEMENT_KEYS}
+_cpb_st.update({
+    "revenue": {str(y): 3333e6 for y in _yy},
+    "net_income": {str(y): 500e6 for y in _yy},          # healthy 15% margin, ROE 25%
+    "total_equity": {str(y): 2000e6 for y in _yy},
+    "cash": {str(y): 100e6 for y in _yy},
+    "operating_cashflow": {str(y): 250e6 for y in _yy},  # FCF far below earnings
+    "capex": {str(y): -200e6 for y in _yy},
+    "total_debt": {str(y): 4000e6 for y in _yy}})        # debt sinks the DCF equity
+_cpb_inf = {"name": "C", "currency": "USD", "financial_currency": "USD",
+            "currency_converted": False, "currency_unresolved": False, "fx_rate": 1.0,
+            "shares_outstanding": 100e6, "current_price": 50.0,
+            "total_debt": 4000e6, "total_cash": 100e6, "market_cap": 5000e6}
+_cpb_m = compute_metrics({"ticker": "C", "error": None, "info": _cpb_inf,
+                          "statements": _cpb_st, "price_history": []}, resolve_assumptions())
+ok(_cpb_m["valuation"].get("ok") and _cpb_m["valuation"].get("method") == "earnings-power",
+   "valuation: a profitable name whose DCF returns negative equity is rescued by earnings power")
+
 # net-cash reconciliation: the card (balance) and the DCF (info) must agree on
 # net cash — take the MORE COMPLETE debt (larger of EDGAR statements vs Yahoo
 # info), and write it back to info so downstream consumers match.

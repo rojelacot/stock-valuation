@@ -624,8 +624,13 @@ def compute_metrics(stock: dict[str, Any],
     # artifact, not a real bear case — value it on earnings power instead. Operating
     # companies only; financials/REITs keep their own models.
     earnings_power_val = None
+    # Runs for operating companies with trustworthy data. Note it does NOT require
+    # valuation.ok: a DCF can come back UNUSABLE (negative equity value when
+    # acquisition debt swamps a low-FCF-DCF, e.g. CPB) for a perfectly good business
+    # — the earnings-power model should still value it rather than leave it blank.
     if (not fin_valuation and not reit_valuation
-            and valuation.get("ok") and not valuation.get("suspect")):
+            and not valuation.get("data_quality_bad")
+            and not info.get("currency_unresolved")):
         import earnings_power
         # The multiple keys off through-cycle return on equity, but capped at 2x ROIC
         # so a leverage- or goodwill-inflated ROE can't buy a premium multiple: the
@@ -669,12 +674,18 @@ def compute_metrics(stock: dict[str, Any],
                 and _epv_return and _epv_return >= 0.12):
             _epv = earnings_power.value(_epv_eps, _epv_return, _epv_disc, oe_growth,
                                         price, A["margin_of_safety"])
-            # Floor: step in only when the DCF is materially BELOW the earnings-power
-            # value (>20%) — that gap is the artifact. A DCF near or above it stands.
-            if (_epv.get("ok") and valuation.get("mid")
-                    and valuation["mid"] < _epv["mid"] * 0.80):
-                earnings_power_val = _epv
-                valuation = _epv
+            if _epv.get("ok"):
+                if not valuation.get("ok"):
+                    # DCF unusable (negative equity value / no positive cash flow) —
+                    # value the business on earnings power outright rather than blank.
+                    earnings_power_val = _epv
+                    valuation = _epv
+                elif (not valuation.get("suspect") and valuation.get("mid")
+                        and valuation["mid"] < _epv["mid"] * 0.80):
+                    # Floor: step in only when a usable DCF sits materially BELOW the
+                    # earnings-power value (>20%) — that gap is the artifact.
+                    earnings_power_val = _epv
+                    valuation = _epv
 
         # Low-multiple artifact guard (the strict-gate complement): a name the
         # earnings-power floor doesn't cover — a capital-intensive wide-moat below
