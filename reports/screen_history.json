@@ -831,19 +831,6 @@
           "below_buy": true
         },
         {
-          "ticker": "AMP",
-          "name": "Ameriprise Financial, Inc.",
-          "sector": "Other / Unknown",
-          "score": 90,
-          "rating": "BUY",
-          "upside": 0.9546684950869289,
-          "price": 560.28,
-          "certainty": 0.91,
-          "mos": 0.1270632073141711,
-          "buy_below": 956.0069108176452,
-          "below_buy": true
-        },
-        {
           "ticker": "PGR",
           "name": "The Progressive Corporation",
           "sector": "Other / Unknown",
@@ -862,11 +849,11 @@
           "sector": "Other / Unknown",
           "score": 85,
           "rating": "BUY",
-          "upside": 0.7330764045596838,
+          "upside": 0.7330764045596841,
           "price": 23.87,
           "certainty": 0.89,
           "mos": 0.13228671160545638,
-          "buy_below": 35.89602647956229,
+          "buy_below": 35.896026479562295,
           "below_buy": true
         },
         {
@@ -883,16 +870,16 @@
           "below_buy": true
         },
         {
-          "ticker": "CF",
-          "name": "CF Industries Holdings, Inc.",
-          "sector": "Other / Unknown",
+          "ticker": "MMS",
+          "name": "Maximus, Inc.",
+          "sector": "Industrials",
           "score": 85,
           "rating": "BUY",
-          "upside": 0.3720590831851166,
-          "price": 125.7,
-          "certainty": 0.82,
-          "mos": 0.15303868136170312,
-          "buy_below": 146.07357797225578,
+          "upside": 0.8878247323891635,
+          "price": 58.97,
+          "certainty": 0.84,
+          "mos": 0.1482783023759766,
+          "buy_below": 94.81793882876323,
           "below_buy": true
         },
         {
@@ -932,6 +919,19 @@
           "certainty": 0.66,
           "mos": 0.2010339477866897,
           "buy_below": 8324.7316376611,
+          "below_buy": true
+        },
+        {
+          "ticker": "ESNT",
+          "name": "Essent Group Ltd.",
+          "sector": "Other / Unknown",
+          "score": 80,
+          "rating": "BUY",
+          "upside": 0.716102651862514,
+          "price": 69.59,
+          "certainty": 0.56,
+          "mos": 0.23204107258735904,
+          "buy_below": 91.71240712554248,
           "below_buy": true
         },
         {
