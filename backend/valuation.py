@@ -399,6 +399,21 @@ def compute_metrics(stock: dict[str, Any],
     info["total_debt"] = recon_debt
     info["total_cash"] = recon_cash
 
+    # ---- Reconcile the share count ----
+    # Yahoo's `shares_outstanding` field is often stale; when it disagrees with the
+    # live market_cap / price, that mismatch silently inflates (or deflates) EVERY
+    # per-share figure — EPS, the DCF, the earnings-power value. A stale-LOW count is
+    # the dangerous case (it inflates per-share value into false upside — e.g. AOS
+    # showed 110M shares vs 136M implied, a fake +94%). Take the LARGER of the two:
+    # market_cap/price is derived from two live fields, and the bigger count is the
+    # more conservative per-share value. Write it back so every consumer agrees.
+    _rep_sh = info.get("shares_outstanding")
+    _mc, _px = info.get("market_cap"), info.get("current_price")
+    _impl_sh = (_mc / _px) if (_mc and _px and _px > 0) else None
+    _shs = [s for s in (_rep_sh, _impl_sh) if s and s > 0]
+    if _shs:
+        info["shares_outstanding"] = max(_shs)
+
     # ---- Balance sheet health ----
     latest_debt = recon_debt
     latest_equity = _latest(st["total_equity"])

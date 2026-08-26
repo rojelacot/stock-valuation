@@ -728,6 +728,19 @@ _dcf_nc = (_stock["info"]["total_cash"] or 0) - (_stock["info"]["total_debt"] or
 ok(abs(_bal["net_cash"] - _dcf_nc) < 1.0, "net-cash: card figure matches the DCF's net-cash basis")
 ok(_stock["info"]["total_debt"] == 777e6, "net-cash: info is written back so downstream consumers agree")
 
+# share reconciliation: a stale-LOW shares_outstanding (vs live market_cap/price)
+# is replaced by the larger count, so per-share values aren't silently inflated.
+_stock2 = _mk(_stmts, {"total_debt": 0.0, "total_cash": 100e6,
+                       "shares_outstanding": 100e6, "market_cap": 13_600e6, "current_price": 100.0})
+compute_metrics(_stock2, _A)
+ok(abs(_stock2["info"]["shares_outstanding"] - 136e6) < 1e6,
+   "shares: a stale-low count is reconciled up to the market_cap/price figure")
+_stock3 = _mk(_stmts, {"total_debt": 0.0, "total_cash": 100e6,
+                       "shares_outstanding": 150e6, "market_cap": 13_600e6, "current_price": 100.0})
+compute_metrics(_stock3, _A)
+ok(_stock3["info"]["shares_outstanding"] == 150e6,
+   "shares: a higher reported count is kept (take the larger, more conservative one)")
+
 # earnings-power model: justified P/E behaves and is clamped; value() shape.
 import earnings_power as _ep
 ok(_ep.justified_pe(0.30, 0.09, 0.04) > _ep.justified_pe(0.12, 0.09, 0.04),
