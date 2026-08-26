@@ -1447,8 +1447,51 @@ function summarySection(d) {
   </section>`);
 }
 
+// One-line read on whether the moat is strengthening: compares the first ~3 years
+// of history to the last ~3 for the three quality metrics that matter over a
+// decade-plus hold — returns on capital, net margin, and free cash flow.
+function qualityTrajectory(d) {
+  const s = d.metrics.series || {};
+  const endsAvg = (arr, which) => {
+    const v = (arr || []).map(x => x.value).filter(x => x != null);
+    if (v.length < 4) return null;
+    const k = Math.min(3, Math.floor(v.length / 2));
+    // Median of the window, not mean — so a noisy first year (e.g. a recent IPO's
+    // restructuring charges) doesn't distort the early anchor.
+    const slice = (which === "early" ? v.slice(0, k) : v.slice(-k)).sort((a, b) => a - b);
+    return slice[Math.floor(slice.length / 2)];
+  };
+  const metric = (label, key, fmt, higherBetter = true) => {
+    const e = endsAvg(s[key], "early"), r = endsAvg(s[key], "recent");
+    if (e == null || r == null) return null;
+    const rel = e !== 0 ? (r - e) / Math.abs(e) : 0;
+    const up = rel > 0.10, down = rel < -0.10;
+    const good = higherBetter ? up : down;
+    const cls = up === down ? "text-muted" : good ? "text-good" : "text-bad";
+    return { label, txt: `${fmt(e)}→${fmt(r)}`, dir: up ? "↑" : down ? "↓" : "→", cls, good, flat: up === down };
+  };
+  const pct = v => (v * 100).toFixed(0) + "%";
+  const items = [metric("ROIC", "roic", pct), metric("Net margin", "net_margin", pct),
+    metric("FCF", "fcf", v => axisMoney(v, "$"))].filter(Boolean);
+  if (!items.length) return "";
+  const good = items.filter(x => x.good).length, bad = items.filter(x => !x.good && !x.flat).length;
+  const yrs = (s.roic || s.net_margin || s.fcf || []);
+  const span = yrs.length >= 2 ? yrs[yrs.length - 1].year - yrs[0].year : 0;
+  let synth;
+  if (good === items.length) synth = "Widening moat — returns on capital, margins and cash generation are all trending up. The kind of trajectory a decade-plus hold wants.";
+  else if (bad === items.length) synth = "Eroding — returns, margins and cash generation are all trending down. Scrutinize the moat hard before a long hold.";
+  else synth = `Mixed — ${good} of ${items.length} core quality metrics improving. Read the charts and ask what's driving the divergence (often heavy reinvestment that depresses ROIC while margins/FCF still grow).`;
+  const chips = items.map(x => `<span class="${x.cls} font-medium">${x.label} ${x.txt} ${x.dir}</span>`)
+    .join('<span class="text-muted mx-2">·</span>');
+  return `<div class="mb-4 bg-ink/40 rounded-xl p-3 border border-line/60">
+    <div class="text-[11px] text-muted mb-1">Quality trajectory${span ? ` · ${span}yr` : ""}</div>
+    <div class="flex flex-wrap items-center gap-y-1 text-sm">${chips}</div>
+    <p class="text-xs text-muted mt-1.5 leading-snug">${synth}</p></div>`;
+}
+
 function chartsSection(d) {
   return h(`<section class="card rounded-2xl p-6"><h3 class="font-semibold mb-4">Trends</h3>
+    ${qualityTrajectory(d)}
     <div class="grid md:grid-cols-2 gap-6">
       <div><div class="text-sm text-muted mb-2">Price (10yr)</div><canvas id="c_price" height="150"></canvas></div>
       <div><div class="text-sm text-muted mb-2">Revenue</div><canvas id="c_rev" height="150"></canvas></div>
