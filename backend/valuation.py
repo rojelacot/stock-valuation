@@ -136,27 +136,39 @@ def _earnings_stability(net_income: list, revenue: list) -> Optional[float]:
     margins rise steadily (a strengthening compounder — LLY, NVDA) is predictable,
     not volatile, so it should read as stable. Fitting a line and scoring the
     residuals means a smooth up- (or down-) trend no longer reads as instability,
-    while a margin that genuinely swings up and down still does. Loss years dock it."""
+    while a margin that genuinely swings up and down still does.
+
+    Charge-robust: the center is the MEDIAN margin (a one-off writedown year can't
+    drag it negative and short-circuit the score), and the dispersion drops the 1-2
+    largest residuals (a couple of restructuring/impairment years — Baxter, Emerson
+    — shouldn't crater an otherwise-steady business). Chronic volatility survives the
+    trim. Loss years still dock it (capped, so a couple of charge losses don't zero it)."""
     ni, rev = dict(net_income), dict(revenue)
     years = sorted(y for y in rev if y in ni and rev[y])
     margins = [ni[y] / rev[y] for y in years]
     if len(margins) < 4:
         return None
-    losses = sum(1 for m in margins if m < 0)
-    mean = sum(margins) / len(margins)
-    if mean <= 0:
-        return 0.1
     import statistics
     n = len(margins)
+    losses = sum(1 for m in margins if m < 0)
+    mean = sum(margins) / n
+    center = statistics.median(margins)   # robust to a one-off charge year
+    if center <= 0:
+        return 0.1
     xs = list(range(n))
     mx = sum(xs) / n
     sxx = sum((x - mx) ** 2 for x in xs)
     slope = (sum((xs[i] - mx) * (margins[i] - mean) for i in range(n)) / sxx) if sxx else 0.0
     intercept = mean - slope * mx
     resid = [margins[i] - (slope * xs[i] + intercept) for i in range(n)]
-    # Detrended coefficient of variation: dispersion AROUND the trend line.
-    cv = statistics.pstdev(resid) / mean
-    score = (1.0 - min(cv, 1.5) / 1.5) - 0.15 * losses
+    # Trim the 1-2 largest |residuals| (one-time charge years) before measuring
+    # dispersion; keep the rest. A chronically volatile business still has a wide
+    # spread among the kept years, so this doesn't flatter it.
+    k = min(2, max(1, round(0.15 * n))) if n >= 6 else 0
+    kept = sorted(resid, key=abs)[:n - k]
+    trimmed_std = statistics.pstdev(kept) if len(kept) > 1 else 0.0
+    cv = trimmed_std / center
+    score = (1.0 - min(cv, 1.5) / 1.5) - 0.15 * min(losses, 2)
     return max(0.0, min(1.0, score))
 
 

@@ -788,6 +788,12 @@ ok(_rising > _choppy and _rising > 0.8,
 _wild = _stab([(y, (0.02 if i % 2 == 0 else 0.28) * 1000) for i, y in enumerate(_sy)],
               [(y, 1000) for y in _sy])
 ok(_wild < _rising - 0.3, "stability: a margin that swings hard still reads as unstable")
+# charge-robust: a single one-off writedown year shouldn't crater an otherwise-steady
+# business (the largest residuals are trimmed, the median centers it).
+_cy = list(range(2016, 2025))  # 9 years
+_charge = _stab([(y, (0.15 if i != 5 else -0.20) * 1000) for i, y in enumerate(_cy)],
+                [(y, 1000) for y in _cy])
+ok(_charge > 0.6, "stability: one one-off charge year doesn't crater an otherwise-steady business")
 
 # ---------------------------------------------------------------------------
 if FAILS:
