@@ -78,6 +78,7 @@ def _analyze(sym, assumptions, deep=False):
         "method": val.get("method"),
         "exp_return": m["expected_return"].get("expected_annual_return"),
         "roic": m["returns"].get("roic_avg") or m["returns"].get("roic_latest"),
+        "roe": m["returns"].get("roe_avg") or m["returns"].get("roe_latest"),
     }, None
 
 
@@ -281,7 +282,20 @@ def main():
     # well past the top 80 on its noisy fast score yet deep-verify into a BUY
     # (e.g. SYF, ACN, GL sat at fast ~67-69 but score 73-76 on EDGAR).
     verify_floor = max(45, args.min_score - 15)
-    to_verify = [r for r in rows if (r["score"] or 0) >= verify_floor][:args.deep_cap]
+    # ALSO deep-verify high-return names below the floor. The earnings-power model
+    # (justified P/E) needs 7+ yr of history, which the Yahoo-only fast pass doesn't
+    # have — so a mature quality compounder falls back to a shallow 4-yr DCF and
+    # under-scores badly (CTSH: fast 58 -> deep 88, a 30-pt swing the 15-pt floor
+    # buffer can't catch). Strong ROE *and* ROIC on the fast data is the tell that a
+    # name is exactly such a candidate, so pull those into the deep pass regardless
+    # of fast score. The deep re-score still decides candidacy, so the only cost is a
+    # few extra EDGAR fetches.
+    def _worth_verifying(r):
+        if (r.get("score") or 0) >= verify_floor:
+            return True
+        return ((r.get("roe") or 0) >= 0.15 and (r.get("roic") or 0) >= 0.12
+                and (r.get("score") or 0) >= 45 and not r.get("suspect"))
+    to_verify = [r for r in rows if _worth_verifying(r)][:args.deep_cap]
     if to_verify:
         print(f"\nDeep-verifying {len(to_verify)} near-the-bar names on EDGAR + SimFin…")
         by_t = {r["ticker"]: r for r in rows}
