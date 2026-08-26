@@ -749,6 +749,18 @@ ok(_rev["ok"] and 0.0 <= _rev["implied_growth"] <= 0.09,
 _epv_neg = _ep.value(0.0, 0.25, 0.09, 0.04, 100.0, 0.20)
 ok(not _epv_neg["ok"], "earnings-power: no valuation without positive earnings")
 
+# capital-light financials: exchanges/data/ratings/insurance-brokers are valued as
+# operating companies (not book value); real banks/insurers still use book value.
+from valuation import needs_earnings_valuation as _nev  # noqa: E402
+ok(_nev({"sector": "Financial Services", "industry": "Financial Data & Stock Exchanges"}) is False,
+   "classify: exchange/data financial -> operating-company valuation (not book value)")
+ok(_nev({"sector": "Financial Services", "industry": "Insurance Brokers"}) is False,
+   "classify: insurance broker -> operating-company valuation")
+ok(_nev({"sector": "Financial Services", "industry": "Banks - Diversified"}) is True,
+   "classify: a real bank still uses the book-value model")
+ok(_nev({"sector": "Financial Services", "industry": "Insurance - Property & Casualty"}) is True,
+   "classify: a risk-bearing insurer still uses the book-value model")
+
 # ---------------------------------------------------------------------------
 if FAILS:
     print(f"\n{len(FAILS)} failure(s):")

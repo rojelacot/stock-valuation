@@ -951,11 +951,23 @@ FINANCIAL_INDUSTRY_WORDS = ("bank", "insurance", "insurer", "capital markets",
                             "asset management", "reit", "mortgage", "financial")
 
 
+# Capital-light "financials" that carry trivial balance sheets relative to their
+# earnings — exchanges, index/data/ratings shops, insurance brokers. Book value is
+# meaningless for them (a justified-P/B model badly under-prices SPGI, ICE, CME),
+# so value them as ordinary operating companies (DCF -> earnings-power) instead.
+# NB: "credit services" is deliberately NOT here — it mixes capital-light networks
+# (V, MA) with balance-sheet lenders (SYF, COF); the ROE/P-B capital-light escape
+# in compute_metrics separates those.
+CAPITAL_LIGHT_FIN_INDUSTRIES = ("financial data & stock exchanges", "insurance brokers")
+
+
 def needs_earnings_valuation(info: dict[str, Any]) -> bool:
     """Guardrail 2: banks/insurers/REITs don't have meaningful 'free cash flow' —
     an FCF-DCF wildly misprices them. Value these on earnings power instead."""
     sec = (info.get("sector") or "").lower()
     ind = (info.get("industry") or "").lower()
+    if any(w in ind for w in CAPITAL_LIGHT_FIN_INDUSTRIES):
+        return False  # operating-company path, not book value
     if "financial" in sec or "real estate" in sec:
         return True
     return any(w in ind for w in FINANCIAL_INDUSTRY_WORDS)
