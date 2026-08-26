@@ -36,7 +36,7 @@ def main() -> None:
         time.sleep(wait)
         print(f"[scheduler] running weekly screen (--scope {SCOPE})", flush=True)
         try:
-            subprocess.run([sys.executable, "weekly_screen.py", "--scope", SCOPE],
+            subprocess.run([sys.executable, "weekly_screen.py", "--scope", SCOPE, "--no-ai"],
                            cwd="/app", check=False)
         except Exception as e:  # noqa: BLE001
             print(f"[scheduler] run failed: {e}", flush=True)
