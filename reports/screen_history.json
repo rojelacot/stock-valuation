@@ -743,6 +743,104 @@
           "below_buy": true
         }
       ]
+    },
+    {
+      "date": "2026-08-26",
+      "min_score": 80,
+      "count": 7,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 98,
+          "rating": "BUY",
+          "upside": 0.9530783926034161,
+          "price": 88.95,
+          "certainty": 0.66,
+          "mos": 0.20278872122311828,
+          "buy_below": 138.49658413363312,
+          "below_buy": true
+        },
+        {
+          "ticker": "CRUS",
+          "name": "Cirrus Logic, Inc.",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.3229934729382607,
+          "price": 111.1,
+          "certainty": 0.62,
+          "mos": 0.21418674892663933,
+          "buy_below": 115.50242661535988,
+          "below_buy": true
+        },
+        {
+          "ticker": "ACN",
+          "name": "Accenture plc",
+          "sector": "Technology",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 0.45556654775430583,
+          "price": 181.74,
+          "certainty": 0.97,
+          "mos": 0.12,
+          "buy_below": 232.79050466220346,
+          "below_buy": true
+        },
+        {
+          "ticker": "AOS",
+          "name": "A. O. Smith Corporation",
+          "sector": "Industrials",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.5763068503661123,
+          "price": 62.5,
+          "certainty": 0.89,
+          "mos": 0.13263303166872398,
+          "buy_below": 85.45228087261732,
+          "below_buy": true
+        },
+        {
+          "ticker": "ADBE",
+          "name": "Adobe Inc.",
+          "sector": "Technology",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.19111326279493748,
+          "price": 273.01,
+          "certainty": 0.87,
+          "mos": 0.13803867374362777,
+          "buy_below": 280.2976109233134,
+          "below_buy": true
+        },
+        {
+          "ticker": "GNTX",
+          "name": "Gentex Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.7830123160442747,
+          "price": 23.735,
+          "certainty": 0.89,
+          "mos": 0.13228671160545638,
+          "buy_below": 36.72145049786524,
+          "below_buy": true
+        },
+        {
+          "ticker": "SNA",
+          "name": "Snap-on Incorporated",
+          "sector": "Industrials",
+          "score": 83,
+          "rating": "BUY",
+          "upside": 0.2394039994277905,
+          "price": 396.54,
+          "certainty": 0.86,
+          "mos": 0.14147005279607416,
+          "buy_below": 421.9445136195622,
+          "below_buy": true
+        }
+      ]
     }
   ]
 }
