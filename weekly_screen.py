@@ -190,7 +190,7 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
                              f"{pct(r['upside'])} | {pct(r['exp_return'])} |")
             lines.append("")
 
-        # ---- AI qualitative read (moat / management / risks / take) ----
+        # ---- AI qualitative read (moat / management / thesis / bull / bear / risks) ----
         if any(r.get("ai") for r in candidates):
             lines.append("## AI qualitative read (candidates)")
             lines.append("")
@@ -199,13 +199,28 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
                 if not ai.get("available"):
                     continue
                 moat = ai.get("moat", {}); mgmt = ai.get("management", {})
-                lines.append(f"**{r['ticker']} — {r['name']}** · Moat: {moat.get('rating','?')} · "
-                             f"Management: {mgmt.get('rating','?')}")
-                if ai.get("verdict_narrative"):
-                    lines.append(f"> {ai['verdict_narrative']}")
+                lines.append(f"### {r['ticker']} — {r['name']}")
+                lines.append(f"**{moat.get('rating','?')} moat · {mgmt.get('rating','?')} management"
+                             + (f" · {ai['cyclicality']}" if ai.get("cyclicality") else "") + "**")
+                lines.append("")
+                if ai.get("investment_thesis"):
+                    lines.append(f"- **Thesis:** {ai['investment_thesis'].strip()}")
+                if moat.get("reasoning"):
+                    lines.append(f"- **Moat ({moat.get('rating','?')}):** {moat['reasoning'].strip()}")
+                if mgmt.get("reasoning"):
+                    lines.append(f"- **Management ({mgmt.get('rating','?')}):** {mgmt['reasoning'].strip()}")
+                bull = ai.get("bull_case") or []
+                bear = ai.get("bear_case") or []
+                if bull:
+                    lines.append(f"- **Bull:** {bull[0].strip()}")
+                if bear:
+                    lines.append(f"- **Bear:** {bear[0].strip()}")
                 risks = ai.get("risks") or []
                 if risks:
-                    lines.append("Key risks: " + "; ".join(risks[:3]))
+                    lines.append("- **Key risks:** " + "; ".join(x.strip() for x in risks[:3]))
+                breakers = ai.get("thesis_breakers") or []
+                if breakers:
+                    lines.append(f"- **Thesis-breaker:** {breakers[0].strip()}")
                 lines.append("")
     else:
         lines.append("## No names cleared the bar this week")
