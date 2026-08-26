@@ -32,6 +32,32 @@ FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
 _CIK_CACHE = Path(__file__).resolve().parent.parent / "reports" / ".edgar_cik.json"
 _CIK_TTL = 30 * 24 * 3600  # refresh the ticker->CIK map monthly
 
+# Per-company XBRL companyfacts (~1MB each) change only when a new filing lands
+# (quarterly), so cache the raw payload to disk. A full-universe screen re-run then
+# skips ~170 multi-MB SEC downloads. Keyed by CIK.
+_FACTS_CACHE = Path(__file__).resolve().parent.parent / "reports" / ".edgar_facts"
+_FACTS_TTL = 7 * 24 * 3600  # a week — well inside the quarterly filing cadence
+
+
+def _facts_cached(cik: int) -> Optional[Any]:
+    p = _FACTS_CACHE / f"CIK{cik:010d}.json"
+    try:
+        if p.exists() and (time.time() - p.stat().st_mtime) < _FACTS_TTL:
+            return json.loads(p.read_text())
+    except Exception:  # noqa: BLE001 — a corrupt/partial cache file just misses
+        pass
+    return None
+
+
+def _facts_store(cik: int, payload: Any) -> None:
+    try:
+        _FACTS_CACHE.mkdir(parents=True, exist_ok=True)
+        tmp = _FACTS_CACHE / f"CIK{cik:010d}.json.tmp"
+        tmp.write_text(json.dumps(payload))
+        tmp.replace(_FACTS_CACHE / f"CIK{cik:010d}.json")   # atomic
+    except Exception:  # noqa: BLE001 — caching is best-effort
+        pass
+
 # In-memory ticker -> CIK (int) map, loaded lazily.
 _CIK_MEM: Optional[dict[str, int]] = None
 
@@ -307,10 +333,14 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
         cik = cik_for(ticker)
     if cik is None:
         return {"error": f"{ticker}: no CIK on file (not a US 10-K filer)"}
-    try:
-        payload = _get(_session(), FACTS_URL.format(cik=cik))
-    except Exception as e:  # noqa: BLE001
-        return {"error": f"EDGAR fetch failed: {e}"}
+    payload = _facts_cached(cik)
+    if payload is None:
+        try:
+            payload = _get(_session(), FACTS_URL.format(cik=cik))
+        except Exception as e:  # noqa: BLE001
+            return {"error": f"EDGAR fetch failed: {e}"}
+        if payload:
+            _facts_store(cik, payload)
     if not payload:
         return {"error": f"{ticker}: no company facts"}
 

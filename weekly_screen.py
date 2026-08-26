@@ -82,10 +82,16 @@ def _analyze(sym, assumptions, deep=False):
     }, None
 
 
-def scan(symbols, assumptions, signature=None):
+def scan(symbols, assumptions, signature=None, workers=6):
     """Scan symbols. If `signature` is given, checkpoint progress to disk so a
     crashed/killed run resumes where it left off (important for multi-hour scans).
-    """
+
+    Fetches run in a thread pool (network-I/O-bound), so the wall-clock is a
+    fraction of the sequential time. Results are collected in the MAIN thread as
+    futures complete, so the shared rows/errors/done + checkpoint stay consistent
+    without locks. `workers` is capped conservatively — Yahoo throttles, and the
+    query1<->query2 host-failover absorbs the occasional 429."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     rows, errors, done = [], [], set()
     if signature and CHECKPOINT.exists():
         try:
@@ -107,22 +113,25 @@ def scan(symbols, assumptions, signature=None):
             {"signature": signature, "rows": rows, "errors": errors,
              "done": sorted(done)}))
 
-    for i, sym in enumerate(symbols, 1):
-        if sym in done:
-            continue
-        print(f" [{i}/{len(symbols)}] {sym} …", end="", flush=True)
-        try:
-            row, err = _analyze(sym, assumptions)
-            if err:
-                errors.append((sym, err)); print(" skipped")
-            else:
-                rows.append(row); print(f" {row['score']} {row['rating']}")
-        except Exception as e: # noqa: BLE001
-            errors.append((sym, str(e))); print(" error")
-        done.add(sym)
-        if signature and i % 25 == 0:
-            save()
-        time.sleep(0.2) # be gentle with Yahoo
+    todo = [s for s in symbols if s not in done]
+    total, completed = len(symbols), len(done)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        futs = {ex.submit(_analyze, sym, assumptions): sym for sym in todo}
+        for fut in as_completed(futs):
+            sym = futs[fut]
+            completed += 1
+            try:
+                row, err = fut.result()
+                if err:
+                    errors.append((sym, err)); tag = "skipped"
+                else:
+                    rows.append(row); tag = f"{row['score']} {row['rating']}"
+            except Exception as e:  # noqa: BLE001
+                errors.append((sym, str(e))); tag = "error"
+            done.add(sym)
+            print(f" [{completed}/{total}] {sym} … {tag}", flush=True)
+            if signature and completed % 25 == 0:
+                save()
     save()
     rows.sort(key=lambda r: -(r["score"] or 0))
     return rows, errors
@@ -260,6 +269,9 @@ def main():
                     help="price floor for --scope all (default $5)")
     ap.add_argument("--no-ai", action="store_true",
                     help="skip Claude's qualitative read on the candidates")
+    ap.add_argument("--workers", type=int, default=6,
+                    help="concurrent fetch workers (default 6; raise cautiously — "
+                         "Yahoo throttles)")
     ap.add_argument("--deep-cap", type=int, default=200,
                     help="max names to deep-verify on EDGAR+SimFin in the second "
                          "pass (default 200; the fast pass under-scores, so a "
@@ -286,7 +298,7 @@ def main():
                  if len(symbols) > 300 else None)
 
     print(f"Scanning {len(symbols)} names (buy bar ≥ {args.min_score})…\n")
-    rows, errors = scan(symbols, assumptions, signature=signature)
+    rows, errors = scan(symbols, assumptions, signature=signature, workers=args.workers)
 
     # Second pass: deep-verify the near-and-above-the-bar names on EDGAR + SimFin
     # so candidates rest on the same 10-19yr as-filed data the app's Analyze view
@@ -314,18 +326,22 @@ def main():
     if to_verify:
         print(f"\nDeep-verifying {len(to_verify)} near-the-bar names on EDGAR + SimFin…")
         by_t = {r["ticker"]: r for r in rows}
-        for i, r in enumerate(to_verify, 1):
-            print(f" [{i}/{len(to_verify)}] {r['ticker']} …", end="", flush=True)
-            try:
-                deep, err = _analyze(r["ticker"], assumptions, deep=True)
-                if deep:
-                    by_t[r["ticker"]] = deep
-                    print(f" {deep['score']} {deep['rating']}")
-                else:
-                    print(f" kept fast ({err})")
-            except Exception as e:  # noqa: BLE001
-                print(f" error ({e})")
-            time.sleep(0.2)
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        n, done = len(to_verify), 0
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            futs = {ex.submit(_analyze, r["ticker"], assumptions, True): r["ticker"]
+                    for r in to_verify}
+            for fut in as_completed(futs):
+                t = futs[fut]; done += 1
+                try:
+                    deep, err = fut.result()
+                    if deep:
+                        by_t[t] = deep; tag = f"{deep['score']} {deep['rating']}"
+                    else:
+                        tag = f"kept fast ({err})"
+                except Exception as e:  # noqa: BLE001
+                    tag = f"error ({e})"
+                print(f" [{done}/{n}] {t} … {tag}", flush=True)
         rows = sorted(by_t.values(), key=lambda r: -(r["score"] or 0))
 
     # Candidates must clear the score bar AND be rated BUY (a high score a
