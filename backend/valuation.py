@@ -757,6 +757,21 @@ def compute_metrics(stock: dict[str, Any],
             # so cap the justified-multiple growth to the terminal rate — a fading
             # business gets a fading-business multiple, not a compounder's.
             _epv_growth = min(oe_growth_robust if oe_growth_robust is not None else 0.0, A["terminal_growth"])
+        # Faded-from-peak guard. The fade test above only fires when the latest year
+        # sits below the 3-yr AVERAGE. A business can recover just above its 3-yr
+        # average yet still be far below a genuine multi-year peak — a secular
+        # decline, not a compounder (TROW: 2025 net income $2.09B vs a 2021 peak of
+        # $3.08B, a shrinking active manager the 3-yr test lets through with a full
+        # growth-premium multiple, implying +100% upside). So when the latest earnings
+        # are >15% below the 7-year peak, deny the growth premium: cap the justified
+        # multiple's growth to terminal. This keys off the peak (not the volatile
+        # single-year trend), so genuine compounders at a new high (last≈peak) are
+        # untouched, and it does not disturb cyclical names sitting AT their peak,
+        # which the earnings series can't distinguish from compounders anyway.
+        _peak7 = max((v for _, v in net_income[-7:]), default=None)
+        if (_latest_ni is not None and _peak7 and _latest_ni < 0.85 * _peak7
+                and _epv_growth is not None):
+            _epv_growth = min(_epv_growth, A["terminal_growth"])
         _epv_eps = (_epv_ni / _epv_shares) if (_epv_ni and _epv_shares and _epv_ni > 0) else None
         # A proven high-ROE, stable, mature compounder is a low-business-risk,
         # bond-like stream; its required return belongs in ~7-10%, so don't let a
