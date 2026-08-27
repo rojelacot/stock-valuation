@@ -2,7 +2,8 @@
 
 A local web app that values a stock the way a patient, index-ignoring value investor would:
 pull ~10-19 years of fundamentals, estimate intrinsic value with the model that fits the
-business (DCF, justified-P/E earnings-power, price-to-book, or FFO), score business
+business (DCF, justified-P/E earnings-power, two-stage price-to-book, or FFO — routed by SIC
+code, [see below](#valuation-models--the-right-one-per-business)), score business
 quality / growth / balance-sheet strength, check whether the expected 10–15yr return beats
 inflation, layer in an AI qualitative read (moat, management, risks), and output a
 **Buy / Hold / Avoid** verdict — with all the reasoning shown.
@@ -72,7 +73,7 @@ recomputes live (no re-fetch, no re-call to Claude).
 
 ## What the single-stock analysis shows
 - **Verdict** — 0–100 score → Buy / Hold / Avoid, with the reasoning and strengths/watch-outs.
-- **Intrinsic value** — conservative (FCF) → adjusted (owner-earnings) DCF, scored off the midpoint; auto-switches to a **justified-P/E earnings-power** model for mature wide-moat compounders (where a strict DCF extrapolates to an artifact), **justified price-to-book** for banks/insurers, and **FFO** for REITs.
+- **Intrinsic value** — conservative (FCF) → adjusted (owner-earnings) DCF, scored off the midpoint; smoothly blends into a **justified-P/E earnings-power** model for mature wide-moat compounders (where a strict DCF extrapolates to an artifact), a **two-stage justified price-to-book** for banks/insurers, and **FFO** for REITs. The model is chosen by SIC code — [see Valuation models](#valuation-models--the-right-one-per-business).
 - **Quality trajectory** — ROIC, margins and free cash flow over the full history, read as *widening moat / mixed / eroding*.
 - **Decision strip** — buy-zone status vs the certainty-scaled buy-below, the fair-value gap, and expected return vs inflation, right under the verdict.
 - **Scenarios & reverse DCF** — bear/base/bull fair values, a discount-rate × growth **sensitivity grid**,
@@ -96,13 +97,57 @@ recomputes live (no re-fetch, no re-call to Claude).
 - **Peers & sector benchmarking** — same-sector comparison and metrics vs the sector median.
 - **Primary sources** — direct links to the 10-K / 10-Q / DEF 14A / transcripts, plus what to check yourself.
 
+## Valuation models — the right one per business
+No single model fits every company, so each name is routed to the model its economics call for.
+**Routing is deterministic**: it keys off the company's **SEC SIC code** (the industry the SEC has on
+file, fetched from EDGAR and cached), not a data-provider sector label that can arrive differently
+from one fetch to the next and flip a name between models. Yahoo's sector/industry is only the
+fallback when no SIC is available (e.g. foreign filers).
+
+- **Operating companies → discounted cash flow.** Two DCFs: *conservative* discounts free cash flow
+  (penalizes all capex); *adjusted* discounts **owner earnings** = net income + D&A − maintenance
+  capex (credits growth capex). Fair value is the range between them — the width **is** the capex
+  distortion, made visible. Growth is a **log-linear (least-squares) trend** over the full earnings
+  history rather than a two-point CAGR, so a single noisy or partially-restated year can't swing it.
+- **Mature wide-moat compounders → justified-P/E earnings power.** A strict DCF misprices a stable,
+  high-return compounder on the low side (a depressed trailing growth rate compounded through a full
+  discount and a Gordon terminal reads as an artifact-low value). These are valued on **normalized
+  earnings × a justified P/E** = (1 − g/ROE)/(r − g), on through-cycle ROE and a capped growth rate,
+  with the multiple clamped so it can never justify a bubble. The **DCF ↔ earnings-power handoff is a
+  smooth blend, not a hard cliff**: where the two models are close the fair value is a weighted
+  average, so a name whose DCF wobbles near the threshold no longer jumps between two fair values run
+  to run. A **faded-from-peak guard** denies the growth premium to a business earning well below its
+  multi-year earnings peak (a secular decliner isn't a compounder), and a **boom-fade rule** values a
+  demand-boom name on its latest actual earnings rather than an inflated multi-year average.
+- **Banks & insurers → two-stage justified price-to-book.** A financial's "free cash flow" is
+  meaningless, so it's valued on the model bank/insurance analysts use — the **residual-income
+  (excess-return)** form of price-to-book: value = book + the present value of `(ROE − r) × book`,
+  with book compounding at a near-term rate for ~10 years before fading to the terminal rate. This
+  two-stage form (vs the single-stage `(ROE − g)/(r − g)`, which can only use a terminal growth below
+  the discount rate) correctly credits a **fast-compounding** insurer like Progressive or Kinsale
+  instead of under-pricing it — while a hard P/B cap and through-cycle (7-yr median) ROE keep it
+  bounded and stop a cyclical peak from inflating it.
+- **REITs → funds from operations (FFO).** Real-estate depreciation crushes GAAP earnings and book
+  value understates the property, so both a cash-flow DCF and price-to-book mislead. REITs are valued
+  on **FFO** (net income + real-estate D&A), discounted as an equity-level stream.
+- **Capital-light "financials" → the operating path.** Exchanges, index/data/ratings shops, payment
+  networks and asset managers earn huge returns on trivial balance sheets, so book value is
+  meaningless (an asset manager is a fee stream, not its equity). By SIC they route to the ordinary
+  DCF → earnings-power path instead of price-to-book.
+
+Every model feeds the **same** downstream panel — scenarios, Monte-Carlo, and the reverse model (what
+ROE/growth the price implies) — so bear/base/bull and the probability-of-undervaluation are always
+computed on whichever model set the headline, never a mismatched one.
+
 ## What each part does
 | File | Role |
 |---|---|
 | `backend/data.py` | Source orchestration + Yahoo JSON fetch (via `curl_cffi`) + normalize; EDGAR/SimFin dispatch + fallback; bulk market-cap prefilter; free analyst/sentiment supplement |
 | `backend/edgar.py` | SEC EDGAR XBRL adapter — 10–19yr as-filed 10-K statements (default single-stock source), same normalized shape |
 | `backend/simfin.py` | SimFin v3 adapter — fallback for names EDGAR doesn't cover (~7yr statements) |
-| `backend/valuation.py` | Growth CAGRs, ROE/ROIC, margins, **DCF value range**, scenarios, reverse DCF, sensitivity grid, **Monte-Carlo DCF**, expected return |
+| `backend/valuation.py` | Growth trends, ROE/ROIC, margins, **model routing** (DCF ↔ earnings-power blend, book-value, FFO), **DCF value range**, scenarios, reverse, sensitivity grid, Monte-Carlo, expected return |
+| `backend/earnings_power.py` | Justified-P/E earnings-power model for mature compounders (value / scenarios / Monte-Carlo / reverse) |
+| `backend/financials.py` | Two-stage justified price-to-book (residual income) + FFO for banks/insurers/REITs |
 | `backend/duediligence.py` | EV multiples, NOPAT-ROIC vs **WACC**, Piotroski, capital returns, dividend safety, valuation-vs-history, accruals |
 | `backend/forensics.py` | **Altman Z** (distress) + **Beneish M** (manipulation) forensic scores; suppressed for financials |
 | `backend/earnings_quality.py` | Capex-cycle / owner-earnings / cash-conversion analysis |
@@ -184,10 +229,13 @@ guardrails keep the ranking honest (see `data.py` and `valuation.py`):
    otherwise blow up the DCF. We detect `financialCurrency`, fetch the FX rate, and convert monetary
    figures to the trading currency — or flag the stock if we can't.
 2. **Financials & REITs.** Banks/insurers/brokers and REITs have no meaningful "free cash flow", so
-   an FCF-DCF wildly misprices them: banks/insurers are valued on **justified price-to-book** (through-
-   cycle ROE), REITs on **FFO**. Capital-light "financials" — exchanges, index/data/ratings shops,
-   payment networks, insurance brokers — carry trivial balance sheets, so book value is meaningless;
-   these are routed to the ordinary DCF → earnings-power path instead.
+   an FCF-DCF wildly misprices them. Which model each gets is decided by its **SEC SIC code**
+   (deterministic — a provider's sector label can arrive differently between fetches and flip the
+   model): banks/insurers on a **two-stage justified price-to-book** (residual income on through-cycle
+   ROE, crediting near-term book compounding so a fast-grower isn't under-priced), REITs on **FFO**.
+   Capital-light "financials" — exchanges, index/data/ratings shops, payment networks, asset managers,
+   insurance brokers — carry trivial balance sheets, so book value is meaningless; by SIC they route
+   to the ordinary DCF → earnings-power path instead. See [Valuation models](#valuation-models--the-right-one-per-business).
 3. **Sanity caps.** Growth is extrapolated cautiously (tighter stage-1 cap, extra caution when only
    ~4yr of history exists), and any DCF implying **>100% upside** is flagged *suspect* — its valuation
    pillar is capped, it's downgraded out of BUY, and it's excluded from the buy-candidate list (a
@@ -266,9 +314,10 @@ top of `backend/valuation.py` and `scoring.py`, or drag the sliders live in the 
 
 ## Data sources
 - **Single-stock Analyze** uses **SEC EDGAR** — the XBRL `companyfacts` API returns 10–19 years of
-  as-filed 10-K line items for any US filer, free and without a key — for the statement history, and
-  pairs it with **Yahoo** for live price, market cap, ratios and analyst sentiment. This hybrid is
-  the deepest free data available and is the default (`backend/edgar.py`).
+  as-filed 10-K line items for any US filer, free and without a key — for the statement history, plus
+  the company's **SIC code** (from the EDGAR submissions endpoint) that deterministically routes it to
+  the right valuation model. It pairs this with **Yahoo** for live price, market cap, ratios and
+  analyst sentiment. This hybrid is the deepest free data available and is the default (`backend/edgar.py`).
 - **Fallback order** when EDGAR doesn't cover a name (e.g. a foreign private issuer that files 20-F):
   **SimFin** if `SIMFIN_API_KEY` is set (~7yr), else **Yahoo** (~4yr). Fully automatic; the source is
   shown on every result.
