@@ -346,6 +346,27 @@ def _tag_series(node: Any, unit: str, instant: bool) -> dict[str, tuple[str, flo
     return out
 
 
+def _fix_scale(series: dict[str, float]) -> dict[str, float]:
+    """Repair filer units errors within a series. Some issuers tag a recent year's
+    value in the wrong magnitude — e.g. MCD's weighted-average diluted shares filed
+    as 716.4 (meaning 716.4 million) beside older years in absolute (750,100,000).
+    Scale a grossly-small value UP in factors of 1000 to match the series' correctly
+    scaled maximum. A stock split is at most ~10x, so a >=1000x gap is unambiguously
+    a units error, never a real year-over-year change — this leaves normal series
+    (and splits) untouched and only rescales the mis-tagged outliers."""
+    vals = [v for v in series.values() if v and v > 0]
+    if len(vals) < 2:
+        return series
+    ref = max(vals)
+    out = dict(series)
+    for yr, v in series.items():
+        if v and v > 0 and v * 1000 <= ref:
+            while v * 1000 <= ref:
+                v *= 1000
+            out[yr] = v
+    return out
+
+
 def _concept(facts: dict[str, Any], tags: list[str], unit: str,
              negate: bool, instant: bool) -> dict[str, float]:
     """Merge candidate tags into one {year: value} series.
@@ -419,6 +440,11 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
     statements: dict[str, dict[str, float]] = {k: {} for k in STATEMENT_KEYS}
     for key, (tags, unit, negate, instant) in _CONCEPTS.items():
         statements[key] = _concept(facts, tags, unit, negate, instant)
+
+    # Repair filer scale errors in the share count so per-share values (EPS, DCF,
+    # earnings-power) and the dilution trend read correctly — some issuers tag a
+    # recent year's weighted-average shares in millions beside older absolute years.
+    statements["shares"] = _fix_scale(statements["shares"])
 
     if not statements.get("revenue"):
         return {"error": f"{ticker}: no revenue history in XBRL facts"}
