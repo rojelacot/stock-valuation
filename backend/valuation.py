@@ -681,8 +681,16 @@ def compute_metrics(stock: dict[str, Any],
             fin_roe = _rs[_n // 2] if _n % 2 else (_rs[_n // 2 - 1] + _rs[_n // 2]) / 2
         else:
             fin_roe = returns.get("roe_avg") or returns.get("roe_latest")
+        # Near-term book/earnings growth for the two-stage P/B, from the robust
+        # (loglin) earnings trend, capped at 12% — a fast-compounding insurer or
+        # bank (KNSL, PGR) shouldn't be valued on a single terminal rate that a
+        # decade of excess-return growth will clearly beat, but no financial gets
+        # a runaway growth assumption either.
+        _fin_g1 = (min(oe_growth_robust, 0.12)
+                   if oe_growth_robust is not None else None)
         fv = financials.value(latest_equity, fin_shares, fin_roe, eff_discount,
-                              A["terminal_growth"], price, A["margin_of_safety"])
+                              A["terminal_growth"], price, A["margin_of_safety"],
+                              growth_stage1=_fin_g1)
         # The P/B model only fits balance-sheet financials, where book value ≈
         # economic capital. Capital-light "financials" — payment networks (V, MA),
         # exchanges, capital-light fintechs — earn enormous ROE on tiny equity, so
@@ -901,8 +909,11 @@ def compute_metrics(stock: dict[str, Any],
     if fin_valuation:
         import financials
         _bvps, _roe = fin_valuation["bvps"], fin_valuation["roe_used"]
-        scenarios = financials.scenarios(_bvps, _roe, eff_discount, A["terminal_growth"], price)
-        monte_carlo = financials.monte_carlo(_bvps, _roe, eff_discount, A["terminal_growth"], price)
+        _g1 = fin_valuation.get("growth_stage1")
+        scenarios = financials.scenarios(_bvps, _roe, eff_discount, A["terminal_growth"], price,
+                                         growth_stage1=_g1)
+        monte_carlo = financials.monte_carlo(_bvps, _roe, eff_discount, A["terminal_growth"], price,
+                                             growth_stage1=_g1)
         sensitivity = {"ok": False}  # the DCF discount×growth grid doesn't apply
         reverse = {"ok": True, "method": "book-value",
                    "implied_roe": fin_valuation.get("implied_roe")}
