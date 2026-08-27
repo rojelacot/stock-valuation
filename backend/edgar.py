@@ -367,6 +367,41 @@ def _fix_scale(series: dict[str, float]) -> dict[str, float]:
     return out
 
 
+_SPLIT_RATIOS = (2, 3, 4, 5, 6, 7, 8, 10, 12, 15, 20, 25, 30)
+
+
+def _split_adjust(shares: dict[str, float], equity: dict[str, float]
+                  ) -> dict[str, float]:
+    """Restate the historical share count for stock splits. EDGAR reports each
+    year's as-filed weighted-average shares, NOT split-adjusted, so a 10:1 split
+    shows as a 10x jump and reads as +20%/yr dilution for names that are actually
+    buying back stock (AAPL, NVDA). Detect a split — a large jump close to a round
+    ratio, with equity flat (no capital raised), occurring past the first few years
+    (an IPO/de-SPAC preferred-conversion jump clusters at the start and mimics a
+    split) — and scale the pre-split years up onto the current basis. Leaves the
+    latest count untouched, so the valuation's per-share math is unaffected; only
+    the dilution trend is corrected."""
+    yrs = sorted(shares, key=lambda y: int(y))
+    if len(yrs) < 4:
+        return dict(shares)
+    out = dict(shares)
+    factor = 1.0
+    for i in range(len(yrs) - 1, 0, -1):
+        y, yp = yrs[i], yrs[i - 1]
+        out[yp] = shares[yp] * factor
+        sp, spp = shares[y], shares[yp]
+        sr = (sp / spp) if spp else 1.0
+        is_round = any(abs(sr / n - 1) < 0.12 for n in _SPLIT_RATIOS)
+        if sr >= 1.8 and is_round and i >= 3:
+            eq_y, eq_yp = equity.get(y), equity.get(yp)
+            eqr = (eq_y / eq_yp) if (eq_y and eq_yp and eq_yp > 0) else None
+            if eqr is None or eqr < sr * 0.6:   # shares jumped but equity did not
+                factor *= sr
+                out[yp] = shares[yp] * factor
+    out[yrs[-1]] = shares[yrs[-1]]
+    return out
+
+
 def _concept(facts: dict[str, Any], tags: list[str], unit: str,
              negate: bool, instant: bool) -> dict[str, float]:
     """Merge candidate tags into one {year: value} series.
@@ -445,6 +480,10 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
     # earnings-power) and the dilution trend read correctly — some issuers tag a
     # recent year's weighted-average shares in millions beside older absolute years.
     statements["shares"] = _fix_scale(statements["shares"])
+    # Restate historical shares for stock splits so the dilution trend isn't fooled
+    # into reading a 10:1 split as +20%/yr dilution (needs total_equity as the
+    # split-vs-issuance cross-check, so run it after the concept loop).
+    statements["shares"] = _split_adjust(statements["shares"], statements.get("total_equity") or {})
 
     if not statements.get("revenue"):
         return {"error": f"{ticker}: no revenue history in XBRL facts"}
