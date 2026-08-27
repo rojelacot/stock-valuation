@@ -28,9 +28,16 @@ from curl_cffi import requests as cr
 
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik:010d}.json"
 
 _CIK_CACHE = Path(__file__).resolve().parent.parent / "reports" / ".edgar_cik.json"
 _CIK_TTL = 30 * 24 * 3600  # refresh the ticker->CIK map monthly
+
+# SEC SIC (Standard Industrial Classification) code per company — the SEC-
+# registered industry, unlike Yahoo's sector/industry which arrives inconsistently
+# and flips a name between valuation models run-to-run. Stable, so cache it long.
+_SIC_CACHE = Path(__file__).resolve().parent.parent / "reports" / ".edgar_sic.json"
+_SIC_TTL = 30 * 24 * 3600
 
 # Per-company XBRL companyfacts (~1MB each) change only when a new filing lands
 # (quarterly), so cache the raw payload to disk. A full-universe screen re-run then
@@ -83,6 +90,40 @@ def _facts_store(cik: int, payload: Any) -> None:
         tmp.replace(_FACTS_CACHE / f"CIK{cik:010d}.json")   # atomic
     except Exception:  # noqa: BLE001 — caching is best-effort
         pass
+
+
+def company_sic(cik: int) -> Optional[int]:
+    """The SEC-registered SIC code for a company (a stable industry classification),
+    or None if unavailable. Read from a small on-disk cik->sic map; on a miss fetch
+    the SEC submissions doc once and cache it. Used to route a name to the right
+    valuation model deterministically, instead of Yahoo's flaky sector field."""
+    key = str(cik)
+    try:
+        if _SIC_CACHE.exists() and (time.time() - _SIC_CACHE.stat().st_mtime) < _SIC_TTL:
+            cache = json.loads(_SIC_CACHE.read_text())
+            if key in cache:
+                return cache[key]
+        else:
+            cache = json.loads(_SIC_CACHE.read_text()) if _SIC_CACHE.exists() else {}
+    except Exception:  # noqa: BLE001
+        cache = {}
+    sic: Optional[int] = None
+    try:
+        sub = _get(_session(), SUBMISSIONS_URL.format(cik=cik))
+        raw = (sub or {}).get("sic")
+        if raw not in (None, ""):
+            sic = int(raw)
+    except Exception:  # noqa: BLE001 — SIC is best-effort; classification falls back to Yahoo
+        return None
+    try:  # persist even a None so a genuinely-absent SIC isn't refetched every run
+        cache[key] = sic
+        _SIC_CACHE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = _SIC_CACHE.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(cache))
+        tmp.replace(_SIC_CACHE)
+    except Exception:  # noqa: BLE001
+        pass
+    return sic
 
 # In-memory ticker -> CIK (int) map, loaded lazily.
 _CIK_MEM: Optional[dict[str, int]] = None
@@ -445,5 +486,6 @@ def fetch_statements(ticker: str, cik: Optional[int] = None) -> dict[str, Any]:
         "years": years,
         "entity": payload.get("entityName"),
         "cik": cik,
+        "sic": company_sic(cik),
         "debt_estimated": debt_estimated,
     }

@@ -341,6 +341,11 @@ def fetch_stock(ticker: str, use_simfin: bool = True,
                     info["shares_outstanding"] = sh
                     if not info.get("market_cap") and info.get("current_price"):
                         info["market_cap"] = info["current_price"] * sh
+            # SEC SIC code — the stable industry classification that routes a name
+            # to the right valuation model (Yahoo's sector/industry arrives
+            # inconsistently and flips the model choice between fetches).
+            if edg.get("sic") is not None:
+                info["sic"] = edg["sic"]
             return base
 
     # 2) SimFin then Yahoo (EDGAR didn't cover this name).

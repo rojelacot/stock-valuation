@@ -1150,9 +1150,44 @@ FINANCIAL_INDUSTRY_WORDS = ("bank", "insurance", "insurer", "capital markets",
 CAPITAL_LIGHT_FIN_INDUSTRIES = ("financial data & stock exchanges", "insurance brokers")
 
 
+def _sic_class(info: dict[str, Any]) -> Optional[str]:
+    """Route a name to a valuation model from its SEC SIC code — a stable,
+    SEC-registered classification, unlike Yahoo's sector/industry which arrives
+    inconsistently and flips the model between fetches (ESNT swung book-value
+    <-> DCF run-to-run). Returns 'book' (balance-sheet financial -> justified
+    price-to-book), 'ffo' (REIT -> FFO), 'operating' (capital-light financial or
+    non-financial -> DCF/earnings-power), or None when no SIC is available.
+
+    SIC financial blocks: 6000-6199 banks & credit and 6300-6399 insurance
+    carriers are balance-sheet businesses (book x ROE). 6200-6299 brokers,
+    exchanges & investment advice and 6400-6499 insurance agents/brokers are
+    CAPITAL-LIGHT — book value badly under-prices them (an asset manager is a fee
+    stream, not its balance sheet), so they take the operating path. 6500-6599
+    real estate and 6798 REITs value on FFO."""
+    sic = info.get("sic")
+    if sic is None:
+        return None
+    try:
+        sic = int(sic)
+    except (TypeError, ValueError):
+        return None
+    if sic == 6798 or 6500 <= sic <= 6599:
+        return "ffo"
+    if 6200 <= sic <= 6299 or 6400 <= sic <= 6499:
+        return "operating"          # capital-light financials
+    if 6000 <= sic <= 6199 or 6300 <= sic <= 6399 or 6700 <= sic <= 6799:
+        return "book"               # banks, credit, insurance carriers, holdcos
+    return "operating"
+
+
 def needs_earnings_valuation(info: dict[str, Any]) -> bool:
-    """Guardrail 2: banks/insurers/REITs don't have meaningful 'free cash flow' —
-    an FCF-DCF wildly misprices them. Value these on earnings power instead."""
+    """Guardrail 2: banks/insurers don't have meaningful 'free cash flow' — an
+    FCF-DCF wildly misprices them, so value them on a justified price-to-book
+    model. Prefer the stable SEC SIC classification; fall back to Yahoo's
+    sector/industry only when no SIC is on file."""
+    cls = _sic_class(info)
+    if cls is not None:
+        return cls == "book"
     sec = (info.get("sector") or "").lower()
     ind = (info.get("industry") or "").lower()
     if any(w in ind for w in CAPITAL_LIGHT_FIN_INDUSTRIES):
@@ -1166,7 +1201,11 @@ def needs_ffo_valuation(info: dict[str, Any]) -> bool:
     """REITs: GAAP earnings are crushed by real-estate depreciation and book value
     understates the property, so both a cash-flow DCF and a price-to-book model
     mislead. The right measure is FFO (funds from operations = net income + real-
-    estate D&A) and a P/FFO / FFO-discount valuation."""
+    estate D&A) and a P/FFO / FFO-discount valuation. Prefer SIC; fall back to
+    Yahoo."""
+    cls = _sic_class(info)
+    if cls is not None:
+        return cls == "ffo"
     sec = (info.get("sector") or "").lower()
     ind = (info.get("industry") or "").lower()
     return "real estate" in sec or "reit" in ind
