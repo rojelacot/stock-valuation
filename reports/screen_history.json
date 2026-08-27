@@ -978,7 +978,7 @@
     {
       "date": "2026-08-27",
       "min_score": 80,
-      "count": 14,
+      "count": 13,
       "winners": [
         {
           "ticker": "DECK",
@@ -991,19 +991,6 @@
           "certainty": 0.66,
           "mos": 0.20278872122311828,
           "buy_below": 131.6868440832368,
-          "below_buy": true
-        },
-        {
-          "ticker": "CRUS",
-          "name": "Cirrus Logic, Inc.",
-          "sector": "Other / Unknown",
-          "score": 93,
-          "rating": "BUY",
-          "upside": 0.2772355395408018,
-          "price": 110.88,
-          "certainty": 0.62,
-          "mos": 0.21418674892663933,
-          "buy_below": 111.28677566673692,
           "below_buy": true
         },
         {
