@@ -505,11 +505,17 @@ def compute_metrics(stock: dict[str, Any],
         info["shares_outstanding"] = _filed_sh
     else:
         # FALLBACK (foreign / non-10-K filers with no statement share count, or a
-        # scale-broken filed count): reconcile Yahoo's reported vs market_cap/price,
-        # taking the larger (more conservative, and it catches a stale-LOW reported
-        # field — e.g. AOS 110M vs 136M implied).
+        # filed count that disagreed with the implied one). Take the LARGEST plausible
+        # count across the filed, reported and implied figures. The filed count is
+        # included even though it tripped the sanity check above: the disagreement can
+        # mean the MARKET data is the broken side, not the filing (a mid-merger name
+        # with stale Yahoo data — Paramount's price/market-cap implied only 3.6M shares
+        # against 664M filed). Data errors shrink a share count rather than inflate it,
+        # so the maximum is the safe pick; a genuinely too-small filed count (MCD's
+        # 716) simply loses to the correct larger figure. Also catches a stale-LOW
+        # reported field (AOS 110M vs 136M implied).
         _rep_sh = info.get("shares_outstanding")
-        _shs = [s for s in (_rep_sh, _impl_sh) if s and s > 0]
+        _shs = [s for s in (_filed_sh, _rep_sh, _impl_sh) if s and s > 0]
         if _shs:
             info["shares_outstanding"] = max(_shs)
 
