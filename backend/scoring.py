@@ -417,6 +417,11 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
 
     # Hard overrides that a value investor treats as near-disqualifying.
     override_upside = val.get("upside_mid") if val.get("ok") else dcf.get("upside")
+    _bb = val.get("buy_below") if val.get("ok") else dcf.get("buy_below")
+    _px = val.get("current_price") or dcf.get("current_price")
+    # In the buy zone == price at or below the certainty-scaled buy-below (unknown
+    # price/buy-below counts as in-zone, so a name isn't downgraded on missing data).
+    in_buy_zone = not (_bb and _px and _px > _bb)
     az = (fx.get("altman") or {}) if fx.get("applicable") else {}
     bm = (fx.get("beneish") or {}) if fx.get("applicable") else {}
     if val.get("suspect") and rating == "BUY":
@@ -427,9 +432,14 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         why = "in Altman distress zone" if az.get("distress") else "flagged by Beneish M"
         stance += (f" (Downgraded: {why} — a decade-plus holder shouldn't buy through a "
                    "distress/manipulation signal, however cheap it looks.)")
-    elif override_upside is not None and override_upside < -0.30 and rating == "BUY":
+    elif rating == "BUY" and not in_buy_zone:
+        # A high score is quality; a BUY also needs a margin of safety. A wonderful
+        # business trading above its buy-below (META at a 72 score but 8% over fair)
+        # is a watch, not a buy — the third gate of the thesis, matching the app's
+        # own buy-zone status rather than only downgrading a >30% overvaluation.
         rating = "HOLD / WATCH"
-        stance += " (Downgraded: trades well above intrinsic value — wait for a pullback.)"
+        stance += (" (Downgraded: above the margin-of-safety buy-below — a great business "
+                   "without a margin of safety is a watch, not a buy. Wait for a better entry.)")
     elif div and div.get("material") and rating == "BUY":
         rating = "HOLD / WATCH"
         stance += (f" (Downgraded: {div['primary']} and {div['peer']} disagree ~"
