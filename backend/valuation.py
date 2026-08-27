@@ -143,6 +143,11 @@ def _blend_valuation(dcf: dict, epv: dict, w_epv: float,
     (0 -> pure DCF, 1 -> pure EPV). Price-level fields are averaged and the
     upside/spread fields recomputed so the result stays internally coherent; all
     other fields (flags, method, is_financial) are inherited from the DCF base."""
+    if w_epv >= 1.0:
+        # Pure earnings-power — keep the EPV dict intact so its detail block
+        # (justified_pe, eps_used, return_used, ...) reaches the UI rather than a
+        # DCF shell relabelled "earnings-power" with those tiles blank.
+        return dict(epv)
     out = dict(dcf)
     for k in ("low", "high", "mid", "conservative_iv", "adjusted_iv", "buy_below"):
         av, bv = dcf.get(k), epv.get(k)
