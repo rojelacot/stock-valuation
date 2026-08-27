@@ -540,6 +540,18 @@ def compute_metrics(stock: dict[str, Any],
 
     # ---- Normalized base FCF (shared by DCF + expected return) ----
     base_fcf = _normalized_base_fcf(fcf, info.get("free_cashflow_ttm"))
+    # A capital-light financial (asset manager / insurer-hybrid) routed to the
+    # operating DCF path can carry insurance/annuity FLOAT in its operating cash
+    # flow, so its "free cash flow" overstates what's actually distributable to
+    # shareholders — Ameriprise reports $8.2B OCF against $3.5B net income, and the
+    # DCF valued it at ~2x its real worth (+97%). Cap the DCF base at normalized net
+    # income for a financial (by SIC) on the operating path. A pure asset manager
+    # (TROW, BLK: FCF already below NI) is untouched.
+    _sic_int = int(info["sic"]) if str(info.get("sic")).isdigit() else None
+    if _sic_int and 6000 <= _sic_int <= 6799 and _sic_class(info) == "operating":
+        _ni_base = _normalized_base_fcf(net_income, None)
+        if _ni_base and _ni_base > 0 and base_fcf and base_fcf > _ni_base:
+            base_fcf = _ni_base
     if base_fcf and margin_ratio != 1.0:
         base_fcf *= margin_ratio
 
