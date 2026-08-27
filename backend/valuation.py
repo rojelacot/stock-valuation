@@ -490,15 +490,25 @@ def compute_metrics(stock: dict[str, Any],
     # (e.g. CTSH flickering 473M<->489M). It lags recent buybacks by up to a filing,
     # which is a small, conservative price to pay for a stable, authoritative count.
     _filed_sh = _latest(st["shares"])
-    if _filed_sh and _filed_sh > 0:
+    # Sanity-check the scale. The as-filed count occasionally arrives at the wrong
+    # magnitude — a mixed decimals/unit in the XBRL, e.g. MCD's later years tagged in
+    # millions (716.4) beside older years in absolute (750,100,000). A filed count
+    # that differs from the market-cap-implied share count by more than ~3x is a
+    # units error, not a real buyback gap (which is single-digit %), so don't trust
+    # it: dividing equity value by 716 instead of 716,000,000 inflates every
+    # per-share fair value a million-fold.
+    _mc, _px = info.get("market_cap"), info.get("current_price")
+    _impl_sh = (_mc / _px) if (_mc and _px and _px > 0) else None
+    _filed_ok = (_filed_sh and _filed_sh > 0
+                 and (_impl_sh is None or (1 / 3) <= (_filed_sh / _impl_sh) <= 3))
+    if _filed_ok:
         info["shares_outstanding"] = _filed_sh
     else:
-        # FALLBACK (foreign / non-10-K filers with no statement share count): reconcile
-        # Yahoo's reported vs market_cap/price, taking the larger (more conservative,
-        # and it catches a stale-LOW reported field — e.g. AOS 110M vs 136M implied).
+        # FALLBACK (foreign / non-10-K filers with no statement share count, or a
+        # scale-broken filed count): reconcile Yahoo's reported vs market_cap/price,
+        # taking the larger (more conservative, and it catches a stale-LOW reported
+        # field — e.g. AOS 110M vs 136M implied).
         _rep_sh = info.get("shares_outstanding")
-        _mc, _px = info.get("market_cap"), info.get("current_price")
-        _impl_sh = (_mc / _px) if (_mc and _px and _px > 0) else None
         _shs = [s for s in (_rep_sh, _impl_sh) if s and s > 0]
         if _shs:
             info["shares_outstanding"] = max(_shs)
