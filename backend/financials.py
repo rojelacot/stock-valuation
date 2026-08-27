@@ -112,6 +112,8 @@ def value(book_value: Optional[float], shares: Optional[float], roe: Optional[fl
         "roe_used": roe, "cost_of_equity": r, "growth": g, "implied_roe": implied_roe,
         "growth_stage1": (growth_stage1 if (growth_stage1 is not None and growth_stage1 > g)
                           else None),
+        "stage1_years": (STAGE1_YEARS if (growth_stage1 is not None and growth_stage1 > g)
+                         else None),
         "book_value": book_value,
     }
 
