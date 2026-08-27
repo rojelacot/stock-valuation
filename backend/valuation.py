@@ -859,6 +859,23 @@ def compute_metrics(stock: dict[str, Any],
                 "likely a growth-extrapolation artifact, not a real bear case. Treated as "
                 "low-confidence (the earnings-power model doesn't cover this business type).")
 
+    # Uniform implausible-upside cap. build_valuation_range flags a raw DCF above
+    # SUSPECT_UPSIDE, but the earnings-power, book-value and (especially) the blended
+    # paths set the headline afterward and could land above it without re-checking —
+    # the DCF↔EPV blend inherits the DCF's not-suspect flag even after averaging the
+    # fair value UP (MLI blended to +119% yet un-flagged). Apply the same cap to
+    # whatever model set the final valuation: a liquid name rarely trades at half its
+    # fair value, so treat it as a likely artifact — scoring distrusts it and it's
+    # kept out of the buy list until the inputs are verified.
+    _fin_up = valuation.get("upside_mid")
+    if (_fin_up is not None and _fin_up > SUSPECT_UPSIDE
+            and not valuation.get("suspect")):
+        valuation["suspect"] = True
+        valuation["suspect_reason"] = (
+            f"Implied upside ~{_fin_up * 100:.0f}% is implausibly high for a liquid "
+            "name — almost always a data or extrapolation artifact. Treated as "
+            "low-confidence; verify the inputs before trusting it.")
+
     # ---- Multiples vs the stock's own recent history ----
     multiples = compute_multiples(stock, eps, fcf)
     # Trailing-PEG proxy = trailing P/E ÷ historical EPS growth (%). A backward-
