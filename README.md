@@ -305,8 +305,14 @@ not a blanket "higher score = higher return" across every bucket. Directional (r
 not point-in-time), not an academic backtest.
 
 ## Tests
-`python tests/smoke.py` runs offline robustness checks — the valuation/scoring pipeline must survive
-degenerate data (empty/zero/negative/missing) without crashing and keep scores in range.
+All offline (no network); each exits non-zero on failure.
+- `python tests/smoke.py` — robustness: the valuation/scoring pipeline must survive degenerate data
+  (empty/zero/negative/missing) without crashing and keep scores in range.
+- `python tests/test_features.py` — targeted feature checks (e.g. charge-robust earnings stability).
+- `python tests/test_regressions.py` — one case per valuation-integrity fix (share-scale repair,
+  split-adjusted dilution, the uniform >100% suspect cap, the buy-zone rating gate, the
+  insurance-float DCF cap, the ADR currency-mismatch flag, and the share-count reconciliation), so
+  none can silently come back.
 
 ## Tuning
 Assumptions (discount rate, terminal growth, inflation hurdle, margin of safety) live at the

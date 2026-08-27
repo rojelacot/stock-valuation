@@ -85,6 +85,20 @@ class YahooError(Exception):
     pass
 
 
+CURRENCY_MISMATCH_MIN_PE = 2.5  # implied P/E below this signals a currency mismatch
+
+
+def _currency_scale_mismatch(market_cap: Optional[float],
+                             net_income_latest: Optional[float]) -> bool:
+    """True when market cap (in the trading currency) over latest net income (in the
+    statement currency) implies a sub-2.5 trailing P/E — a currency-agnostic tell
+    that the two are in different currencies (an ADR whose financialCurrency Yahoo
+    didn't report). A large, liquid company essentially never trades that cheap."""
+    if not (net_income_latest and net_income_latest > 0 and market_cap and market_cap > 0):
+        return False
+    return (market_cap / net_income_latest) < CURRENCY_MISMATCH_MIN_PE
+
+
 def _clean(value: Any) -> Optional[float]:
     if value is None:
         return None
@@ -617,9 +631,7 @@ def _fetch_yahoo(ticker: str) -> dict[str, Any]:
         # bogus bargain.
         _ni = statements.get("net_income") or {}
         _ni_latest = _ni[max(_ni)] if _ni else None
-        _mc = info.get("market_cap")
-        if (_ni_latest and _ni_latest > 0 and _mc and _mc > 0
-                and (_mc / _ni_latest) < 2.5):
+        if _currency_scale_mismatch(info.get("market_cap"), _ni_latest):
             info["currency_unresolved"] = True
 
     # Guard: an unknown/typo ticker (e.g. "APPL") can return a non-error but
