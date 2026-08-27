@@ -604,6 +604,23 @@ def _fetch_yahoo(ticker: str) -> dict[str, Any]:
             info["fx_rate"] = fx
         else:
             info["currency_unresolved"] = True
+    elif not info.get("currency_converted"):
+        # Fallback mismatch detector: Yahoo often omits financialCurrency for ADRs,
+        # so the block above can't fire even when statements are in local currency
+        # (TSM in TWD, Toyota in JPY) against a USD price — producing a fair value
+        # ~10-100x too high. A reliable, currency-agnostic tell is the implied
+        # trailing P/E: market cap (trading ccy) over latest net income (statement
+        # ccy). A large, liquid company essentially never trades below ~2.5x
+        # earnings, so an implied P/E far under that means the two are in different
+        # currencies. We can't confirm which, so flag it — scoring then distrusts
+        # the valuation and it's kept out of the buy list rather than shown as a
+        # bogus bargain.
+        _ni = statements.get("net_income") or {}
+        _ni_latest = _ni[max(_ni)] if _ni else None
+        _mc = info.get("market_cap")
+        if (_ni_latest and _ni_latest > 0 and _mc and _mc > 0
+                and (_mc / _ni_latest) < 2.5):
+            info["currency_unresolved"] = True
 
     # Guard: an unknown/typo ticker (e.g. "APPL") can return a non-error but
     # empty payload — no price and no statements. Treat that as not-found so the
