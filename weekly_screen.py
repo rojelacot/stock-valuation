@@ -335,6 +335,16 @@ def main():
         return ((r.get("roe") or 0) >= 0.15 and (r.get("roic") or 0) >= 0.12
                 and (r.get("score") or 0) >= 45 and not r.get("suspect"))
     to_verify = [r for r in rows if _worth_verifying(r)][:args.deep_cap]
+    # Close the sticky hole: a prior candidate whose FAST pass errored (a transient
+    # Yahoo failure under the 901-name concurrent sweep) never lands in `rows`, so
+    # the _worth_verifying sticky check above can't see it and it silently drops off
+    # the buy list (GNTX/MLI/MMS: clean deep BUYs, but a flaky fast fetch skipped
+    # them). Force-verify every prior candidate not already queued — deep-verify
+    # fetches EDGAR + Yahoo fresh, so it recovers from the fast-pass blip. These
+    # bypass the deep_cap (there are only ~15) so a full near-bar list can't crowd
+    # a standing candidate out.
+    _queued = {r["ticker"] for r in to_verify}
+    to_verify += [{"ticker": tk} for tk in _prev_candidates if tk not in _queued]
     if to_verify:
         print(f"\nDeep-verifying {len(to_verify)} near-the-bar names on EDGAR + SimFin…")
         by_t = {r["ticker"]: r for r in rows}
