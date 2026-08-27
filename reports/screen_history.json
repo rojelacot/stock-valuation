@@ -974,6 +974,182 @@
           "below_buy": true
         }
       ]
+    },
+    {
+      "date": "2026-08-27",
+      "min_score": 80,
+      "count": 13,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 98,
+          "rating": "BUY",
+          "upside": 0.8657050731648478,
+          "price": 86.97,
+          "certainty": 0.66,
+          "mos": 0.20278872122311828,
+          "buy_below": 129.35579723243302,
+          "below_buy": true
+        },
+        {
+          "ticker": "CRUS",
+          "name": "Cirrus Logic, Inc.",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.2637888220078023,
+          "price": 110.35,
+          "certainty": 0.62,
+          "mos": 0.21418674892663933,
+          "buy_below": 109.58880601914586,
+          "below_buy": false
+        },
+        {
+          "ticker": "ACN",
+          "name": "Accenture plc",
+          "sector": "Technology",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 0.359569222839776,
+          "price": 189.37,
+          "certainty": 0.97,
+          "mos": 0.12,
+          "buy_below": 226.56622888166817,
+          "below_buy": true
+        },
+        {
+          "ticker": "CTSH",
+          "name": "Cognizant Technology Solutions Corporation",
+          "sector": "Technology",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 0.587177399621158,
+          "price": 64.1,
+          "certainty": 0.94,
+          "mos": 0.12,
+          "buy_below": 89.52950275783027,
+          "below_buy": true
+        },
+        {
+          "ticker": "MLI",
+          "name": "Mueller Industries, Inc.",
+          "sector": "Industrials",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 1.2117522071848503,
+          "price": 63.675,
+          "certainty": 0.8,
+          "mos": 0.16078767596540514,
+          "buy_below": 118.18905928299198,
+          "below_buy": true
+        },
+        {
+          "ticker": "AOS",
+          "name": "A. O. Smith Corporation",
+          "sector": "Industrials",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.520540652222939,
+          "price": 62.05,
+          "certainty": 0.89,
+          "mos": 0.13263303166872398,
+          "buy_below": 81.8356809528576,
+          "below_buy": true
+        },
+        {
+          "ticker": "TROW",
+          "name": "T. Rowe Price Group, Inc.",
+          "sector": "Financial Services",
+          "score": 86,
+          "rating": "BUY",
+          "upside": 0.39862403339295444,
+          "price": 112.86,
+          "certainty": 0.95,
+          "mos": 0.12,
+          "buy_below": 138.90686339968138,
+          "below_buy": true
+        },
+        {
+          "ticker": "GNTX",
+          "name": "Gentex Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.7133209842441184,
+          "price": 23.22,
+          "certainty": 0.89,
+          "mos": 0.13228671160545638,
+          "buy_below": 34.52050956698736,
+          "below_buy": true
+        },
+        {
+          "ticker": "CF",
+          "name": "CF Industries Holdings, Inc.",
+          "sector": "Basic Materials",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.38263360417288,
+          "price": 123.12,
+          "certainty": 0.82,
+          "mos": 0.15420588372826263,
+          "buy_below": 143.9794049904723,
+          "below_buy": true
+        },
+        {
+          "ticker": "MMS",
+          "name": "Maximus, Inc.",
+          "sector": "Industrials",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.8582043810547317,
+          "price": 59.91,
+          "certainty": 0.84,
+          "mos": 0.1482783023759766,
+          "buy_below": 94.81793882876323,
+          "below_buy": true
+        },
+        {
+          "ticker": "ZTS",
+          "name": "Zoetis Inc.",
+          "sector": "Healthcare",
+          "score": 84,
+          "rating": "BUY",
+          "upside": 0.8645281457743896,
+          "price": 75.555,
+          "certainty": 0.67,
+          "mos": 0.1992952923119749,
+          "buy_below": 112.79881453286418,
+          "below_buy": true
+        },
+        {
+          "ticker": "NVR",
+          "name": "NVR, Inc.",
+          "sector": "Consumer Cyclical",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.6192420429749658,
+          "price": 6316.99,
+          "certainty": 0.66,
+          "mos": 0.2010339477866897,
+          "buy_below": 8172.412655708083,
+          "below_buy": true
+        },
+        {
+          "ticker": "BAH",
+          "name": "Booz Allen Hamilton Holding Corporation",
+          "sector": "Industrials",
+          "score": 80,
+          "rating": "BUY",
+          "upside": 1.1837659066574644,
+          "price": 74.59,
+          "certainty": 0.55,
+          "mos": 0.23536648434789365,
+          "buy_below": 124.54893514559983,
+          "below_buy": true
+        }
+      ]
     }
   ]
 }
