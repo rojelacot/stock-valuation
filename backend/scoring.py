@@ -440,6 +440,19 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         rating = "HOLD / WATCH"
         stance += (" (Downgraded: above the margin-of-safety buy-below — a great business "
                    "without a margin of safety is a watch, not a buy. Wait for a better entry.)")
+    elif (metrics.get("business_decline") or {}).get("declining") and rating == "BUY":
+        # Value trap: revenue in a sustained multi-year decline. Cost cuts and
+        # buybacks can hold margins and ROE up (keeping the quality score high) while
+        # the business shrinks — so it screens cheap for a reason, not as a margin of
+        # safety. A decade-plus holder wants a durable or growing business; wait for
+        # the top line to stabilise before it's a buy.
+        _dp = (metrics.get("business_decline") or {}).get("decline_pct")
+        rating = "HOLD / WATCH"
+        red.append("Revenue in sustained decline — possible value trap")
+        stance += (" (Downgraded: revenue is in a sustained multi-year decline"
+                   + (f" (~{_dp * 100:.0f}% off its recent level)" if _dp else "")
+                   + " — a shrinking business is cheap for a reason, not a margin of safety. "
+                   "Watch for the top line to stabilise before buying.)")
     elif div and div.get("material") and rating == "BUY":
         rating = "HOLD / WATCH"
         stance += (f" (Downgraded: {div['primary']} and {div['peer']} disagree ~"

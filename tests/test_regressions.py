@@ -225,6 +225,34 @@ ok(_bvps_pref is not None and _bvps_none is not None and _bvps_pref < _bvps_none
 ok(abs(_bvps_none - 10.0) < 0.01 and abs(_bvps_pref - 8.0) < 0.01,
    "C: common book value drops exactly by the preferred fraction (10 -> 8 on 20% preferred)")
 
+# ── Value-trap / secular-decline guard — a shrinking business isn't a buy ──────
+from valuation import secular_decline                          # noqa: E402
+_declining = [(2015 + i, 200 * 0.95 ** i) for i in range(10)]   # revenue fading 5%/yr
+_growing = [(2015 + i, 100 * 1.08 ** i) for i in range(10)]
+_spinoff = [(2015 + i, 200) for i in range(6)] + [(2021, 130), (2022, 128), (2023, 126)]  # one-time -35% step
+ok(secular_decline(_declining)["declining"] is True, "IBM: a sustained revenue downtrend is flagged declining")
+ok(secular_decline(_growing)["declining"] is False, "a grower is not flagged declining")
+ok(secular_decline(_spinoff)["declining"] is False, "MMM: a one-time spinoff step-down is NOT a value trap")
+# the guard downgrades a would-be BUY: revenue melting but profit held flat (cost cuts)
+def _value_trap(price):
+    _n = 10
+    _rev = [200 * 0.95 ** i for i in range(_n)]
+    st = {"revenue": years(2015, _rev), "gross_profit": years(2015, [r * 0.7 for r in _rev]),
+          "operating_income": years(2015, [85] * _n), "net_income": years(2015, [70] * _n),
+          "eps": years(2015, [0.7] * _n), "operating_cashflow": years(2015, [75] * _n),
+          "capex": years(2015, [-5] * _n), "depreciation": years(2015, [5] * _n),
+          "total_equity": years(2015, [200] * _n), "total_debt": years(2015, [10] * _n),
+          "cash": years(2015, [100] * _n), "shares": years(2015, [100] * _n),
+          "ebitda": years(2015, [90] * _n), "current_assets": years(2015, [150] * _n),
+          "current_liabilities": years(2015, [20] * _n)}
+    return make_stock(statements=st, info={"current_price": price, "shares_outstanding": 100,
+                                           "market_cap": price * 100, "sector": "Technology"})
+_vt = score(metrics(_value_trap(5.0)))            # cheap enough to score BUY on the flat profit
+ok(_vt["score"] >= 70 and _vt["rating"] != "BUY",
+   "value trap: a high-scoring name with melting revenue is downgraded out of BUY")
+ok(any("value trap" in f.lower() for f in _vt["red_flags"]),
+   "value trap: the possible-value-trap red flag is surfaced")
+
 
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")

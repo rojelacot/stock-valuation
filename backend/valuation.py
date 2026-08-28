@@ -351,6 +351,31 @@ def cyclical_peak_check(margins: dict[str, Any], returns: dict[str, Any]) -> dic
     return {"peak": bool(reasons), "reasons": reasons}
 
 
+def secular_decline(revenue: list[tuple[int, float]]) -> dict[str, Any]:
+    """Detect a business in genuine long-run decline — the classic value trap. It can
+    still screen cheap AND 'quality' because cost cuts and buybacks prop up margins
+    and ROE while the top line shrinks; revenue is the tell that's hardest to fake.
+    Flags a sustained multi-year revenue downtrend, but excludes a ONE-TIME step-down
+    from a spinoff/divestiture (a >25% single-year drop restructures a business rather
+    than fading it — the remaining company may well grow)."""
+    out: dict[str, Any] = {"declining": False, "rev_trend": None}
+    if len(revenue) < 7:
+        return out
+    recent = revenue[-7:]
+    trend = loglin_growth(recent)
+    out["rev_trend"] = trend
+    yoy = [recent[i][1] / recent[i - 1][1]
+           for i in range(1, len(recent)) if recent[i - 1][1] > 0]
+    cliff = any(r < 0.75 for r in yoy)          # spinoff/divestiture, not organic decline
+    if trend is not None and trend < -0.015 and not cliff:
+        early = sum(v for _, v in recent[:3]) / 3
+        late = sum(v for _, v in recent[-3:]) / 3
+        if early > 0 and late < 0.92 * early:   # sustained, not a one-year dip
+            out["declining"] = True
+            out["decline_pct"] = 1 - late / early
+    return out
+
+
 def compute_metrics(stock: dict[str, Any],
                     assumptions: Optional[dict[str, Any]] = None) -> dict[str, Any]:
     """Compute the full quantitative picture under the given assumptions."""
@@ -975,6 +1000,8 @@ def compute_metrics(stock: dict[str, Any],
     # ---- Cyclical-peak check (guardrail: durable vs peak earnings) ----
     cyclical = cyclical_peak_check({"gross": gross, "operating": operating, "net": net_margin},
                                    returns)
+    # ---- Value-trap check (guardrail: a shrinking business is cheap for a reason) ----
+    business_decline = secular_decline(revenue)
 
     # ---- Extended due-diligence metrics + scenarios + reverse DCF ----
     dd = duediligence.analyze(st, info, fcf, stock.get("price_history"))
@@ -1089,6 +1116,7 @@ def compute_metrics(stock: dict[str, Any],
         "risk_premium": rp,
         "effective_discount_rate": eff_discount,
         "cyclical_peak": cyclical,
+        "business_decline": business_decline,
         "due_diligence": dd,
         "scenarios": scenarios,
         "reverse_dcf": reverse,
