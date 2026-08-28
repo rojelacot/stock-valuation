@@ -245,9 +245,8 @@ function renderAnalysis(d) {
   const el = $("results"); el.innerHTML = "";
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
-    monteCarloSection(d, cur), scenariosSection(d, cur), forensicsSection(d),
-    refinancingSection(d, cur), leverageTrendSection(d), workingCapitalSection(d),
-    dividendCoverageSection(d, cur), intangiblesSection(d, cur), ddSection(d, cur), divSafetySection(d, cur),
+    monteCarloSection(d, cur), scenariosSection(d, cur),
+    riskSection(d, cur), ddSection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
@@ -698,6 +697,117 @@ function monteCarloSection(d, cur) {
       <span class="text-white">▏Price ${price(px, cur)}</span>
     </div>
   </section>`);
+}
+
+// ================= CONSOLIDATED BALANCE-SHEET & RISK =================
+// The seven balance-sheet / risk screens — distress, refinancing, leverage,
+// working capital, dividend coverage, impairment, dividend safety — collapsed
+// into one traffic-light card. Each applicable dimension becomes a collapsible
+// row with a severity dot; the existing detailed renderers are reused verbatim
+// inside them, so nothing is lost — just the wall of separate cards. Real flags
+// (bad) auto-expand; clean/neutral rows stay collapsed. Non-applicable screens
+// are listed once at the foot rather than each getting an empty card.
+const _SEV_RANK = { bad: 0, warn: 1, muted: 2, good: 3 };
+
+function _riskDims(d, cur) {
+  const m = d.metrics, dims = [], na = [];
+  const lvl = (map, level) => map[level] || "muted";
+
+  const fx = m.forensics;
+  if (fx && fx.applicable) {
+    const azSev = fx.altman ? ({ safe: "good", grey: "warn", distress: "bad" }[fx.altman.zone] || "muted") : "muted";
+    const bmSev = fx.beneish ? (fx.beneish.manipulator ? "bad" : fx.beneish.level === "elevated" ? "warn" : "good") : "muted";
+    const sev = _SEV_RANK[azSev] <= _SEV_RANK[bmSev] ? azSev : bmSev;
+    const status = sev === "bad" ? "distress / flagged" : sev === "warn" ? "grey zone" : "safe";
+    dims.push({ title: "Distress & manipulation", sev, status, render: () => forensicsSection(d) });
+  } else if (fx) na.push("distress checks");
+
+  const rf = m.refinancing;
+  if (rf && rf.applicable) {
+    const sev = lvl({ low: "good", moderate: "muted", elevated: "warn", high: "bad" }, rf.level);
+    const status = ({ low: "Low", moderate: "Moderate", elevated: "Elevated", high: "High" }[rf.level] || rf.level) + " risk";
+    dims.push({ title: "Debt maturities & refinancing", sev, status, render: () => refinancingSection(d, cur) });
+  } else if (rf) na.push("refinancing");
+
+  const lt = m.leverage_trend;
+  if (lt && lt.applicable) {
+    const sev = lvl({ improving: "good", none: "good", stable: "muted", deteriorating: "warn", stressed: "bad" }, lt.level);
+    const status = { improving: "Improving", none: "No leverage", stable: "Stable", deteriorating: "Deteriorating", stressed: "Stressed" }[lt.level] || lt.level;
+    dims.push({ title: "Leverage trend & covenants", sev, status, render: () => leverageTrendSection(d) });
+  } else if (lt) na.push("leverage trend");
+
+  const wc = m.working_capital;
+  if (wc && wc.applicable) {
+    const sev = lvl({ low: "good", moderate: "warn", elevated: "bad" }, wc.level);
+    const status = { low: "Clean", moderate: "Watch", elevated: "Concern" }[wc.level] || wc.level;
+    dims.push({ title: "Working-capital quality", sev, status, render: () => workingCapitalSection(d) });
+  } else if (wc) na.push("working capital");
+
+  const dc = m.dividend_coverage;
+  if (dc && dc.applicable) {
+    const sev = lvl({ comfortable: "good", tight: "warn", uncovered: "bad" }, dc.level);
+    const status = { comfortable: "Well covered", tight: "Tight", uncovered: "Uncovered" }[dc.level] || dc.level;
+    dims.push({ title: "Dividend coverage (FCF)", sev, status, render: () => dividendCoverageSection(d, cur) });
+  }
+
+  const ig = m.intangibles;
+  if (ig && ig.applicable && ig.level !== "low") {
+    const sev = lvl({ moderate: "muted", elevated: "warn", high: "bad" }, ig.level);
+    const status = { moderate: "Some", elevated: "Elevated", high: "High" }[ig.level] || ig.level;
+    dims.push({ title: "Impairment / goodwill risk", sev, status, render: () => intangiblesSection(d, cur) });
+  }
+
+  const ds = (m.due_diligence || {}).dividend_safety;
+  if (ds && ds.pays_dividend) {
+    const cov = ds.fcf_coverage, pay = ds.payout_ratio;
+    const safe = cov == null ? null : (cov >= 2 && (pay == null || pay < 0.6));
+    const sev = safe == null ? "muted" : safe ? "good" : "warn";
+    const status = safe == null ? "—" : safe ? "Well covered" : "Watch coverage";
+    dims.push({ title: "Dividend safety", sev, status, render: () => divSafetySection(d, cur) });
+  }
+
+  return { dims, na };
+}
+
+function riskSection(d, cur) {
+  const { dims, na } = _riskDims(d, cur);
+  if (!dims.length && !na.length) return h(`<div class="hidden"></div>`);
+
+  const reds = dims.filter(x => x.sev === "bad").length;
+  const ambers = dims.filter(x => x.sev === "warn").length;
+  const oColor = reds ? "bad" : ambers ? "warn" : "good";
+  const oText = reds ? `${reds} red flag${reds > 1 ? "s" : ""}`
+    : ambers ? `${ambers} to watch` : "No red flags";
+
+  const card = h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Balance sheet &amp; risk</h3>
+      <div class="text-[11px] uppercase px-2 py-0.5 rounded bg-${oColor}/15 text-${oColor} border border-${oColor}/40">${oText}</div>
+    </div>
+    <p class="text-xs text-muted mb-2">The failure modes a DCF and a quality score miss — distress, refinancing, leverage creep, working-capital and dividend strain, impairment. Green passes; expand any row for the detail. Real flags dock the score directly.</p>
+    <div class="risk-rows"></div>
+    ${na.length ? `<p class="text-[11px] text-muted mt-3 pt-3 border-t border-line/60">Not applicable to this business: ${na.join(" · ")}.</p>` : ""}
+  </section>`);
+
+  const rows = card.querySelector(".risk-rows");
+  dims.forEach(x => {
+    const det = h(`<details class="risk-row border-t border-line/60"${x.sev === "bad" ? " open" : ""}>
+      <summary class="flex items-center gap-3 cursor-pointer py-2.5 px-1">
+        <span class="caret text-muted text-[10px]">▶</span>
+        <span class="inline-block w-2.5 h-2.5 rounded-full bg-${x.sev} shrink-0"></span>
+        <span class="font-medium text-sm flex-1">${x.title}</span>
+        <span class="text-xs ${x.sev === "muted" ? "text-muted" : "text-" + x.sev}">${x.status}</span>
+      </summary>
+      <div class="risk-detail pl-6 pb-1"></div>
+    </details>`);
+    const body = x.render();
+    body.classList.remove("card", "rounded-2xl", "p-6");
+    body.classList.add("mt-1");
+    det.querySelector(".risk-detail").appendChild(body);
+    rows.appendChild(det);
+  });
+  return card;
 }
 
 function forensicsSection(d) {

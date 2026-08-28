@@ -22,6 +22,11 @@
     .tab{padding:.5rem 1rem;border-radius:.6rem;cursor:pointer;font-size:.9rem;font-weight:500;color:#8ba0bd;transition:.15s}
     .tab.active{background:#1b2534;color:#e8eefc;box-shadow:inset 0 0 0 1px #26334a}
     tr.clickable:hover{background:#1b2534}
+    details.risk-row>summary{list-style:none}
+    details.risk-row>summary::-webkit-details-marker{display:none}
+    details.risk-row .caret{transition:transform .15s}
+    details.risk-row[open] .caret{transform:rotate(90deg)}
+    details.risk-row>summary:hover{background:#161f2e;border-radius:.5rem}
   </style>
 </head>
 <body class="text-slate-200 min-h-screen">
@@ -197,6 +202,6 @@
     </footer>
   </div>
 
-  <script src="/static/app.js?v=45"></script>
+  <script src="/static/app.js?v=46"></script>
 </body>
 </html>
