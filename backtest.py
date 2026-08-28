@@ -173,6 +173,7 @@ def main():
                 pillars = {p["name"].split(" ")[0].lower(): p["points"] for p in v["pillars"]}
                 obs = {"ticker": sym, "window": w, "score": v["score"],
                        "total_return": tr, "sector": snap["info"].get("sector"),
+                       "market_cap": snap["info"].get("market_cap"),
                        "method": val.get("method"), "upside": val.get("upside_mid"),
                        "forensic_penalty": v.get("forensic_penalty", 0),
                        "roic": m["returns"].get("roic_avg") or m["returns"].get("roic_latest"),
