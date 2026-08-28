@@ -165,6 +165,28 @@ ok(metrics(reit(0.02))["valuation"].get("method") == "book-value",
 ok(metrics(reit(1.5))["valuation"].get("method") == "ffo",
    "a property REIT (heavy real-estate depreciation) stays on FFO")
 
+# ── Hyper-growth artifact-low DCF is softened, not shown as a hard bear — PLTR ─
+def hypergrowth(price, g, n=6):
+    _rev = [100 * (1 + g) ** i for i in range(n)]
+    st = {"revenue": years(2019, _rev), "gross_profit": years(2019, [r * 0.72 for r in _rev]),
+          "operating_income": years(2019, [r * 0.08 for r in _rev]),
+          "net_income": years(2019, [r * 0.05 for r in _rev]),
+          "eps": years(2019, [r * 0.05 / 50 for r in _rev]),
+          "operating_cashflow": years(2019, [r * 0.06 for r in _rev]),
+          "capex": years(2019, [-r * 0.05 for r in _rev]),
+          "depreciation": years(2019, [r * 0.03 for r in _rev]),
+          "total_equity": years(2019, [r * 0.5 for r in _rev]),
+          "total_debt": years(2019, [10] * n), "cash": years(2019, [20] * n),
+          "ebitda": years(2019, [r * 0.11 for r in _rev])}
+    return make_stock(statements=st, info={"current_price": price, "shares_outstanding": 50,
+                                           "market_cap": price * 50, "sector": "Technology"})
+ok(metrics(hypergrowth(80, 0.25))["valuation"].get("low_multiple_artifact") is True,
+   "PLTR: a profitable hyper-grower's artifact-low DCF is flagged low-confidence")
+ok(not metrics(hypergrowth(3, 0.25))["valuation"].get("low_multiple_artifact"),
+   "a cheap hyper-grower (small downside) is NOT flagged")
+ok(not metrics(hypergrowth(80, 0.03))["valuation"].get("low_multiple_artifact"),
+   "a slow/shrinking grower with a low DCF value is left un-flagged (can deserve it)")
+
 
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")

@@ -875,18 +875,51 @@ def compute_metrics(stock: dict[str, Any],
         # This does NOT hand out a premium multiple; it just stops a -95% artifact
         # being trusted (and gives a neutral valuation score, not a false 'priced for
         # perfection').
+        # "Not shrinking" — the signal that a sub-7x DCF is an artifact rather than a
+        # real melting-ice-cube value. Revenue growth is the key tell for a hyper-
+        # growth or freshly-profitable name (Palantir, Datadog, a young spinoff like
+        # GE Vernova) whose EARNINGS are flat/volatile — its DCF collapses to a near-
+        # zero fair value the guard should soften, even though the stricter stable/
+        # earnings-growth gate misses it. A genuinely declining business (revenue and
+        # earnings both fading) is still left un-flagged: it can deserve a low multiple.
+        _rev_cagr = growth.get("revenue_cagr") or 0
+        _not_shrinking = (_epv_stable or _rev_cagr > 0.03
+                          or (oe_growth is not None and oe_growth > 0.05))
         if (earnings_power_val is None and valuation.get("ok")
                 and valuation.get("method") == "dcf-range" and not valuation.get("suspect")
-                and _epv_eps and _epv_eps > 0 and _epv_mature
-                and (_epv_stable or (oe_growth and oe_growth > 0.05))
+                and _epv_eps and _epv_eps > 0
+                and (growth.get("years_of_data") or 0) >= 4 and _not_shrinking
                 and valuation.get("mid") and valuation["mid"] / _epv_eps < 7.0):
             valuation["suspect"] = True
             valuation["low_multiple_artifact"] = True
             valuation["suspect_reason"] = (
                 f"DCF fair value implies only ~{valuation['mid'] / _epv_eps:.0f}x normalized "
-                "earnings — implausibly low for a profitable, mature business, so it's "
-                "likely a growth-extrapolation artifact, not a real bear case. Treated as "
-                "low-confidence (the earnings-power model doesn't cover this business type).")
+                "earnings — implausibly low for a profitable business that's still growing, "
+                "so it's likely a growth-extrapolation artifact, not a real bear case. "
+                "Treated as low-confidence (a strict cash-flow DCF doesn't fit this profile).")
+
+        # Hyper-growth DCF-unreliability: a profitable business growing revenue fast
+        # (Palantir, Datadog, a young spinoff) plows cash into growth, so its trailing
+        # free cash flow is depressed and a strict DCF collapses to a fair value far
+        # below price. Its earnings can be too small for the <7x test above to fire,
+        # yet the -90% it produces is a model-fit failure, not a confident bear case.
+        # Flag it low-confidence rather than present a stark bear case as real. Only
+        # names the DCF marks DOWN are touched; a genuine bargain (positive upside) and
+        # a slow/shrinking grower (revenue not growing) are left alone.
+        _rev_cagr = growth.get("revenue_cagr") or 0
+        if (not valuation.get("suspect") and valuation.get("ok")
+                and valuation.get("method") == "dcf-range"
+                and _epv_eps and _epv_eps > 0 and _rev_cagr > 0.15
+                and valuation.get("upside_mid") is not None
+                and valuation["upside_mid"] < -0.5):
+            valuation["suspect"] = True
+            valuation["low_multiple_artifact"] = True
+            valuation["suspect_reason"] = (
+                f"A strict cash-flow DCF puts fair value ~{-valuation['upside_mid'] * 100:.0f}% "
+                f"below price, but the business is profitable and growing revenue "
+                f"~{_rev_cagr * 100:.0f}%/yr — a fast grower reinvests, depressing trailing "
+                "free cash flow, so a trailing DCF understates it. Treated as low-confidence, "
+                "not a real bear case; judge it on its growth runway, not this number.")
 
     # Uniform implausible-upside cap. build_valuation_range flags a raw DCF above
     # SUSPECT_UPSIDE, but the earnings-power, book-value and (especially) the blended
