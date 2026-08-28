@@ -1135,6 +1135,13 @@ function ddSection(d, cur) {
       ${cell("Share count trend", dil != null ? signPct(dil) + "/yr" : "—",
              dil != null ? (dil > 0.01 ? "dilution" : dil < -0.01 ? "buybacks ✓" : "flat") : "",
              dil != null && dil > 0.02 ? "text-warn" : dil != null && dil < -0.005 ? "text-good" : "")}
+      ${(() => {
+        const bq = dd.buyback_quality;
+        if (!bq || !bq.applicable) return "";
+        const c = bq.level === "value-accretive" ? "text-good" : bq.level === "value-destructive" ? "text-bad" : "";
+        const tag = { "value-accretive": "bought cheap ✓", "value-destructive": "bought dear", "neutral": "mixed timing" }[bq.level];
+        return cell("Buyback timing", `${bq.weighted_percentile}th pct`, tag, c);
+      })()}
       ${cell("Insider ownership", fmtPct(dd.held_percent_insiders, 1))}
       ${cell("Institutional own.", fmtPct(dd.held_percent_institutions, 0))}
       ${cell("Effective tax rate", fmtPct(dd.effective_tax_rate, 0))}
@@ -1160,6 +1167,16 @@ function ddSection(d, cur) {
         : ir.level === "fading" ? "warn" : "good";
       return `<div class="mt-4 text-sm text-${c} bg-${c}/10 border border-${c}/30 rounded-lg p-3">
         <span class="font-medium">Incremental ROIC (${ir.window}):</span> ${ir.flag || ir.note}</div>`;
+    })()}
+    ${(() => {
+      const bq = dd.buyback_quality;
+      if (!bq || !bq.applicable || bq.level === "neutral") return "";
+      const c = bq.level === "value-destructive" ? "bad" : "good";
+      const msg = bq.level === "value-destructive"
+        ? `the average repurchase dollar was spent at the ~${bq.weighted_percentile}th percentile of the stock's own valuation (≈${bq.weighted_multiple}× vs a ${bq.median_multiple}× median) — buying dear. "Net buybacks" isn't automatically value-accretive.`
+        : `repurchases concentrated when the stock was cheap vs its own history (~${bq.weighted_percentile}th percentile, ≈${bq.weighted_multiple}× vs ${bq.median_multiple}× median) — compounding per-share value.`;
+      return `<div class="mt-3 text-sm text-${c} bg-${c}/10 border border-${c}/30 rounded-lg p-3">
+        <span class="font-medium">Buyback timing:</span> ${msg}</div>`;
     })()}
     ${(() => {
       const vh = dd.valuation_vs_history || {};

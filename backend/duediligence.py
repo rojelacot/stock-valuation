@@ -234,6 +234,42 @@ def incremental_roic(nopat_by: dict, inv_cap_by: dict,
             "level": level, "flag": flag, "note": note}
 
 
+def buyback_quality(bb_by: dict, pe_by: dict) -> dict:
+    """Did the company buy back stock cheap or dear — versus its OWN valuation
+    history? Buybacks above intrinsic value destroy per-share value; below it, they
+    compound it. A raw 'net buybacks ✓' flag misses this entirely. We weight each
+    year's valuation percentile (where that year's P/E sat within the company's own
+    multiple range) by the buyback dollars spent that year: a high buyback-weighted
+    percentile means the average repurchase dollar went out when the stock was
+    expensive — value-destructive timing, however good the headline buyback looks."""
+    import statistics
+    # Drop implausible P/E years (one-time EPS items, split artifacts) that would
+    # corrupt the percentile ranking — keep a sane going-concern band. If too few
+    # clean years survive, the data can't support a verdict, so we abstain.
+    pe_by = {y: m for y, m in pe_by.items() if 3.0 <= m <= 100.0}
+    years = sorted(set(bb_by) & set(pe_by))
+    spent = {y: bb_by[y] for y in years if bb_by[y] > 0}
+    if len(pe_by) < 5 or len(spent) < 2:
+        return {"applicable": False}
+    total = sum(spent.values())
+    if total <= 0:
+        return {"applicable": False}
+    mults = sorted(pe_by.values())
+    n = len(mults)
+
+    def pctile(m):
+        return sum(1 for x in mults if x <= m) / n * 100
+
+    wpct = sum(spent[y] * pctile(pe_by[y]) for y in spent) / total
+    wmult = sum(spent[y] * pe_by[y] for y in spent) / total
+    med = statistics.median(mults)
+    level = ("value-accretive" if wpct <= 40 else
+             "value-destructive" if wpct >= 65 else "neutral")
+    return {"applicable": True, "weighted_percentile": round(wpct),
+            "weighted_multiple": round(wmult, 1), "median_multiple": round(med, 1),
+            "level": level, "years_bought": len(spent)}
+
+
 def analyze(statements: dict[str, Any], info: dict[str, Any],
             fcf: list[tuple[int, float]],
             price_history: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
@@ -338,6 +374,13 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
         "pfcf": _vs_history(pfcf_hist, cur_pfcf),
     }
 
+    # ---- Buyback quality: did repurchases happen cheap or dear vs own history? ----
+    eps_map = dict(eps_s)
+    pe_by = {y: price_by_year[y] / eps_map[y] for y in eps_map
+             if eps_map[y] and eps_map[y] > 0 and price_by_year.get(y)}
+    bb_by = {y: abs(v) for y, v in _series(statements.get("buybacks")) if v}
+    bb_quality = buyback_quality(bb_by, pe_by)
+
     # ---- Capital returns (dividends + buybacks) & other free metrics ----
     div_paid = abs(_latest(_series(statements.get("dividends_paid"))) or 0)
     buybacks = abs(_latest(_series(statements.get("buybacks"))) or 0)
@@ -373,6 +416,7 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
         "roic_vs_wacc_spread": value_spread,
         "creates_value": (value_spread is not None and value_spread > 0),
         "incremental_roic": inc_roic,
+        "buyback_quality": bb_quality,
         "valuation_vs_history": valuation_vs_history,
         "price_to_sales": _div(mc, rev_l),
         "return_on_assets": _div(ni_l, assets_l),

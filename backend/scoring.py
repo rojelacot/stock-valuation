@@ -246,6 +246,20 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         green.append(f"Incremental capital still earns ~{_pct(inc_roic['value'])}% — "
                      "reinvestment stays productive, not just legacy ROIC.")
 
+    # Buyback quality: net buybacks aren't automatically value-accretive — were the
+    # repurchases made cheap or dear versus the stock's own valuation history?
+    bbq = dd.get("buyback_quality") or {}
+    if bbq.get("applicable"):
+        if bbq.get("level") == "value-destructive":
+            red.append(f"Buybacks poorly timed — the average repurchase dollar was spent at the "
+                       f"~{bbq['weighted_percentile']}th percentile of the stock's own valuation "
+                       f"(~{bbq['weighted_multiple']}× vs a ~{bbq['median_multiple']}× median). "
+                       "Buying dear destroys per-share value; 'net buybacks' isn't automatically good.")
+        elif bbq.get("level") == "value-accretive":
+            green.append(f"Disciplined buybacks — repurchases concentrated when the stock was cheap "
+                         f"vs its own history (~{bbq['weighted_percentile']}th percentile), "
+                         "compounding per-share value.")
+
     # Cyclical-peak warning (earnings may not be durable).
     cyc = metrics.get("cyclical_peak", {})
     if cyc.get("peak"):

@@ -314,6 +314,33 @@ ok(_ir([10, 11, 12], [100, 110, 120], 0.1, 0.08)["applicable"] is False,
    "incremental ROIC: fewer than ~6yr of data → not applicable")
 
 
+# --- buyback quality: were repurchases made cheap or dear vs own valuation history ---
+from duediligence import buyback_quality                         # noqa: E402
+
+# P/E band 10–30 across years; buybacks concentrated in the cheap years (low P/E).
+_pe_band = {y: 10 + (y - 2016) * 2.2 for y in range(2016, 2026)}   # ~10..30
+_bb_cheap = {2016: 100, 2017: 100, 2018: 80}                       # spent when P/E ~10–14
+_acc = buyback_quality(_bb_cheap, _pe_band)
+ok(_acc["applicable"] and _acc["level"] == "value-accretive" and _acc["weighted_percentile"] <= 40,
+   "buyback quality: repurchases concentrated in the cheap years read as value-accretive")
+
+_bb_dear = {2023: 100, 2024: 100, 2025: 80}                        # spent when P/E ~25–30
+_des = buyback_quality(_bb_dear, _pe_band)
+ok(_des["level"] == "value-destructive" and _des["weighted_percentile"] >= 65,
+   "buyback quality: repurchases concentrated in the expensive years read as value-destructive")
+
+_bb_even = {y: 50 for y in range(2016, 2026)}                      # steady every year
+ok(buyback_quality(_bb_even, _pe_band)["level"] == "neutral",
+   "buyback quality: steady dollar-cost-averaged buybacks read as neutral")
+
+# Implausible P/E years (one-time items / split artifacts) are filtered out.
+_dirty = dict(_pe_band); _dirty[2016] = 1.2; _dirty[2017] = 250
+ok(buyback_quality(_bb_dear, _dirty)["applicable"] is True,
+   "buyback quality: absurd P/E years are filtered, not left to corrupt the percentile")
+ok(buyback_quality({2020: 100}, _pe_band).get("applicable") is False,
+   "buyback quality: a single buyback year → not applicable (no timing story)")
+
+
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")
     print("\n".join("  - " + f for f in FAILS))

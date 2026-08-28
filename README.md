@@ -265,7 +265,7 @@ guardrails keep the ranking honest (see `data.py` and `valuation.py`):
    doesn't cover it, the DCF is flagged a likely artifact rather than presented as a real bear case.
 
 ## Conviction refinements
-On top of the guardrails, five adjustments make the ranking more trustworthy:
+On top of the guardrails, six adjustments make the ranking more trustworthy:
 
 1. **Stock-based comp (SBC) is subtracted from free cash flow.** OCF adds SBC back as "non-cash",
    but it's a real dilution cost — so SBC-heavy names (much of tech) no longer look cheaper than they
@@ -283,7 +283,15 @@ On top of the guardrails, five adjustments make the ranking more trustworthy:
    ROIC−WACC, so a name whose *average* "creates value" while its *marginal* dollar destroys it can't
    hide (CVS: +4% ROIC−WACC on average, but 2.8% incremental — below its cost of capital). A flat or
    shrinking capital base has no incremental story, so it's marked capital-light rather than flagged.
-5. **AI read on the shortlist.** The weekly job runs Claude's moat / management / risk / verdict on
+5. **Buyback quality.** "Net buybacks ✓" is not automatically value-accretive — buying back stock
+   *above* intrinsic value destroys per-share value. We weight each year's valuation percentile (where
+   that year's P/E sat within the company's own multiple range) by the buyback dollars spent that year:
+   a high buyback-weighted percentile means the average repurchase dollar went out when the stock was
+   expensive. Graded value-accretive (green) / neutral / value-destructive (a red flag) — e.g. LRCX
+   bought back at a ~35× weighted P/E vs a ~25× median (69th percentile — buying dear), while IBM
+   bought below its own median. Implausible-P/E years (one-time items, split artifacts) are filtered so
+   they can't corrupt the ranking; too few clean years → the tool abstains.
+6. **AI read on the shortlist.** The weekly job runs Claude's moat / management / risk / verdict on
    each buy candidate (needs `ANTHROPIC_API_KEY`; `--no-ai` to skip) — the value-trap and moat
    judgment the pure-quant screen can't provide. Plus a **week-over-week diff** (🆕 new / ❌ dropped
    candidates vs the previous run).
