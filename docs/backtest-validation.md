@@ -4,6 +4,16 @@
 past, would the high scorers have earned higher long-term returns than the low
 scorers? This is what separates a real signal from a plausible-looking heuristic.
 
+> **The backtest is retrospective and survivorship-biased. The honest test is
+> forward.** The weekly screen logs every pick with its entry price and date, and
+> the **Forward performance** panel on the Track-record tab (`track_record.py`)
+> scores what actually happened next — each pick's real return since it was first
+> flagged, vs the S&P 500. That record is out-of-sample, free of survivorship bias
+> (it's the picks exactly as made), and immune to backtest overfitting. It needs
+> months of picks aging to mean anything, but it is the one validator that can't
+> fool itself — and it compounds every week. Everything below is the *retrospective*
+> check; treat the forward panel as the real scorecard as it matures.
+
 ## Method
 
 `backtest.py` rebuilds each name's score **as of** several past start-years

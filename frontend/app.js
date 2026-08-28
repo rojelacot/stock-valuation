@@ -2222,7 +2222,66 @@ async function loadHistory() {
   try {
     const d = await getJSON("/api/history?scope=large");
     renderHistory(d);
+    loadTrackRecord();   // forward performance streams in (needs live prices)
   } catch (e) { body.innerHTML = `<div class="text-bad text-sm">Couldn't load history: ${e.message}</div>`; }
+}
+
+// Forward performance of past picks vs the S&P — the survivorship-free, real-time
+// validator. Fetched separately because it needs live prices; renders into the
+// #fwdPerf placeholder at the top of the track-record view.
+async function loadTrackRecord() {
+  const slot = $("fwdPerf");
+  if (!slot) return;
+  slot.innerHTML = `<div class="card rounded-2xl p-5 text-sm text-muted flex items-center gap-3">
+    <span class="inline-block w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin"></span>
+    Scoring past picks against the S&P…</div>`;
+  let d;
+  try { d = await getJSON("/api/track-record?scope=large"); }
+  catch (e) { slot.innerHTML = `<div class="card rounded-2xl p-4 text-xs text-muted">Forward performance unavailable: ${e.message}</div>`; return; }
+  if (!d.available) { slot.innerHTML = `<div class="card rounded-2xl p-4 text-xs text-muted">${d.reason || "No forward performance yet."}</div>`; return; }
+  slot.innerHTML = "";
+  slot.appendChild(trackRecordCard(d));
+}
+
+function trackRecordCard(d) {
+  const s = d.summary, picks = d.picks || [];
+  const sgn = (v, dp = 1) => v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(dp) + "%";
+  const col = v => v == null ? "" : v >= 0 ? "text-good" : "text-bad";
+  const early = s.avg_days < 90;
+  const tile = (label, val, sub, c = "") => `<div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+    <div class="text-[11px] text-muted">${label}</div><div class="text-lg font-bold ${c}">${val}</div>
+    <div class="text-[10px] text-muted mt-0.5">${sub}</div></div>`;
+  const rows = picks.map(p => `<tr class="border-b border-line/40">
+    <td class="py-1.5 pr-2 font-mono">${p.ticker}</td>
+    <td class="py-1.5 pr-2 text-muted text-xs">${p.flagged.slice(5)} · ${p.days}d</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-muted">${p.entry.toFixed(0)}→${p.current.toFixed(0)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums ${col(p.return)}">${sgn(p.return)}</td>
+    <td class="py-1.5 pr-2 text-right tabular-nums text-muted">${sgn(p.sp_return)}</td>
+    <td class="py-1.5 text-right tabular-nums font-semibold ${col(p.alpha)}">${sgn(p.alpha)}</td>
+  </tr>`).join("");
+  return h(`<section class="card rounded-2xl p-5">
+    <div class="flex items-center justify-between gap-2 mb-1">
+      <h3 class="font-semibold">Forward performance <span class="text-xs text-muted font-normal">· past picks vs the S&P 500</span></h3>
+      <span class="text-[11px] text-muted">${s.n} picks · since ${s.since.slice(5)} · ~${s.avg_days}d avg</span>
+    </div>
+    <p class="text-xs text-muted mb-4">The honest, survivorship-free test the backtest can't be: each pick's <em>actual</em> price return since the screen first flagged it, vs the S&P over the same span. Buy-and-hold from first flag; price-only.</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
+      ${tile("Median pick", sgn(s.median_return), "mean " + sgn(s.mean_return), col(s.median_return))}
+      ${tile("Median α vs S&P", sgn(s.median_alpha), "mean " + sgn(s.mean_alpha), col(s.median_alpha))}
+      ${tile("Beat the S&P", s.hit_rate == null ? "—" : Math.round(s.hit_rate * 100) + "%", "of picks", "")}
+      ${tile("Picks tracked", String(s.n), `~${s.avg_days} days held`, "")}
+    </div>
+    ${early ? `<div class="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-lg p-2.5 mb-3">⏳ Early days — picks average only ~${s.avg_days} days. Short-horizon returns are noise and the S&P is dated to monthly closes; this validator needs months of picks aging to mean anything. It compounds every week.</div>` : ""}
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead><tr class="text-[11px] text-muted text-left border-b border-line">
+          <th class="py-1 pr-2 font-normal">Ticker</th><th class="py-1 pr-2 font-normal">Flagged</th>
+          <th class="py-1 pr-2 font-normal text-right">Entry→Now</th><th class="py-1 pr-2 font-normal text-right">Return</th>
+          <th class="py-1 pr-2 font-normal text-right">S&P</th><th class="py-1 font-normal text-right">α</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  </section>`);
 }
 
 function renderHistory(d) {
@@ -2246,7 +2305,9 @@ function renderHistory(d) {
       <span class="text-[9px] text-muted mt-0.5">${fmtDate(w.date)}</span></span>`).join("");
 
   // --- Header + latest week-over-week summary ---
-  let html = `<div class="card rounded-2xl p-5 mb-5">
+  // Placeholder for the forward-performance card (filled by a separate live-price fetch).
+  let html = `<div id="fwdPerf" class="mb-5"></div>`;
+  html += `<div class="card rounded-2xl p-5 mb-5">
     <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
       <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <span class="text-lg font-semibold">${weeks.length} weekly run${weeks.length === 1 ? "" : "s"}</span>

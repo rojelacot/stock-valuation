@@ -550,6 +550,15 @@ def screen_history(scope: str = "all"):
     return _history.summarize(scope)
 
 
+@app.get("/api/track-record")
+def track_record(scope: str = "large"):
+    """Forward performance of past screen picks — each pick's return since first
+    flagged, vs the S&P 500. The survivorship-free, out-of-sample validator that
+    accumulates in real time (fetches live prices, so it's cached ~15 min)."""
+    import track_record as _tr
+    return _tr.forward_performance(scope)
+
+
 _SEGMENT_CACHE: dict[str, dict] = {}
 
 

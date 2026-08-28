@@ -408,6 +408,18 @@ ok(sell_discipline({"mid": 100.0, "suspect": True}, 0.9, {}, {}, {}, {}, 500)["a
    "sell discipline: a suspect fair value can't call a trim on price alone (no false sell)")
 
 
+# --- forward track record: S&P benchmark dating (last close on/before flag date) ---
+import track_record as _tr                                       # noqa: E402
+
+_spy = [("2026-06-01", 760.0), ("2026-07-01", 765.0), ("2026-08-01", 770.0)]
+ok(_tr._spy_close_at(_spy, "2026-07-15") == 765.0,
+   "track record: S&P benchmark uses the last close on/before the flag date")
+ok(_tr._spy_close_at(_spy, "2026-05-01") is None,
+   "track record: a flag date before any S&P data yields no benchmark (no crash)")
+ok(_tr._spy_close_at(_spy, "2026-08-01") == 770.0,
+   "track record: an exact date match uses that day's close")
+
+
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")
     print("\n".join("  - " + f for f in FAILS))
