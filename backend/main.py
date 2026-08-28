@@ -128,9 +128,18 @@ def _analyze_one(ticker: str, assumptions: dict[str, Any], use_ai: bool,
     verdict = score(metrics)
 
     if use_ai:
-        if ticker not in _AI_CACHE or refresh:
-            _AI_CACHE[ticker] = analyze(stock, metrics)
-        qualitative = _AI_CACHE[ticker]
+        if not os.environ.get("ANTHROPIC_API_KEY"):
+            # No key → the read is an instant rules-based fallback; run it inline
+            # so the "AI is off" banner shows without a needless second request.
+            qualitative = analyze(stock, metrics)
+        elif refresh:
+            _AI_CACHE.pop(ticker, None)
+            qualitative = {"available": None, "pending": True}
+        else:
+            # Don't block the response on the slow Claude call. Hand back a cached
+            # read if we have one; otherwise mark it pending and let the client pull
+            # it from /api/qualitative and stream it in when ready.
+            qualitative = _AI_CACHE.get(ticker) or {"available": None, "pending": True}
     else:
         qualitative = {"available": False, "skipped": True}
 
@@ -164,6 +173,42 @@ def analyze_ticker(
                                 inflation_hurdle, margin_of_safety, margin_normalization, strategy)
     # Single-stock view may use SimFin (if a key is set); bulk paths never do.
     return _analyze_one(ticker, a, use_ai, refresh, use_simfin=True)
+
+
+@app.get("/api/qualitative")
+def qualitative_read(
+    ticker: str,
+    refresh: bool = False,
+    discount_rate: Optional[float] = Query(None),
+    terminal_growth: Optional[float] = Query(None),
+    projection_years: Optional[float] = Query(None),
+    inflation_hurdle: Optional[float] = Query(None),
+    margin_of_safety: Optional[float] = Query(None),
+    margin_normalization: Optional[float] = Query(None),
+    strategy: Optional[str] = Query(None),
+):
+    """The slow AI qualitative read, split out of /api/analyze so the valuation
+    renders immediately and the read streams in afterward. The stock is already
+    in _STOCK_CACHE from the preceding /api/analyze call and metrics recompute
+    cheaply — only the Claude call costs time, and it's cached per ticker."""
+    t = ticker.strip().upper()
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        return {"ticker": t, "qualitative": {"available": False, "skipped": True},
+                "ai_enabled": False}
+    a = _assumptions_from_query(discount_rate, terminal_growth, projection_years,
+                                inflation_hurdle, margin_of_safety, margin_normalization, strategy)
+    if refresh:
+        _AI_CACHE.pop(t, None)
+    if t not in _AI_CACHE:
+        stock = _get_stock(t, use_simfin=True)   # cached from the analyze call
+        _enrich(stock)
+        try:
+            metrics = compute_metrics(stock, a)
+        except Exception as e:  # noqa: BLE001
+            raise HTTPException(status_code=500,
+                                detail=f"Valuation failed for {t}: {e}")
+        _AI_CACHE[t] = analyze(stock, metrics)   # never raises — self-handles errors
+    return {"ticker": t, "qualitative": _AI_CACHE[t], "ai_enabled": True}
 
 
 import universe as _universe

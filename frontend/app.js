@@ -204,8 +204,10 @@ async function analyze(ticker) {
   if (!ticker) return;
   $("ticker").value = ticker;
   lastTicker = ticker;
+  // The Claude read no longer blocks this call — it streams in separately — so
+  // these messages cover only the fast valuation path.
   const msgs = ["Pulling financials…", "Running the DCF model…",
-    "Scoring quality &amp; balance sheet…", "Asking Claude for the qualitative read…"];
+    "Scoring quality &amp; balance sheet…"];
   let mi = 0; showLoading(msgs[0]);
   const timer = setInterval(() => { mi = (mi + 1) % msgs.length; $("loadingMsg").innerHTML = msgs[mi]; }, 1400);
   try {
@@ -213,9 +215,28 @@ async function analyze(ticker) {
     const d = await getJSON(`/api/analyze?ticker=${encodeURIComponent(ticker)}&use_ai=${useAi}${assumptionsQS()}`);
     clearInterval(timer); $("loading").classList.add("hidden");
     renderAnalysis(d);
+    // If the AI read wasn't already cached, pull it separately and stream it in.
+    if (useAi && d.qualitative && d.qualitative.pending) fetchQualitative(d);
   } catch (e) {
     clearInterval(timer); showError(e.message);
   }
+}
+
+// Fetch the (slow) AI qualitative read after the valuation has already rendered,
+// then swap the placeholder card for the real one in place. Mutates `d.qualitative`
+// so a later "save to watchlist" still captures the AI investment thesis.
+async function fetchQualitative(d) {
+  const swap = () => {
+    const fresh = qualitativeSection(d), old = document.getElementById("qualCard");
+    if (old && fresh) old.replaceWith(fresh);
+  };
+  try {
+    const r = await getJSON(`/api/qualitative?ticker=${encodeURIComponent(d.ticker)}${assumptionsQS()}`);
+    d.qualitative = r.qualitative || { available: false };
+  } catch (e) {
+    d.qualitative = { available: false, error: "The qualitative read failed to load: " + e.message };
+  }
+  swap();
 }
 
 function renderAnalysis(d) {
@@ -1577,13 +1598,21 @@ function drawCharts(d, cur) {
 
 function qualitativeSection(d) {
   const q = d.qualitative;
-  if (q.skipped) return h(`<div class="hidden"></div>`);
+  if (q.skipped) return h(`<div id="qualCard" class="hidden"></div>`);
+  if (q.pending) return h(`
+  <section id="qualCard" class="card rounded-2xl p-6">
+    <h3 class="font-semibold mb-4">Qualitative read <span class="text-xs text-brand font-normal">· Claude</span></h3>
+    <div class="flex items-center gap-3 text-sm text-muted">
+      <span class="inline-block w-4 h-4 border-2 border-brand/30 border-t-brand rounded-full animate-spin"></span>
+      Claude is reading the business — moat, management, risks, thesis…
+    </div>
+  </section>`);
   const moatColor = { Wide: "good", Narrow: "warn", None: "bad", Unknown: "muted" }[q.moat?.rating] || "muted";
   const mgmtColor = { Strong: "good", Adequate: "warn", Concerns: "bad", Unknown: "muted" }[q.management?.rating] || "muted";
   const banner = !q.available ? `<div class="mb-4 text-xs bg-warn/10 border border-warn/30 text-warn rounded-lg p-2">${q.error ? q.error : "AI analysis is off — set ANTHROPIC_API_KEY to enable Claude's qualitative read."}</div>` : "";
   const chips = (arr, color) => (Array.isArray(arr) && arr.length) ? arr.map(x => `<li class="flex gap-2 text-sm mb-1.5"><span class="text-${color} mt-0.5">•</span><span>${x}</span></li>`).join("") : "";
   return h(`
-  <section class="card rounded-2xl p-6">
+  <section id="qualCard" class="card rounded-2xl p-6">
     <h3 class="font-semibold mb-4">Qualitative read ${q.available ? '<span class="text-xs text-brand font-normal">· Claude</span>' : ""}</h3>${banner}
     <p class="text-sm leading-relaxed mb-5">${q.business_summary || ""}</p>
     <div class="grid md:grid-cols-2 gap-4 mb-5">
