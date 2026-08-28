@@ -11,7 +11,6 @@
     <string>/Users/rojel_acot/stock-valuation/weekly_screen.py</string>
     <string>--scope</string>
     <string>large</string>
-    <string>--no-ai</string>
   </array>
 
   <key>WorkingDirectory</key>
