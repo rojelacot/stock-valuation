@@ -246,7 +246,7 @@ function renderAnalysis(d) {
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur),
-    riskSection(d, cur), ddSection(d, cur),
+    riskSection(d, cur), ddSection(d, cur), valuationHistorySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
     returnSection(d), dupontSection(d, cur), sectorRelativeSection(d), pillarsSection(d), flagsSection(d),
     chartsSection(d), qualitativeSection(d), peersSection(d),
@@ -1212,6 +1212,53 @@ function divSafetySection(d, cur) {
       ${cell("FCF coverage", cov != null ? fmtNum(cov, 1) + "×" : "—", "FCF ÷ dividends", cov != null && cov < 1.2 ? "text-warn" : "")}
       ${cell("Payout ratio", fmtPct(pay, 0), "dividends ÷ earnings", pay != null && pay > 0.8 ? "text-warn" : "")}
     </div></section>`);
+}
+
+// Today's valuation multiple placed within the company's OWN 10-19yr range — the
+// "cheap or dear relative to itself" lens the 19yr of as-filed data unlock. A low
+// percentile on a durable business is the classic value setup; a high one means
+// the re-rating has already happened.
+function valuationHistorySection(d, cur) {
+  const vh = d.metrics.valuation_history;
+  if (!vh || !vh.applicable || !(vh.bands && vh.bands.length)) return h(`<div class="hidden"></div>`);
+  const pcolor = p => p >= 81 ? "bad" : p >= 61 ? "warn" : p <= 25 ? "good" : "muted";
+  const plabel = (p, yrs) =>
+    p >= 90 ? `dearest in ${yrs}yr` :
+    p >= 70 ? `${p}th percentile — expensive vs its own history` :
+    p <= 10 ? `cheapest in ${yrs}yr` :
+    p <= 30 ? `${p}th percentile — cheap vs its own history` :
+    `${p}th percentile of its own range`;
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+  const pos = (v, b) => b.max > b.min ? clamp((v - b.min) / (b.max - b.min) * 100, 2, 98) : 50;
+
+  const bar = b => {
+    const c = pcolor(b.percentile);
+    const todayPos = pos(b.current, b), medPos = pos(b.median, b);
+    return `<div class="mb-4">
+      <div class="flex items-baseline justify-between mb-1.5 gap-2 flex-wrap">
+        <span class="text-sm font-medium">${b.label}</span>
+        <span class="text-xs text-${c}">${b.current}× today · vs ${b.median}× median · <span class="font-semibold">${plabel(b.percentile, b.years)}</span></span>
+      </div>
+      <div class="relative h-2 rounded-full" style="background:linear-gradient(90deg,#14351f,#1b2534 55%,#3a1d1d)">
+        <div class="absolute -top-1 h-4 w-px bg-muted" style="left:${medPos}%" title="median ${b.median}×"></div>
+        <div class="absolute -top-1.5 h-5 w-1.5 rounded bg-${c} border border-ink" style="left:calc(${todayPos}% - 3px)" title="today ${b.current}×"></div>
+      </div>
+      <div class="flex justify-between text-[10px] text-muted mt-1">
+        <span>cheapest ${b.min}×</span><span>dearest ${b.max}×</span>
+      </div>
+    </div>`;
+  };
+  const primary = vh.bands.find(b => b.key === vh.primary) || vh.bands[0];
+  const pc = pcolor(primary.percentile);
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1 gap-2">
+      <h3 class="font-semibold">Valuation vs its own history</h3>
+      <div class="text-[11px] uppercase px-2 py-0.5 rounded bg-${pc}/15 text-${pc} border border-${pc}/40">${plabel(primary.percentile, primary.years)}</div>
+    </div>
+    <p class="text-xs text-muted mb-4">Cheap or dear <em>relative to itself</em> — today's multiple placed in its own ${primary.years}-year range (green cheap → red dear). A low percentile on a durable business is the classic value setup; a high one means the re-rating already happened. Year-end price ÷ that year's per-share earnings / FCF / sales.</p>
+    ${vh.bands.map(bar).join("")}
+  </section>`);
 }
 
 // Revenue (and, when disclosed, operating income) by segment — parsed live from

@@ -1175,7 +1175,95 @@ def compute_metrics(stock: dict[str, Any],
             "operating_margin": _margin_by_year(operating_income_s, revenue),
             "net_margin": _margin_by_year(net_income, revenue),
         },
+        "valuation_history": valuation_history(
+            eps, fcf, revenue, _series(st["shares"]),
+            stock.get("price_history"), info),
     }
+
+
+def valuation_history(eps, fcf, revenue, shares, price_history, info) -> dict:
+    """Today's price multiple vs the company's OWN 10-19yr history — 'cheap or
+    dear relative to itself', the most decision-useful lens once 19 years of
+    as-filed data are on hand. For each fiscal year we take the price at that
+    year-end ÷ that year's per-share earnings / FCF / sales, then place today's
+    multiple within the band (percentile: 0 = the cheapest this stock has ever
+    been on the measure, 100 = the dearest). A low percentile on a quality name
+    is the classic value setup; a high one says the re-rating already happened."""
+    import statistics
+    if not price_history:
+        return {"applicable": False}
+    closes = [(p["date"], p["close"]) for p in price_history
+              if p.get("close") and p.get("date")]
+    closes.sort()  # ISO date strings sort chronologically
+
+    def price_at(year):
+        best = None
+        for dt, c in closes:
+            if int(dt[:4]) <= year:
+                best = c
+            else:
+                break
+        return best
+
+    shares_by = {y: v for y, v in (shares or []) if v and v > 0}
+    eps_by = {y: v for y, v in (eps or [])}
+    fcf_by = {y: v for y, v in (fcf or [])}
+    rev_by = {y: v for y, v in (revenue or [])}
+    px = info.get("current_price")
+
+    def band(hist, current):
+        vals = [m for _, m in sorted(hist.items())]
+        if len(vals) < 4 or current is None or current <= 0:
+            return None
+        med = statistics.median(vals)
+        below = sum(1 for v in vals if v <= current)
+        return {
+            "history": [{"year": y, "mult": round(m, 2)} for y, m in sorted(hist.items())],
+            "current": round(current, 2),
+            "min": round(min(vals), 2), "median": round(med, 2), "max": round(max(vals), 2),
+            "percentile": round(below / len(vals) * 100),
+            "cheaper_than_median": current < med,
+            "years": len(vals),
+        }
+
+    def per_share_mult(fund_by):
+        # price_at(y) ÷ (fundamental_y / shares_y); the current point uses today's
+        # price vs the latest year's per-share fundamental, so it's comparable.
+        hist = {}
+        for y, f in fund_by.items():
+            sh, p = shares_by.get(y), price_at(y)
+            if sh and p and f and f > 0:
+                hist[y] = p / (f / sh)
+        cur = None
+        if fund_by:
+            ly = max(fund_by)
+            sh, f = shares_by.get(ly), fund_by.get(ly)
+            if sh and px and f and f > 0:
+                cur = px / (f / sh)
+        return band(hist, cur)
+
+    # P/E straight from per-share EPS (no share count needed).
+    pe_hist = {}
+    for y, e in eps_by.items():
+        p = price_at(y)
+        if p and e and e > 0:
+            pe_hist[y] = p / e
+    cur_pe = (px / eps_by[max(eps_by)]) if (eps_by and px and eps_by[max(eps_by)] > 0) else None
+    pe = band(pe_hist, cur_pe)
+
+    bands = []
+    if pe:
+        bands.append({"key": "pe", "label": "P/E", **pe})
+    pfcf = per_share_mult(fcf_by)
+    if pfcf:
+        bands.append({"key": "pfcf", "label": "P/FCF", **pfcf})
+    ps = per_share_mult(rev_by)
+    if ps:
+        bands.append({"key": "ps", "label": "P/Sales", **ps})
+
+    if not bands:
+        return {"applicable": False, "reason": "Not enough price/fundamental overlap."}
+    return {"applicable": True, "bands": bands, "primary": bands[0]["key"]}
 
 
 def _margin_by_year(numer: list, revenue: list) -> list:

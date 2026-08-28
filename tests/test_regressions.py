@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 import edgar                                                    # noqa: E402
 import data                                                     # noqa: E402
 from data import STATEMENT_KEYS                                 # noqa: E402
-from valuation import compute_metrics, resolve_assumptions      # noqa: E402
+from valuation import compute_metrics, resolve_assumptions, valuation_history  # noqa: E402
 from scoring import score                                       # noqa: E402
 
 A = resolve_assumptions()
@@ -252,6 +252,33 @@ ok(_vt["score"] >= 70 and _vt["rating"] != "BUY",
    "value trap: a high-scoring name with melting revenue is downgraded out of BUY")
 ok(any("value trap" in f.lower() for f in _vt["red_flags"]),
    "value trap: the possible-value-trap red flag is surfaced")
+
+
+# --- valuation vs its own history: today's multiple placed in the 10-19yr band ---
+_vh_yrs = range(2016, 2021)
+_vh_eps = [(y, 1.0) for y in _vh_yrs]
+_vh_sh = [(y, 100.0) for y in _vh_yrs]
+_vh_rev = [(y, 1000.0) for y in _vh_yrs]
+_vh_fcf = [(y, 100.0) for y in _vh_yrs]
+# Year-end prices 8→12 give a rising P/E band [8,9,10,11,12] (median 10).
+_vh_ph = [{"date": f"{y}-12-31", "close": 8.0 + i} for i, y in enumerate(_vh_yrs)]
+
+_dear = valuation_history(_vh_eps, _vh_fcf, _vh_rev, _vh_sh, _vh_ph, {"current_price": 20.0})
+_pe = next(b for b in _dear["bands"] if b["key"] == "pe")
+ok(_dear["applicable"] and _pe["percentile"] == 100 and not _pe["cheaper_than_median"],
+   "valuation history: today above the P/E band reads as dearest (100th pctile)")
+ok({b["key"] for b in _dear["bands"]} >= {"pe", "pfcf", "ps"},
+   "valuation history: P/E, P/FCF and P/Sales bands all built from the shares series")
+
+_cheap = valuation_history(_vh_eps, _vh_fcf, _vh_rev, _vh_sh, _vh_ph, {"current_price": 5.0})
+_pe2 = next(b for b in _cheap["bands"] if b["key"] == "pe")
+ok(_pe2["percentile"] == 0 and _pe2["cheaper_than_median"],
+   "valuation history: today below the P/E band reads as cheapest (0th pctile)")
+
+ok(valuation_history(_vh_eps, _vh_fcf, _vh_rev, _vh_sh, [], {"current_price": 10}).get("applicable") is False,
+   "valuation history: no price history → not applicable, no crash")
+ok(valuation_history([(2019, 1.0), (2020, 1.0)], [], [], [], _vh_ph, {"current_price": 10}).get("applicable") is False,
+   "valuation history: too few overlapping years → not applicable (needs a real band)")
 
 
 if FAILS:
