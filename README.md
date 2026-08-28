@@ -265,7 +265,7 @@ guardrails keep the ranking honest (see `data.py` and `valuation.py`):
    doesn't cover it, the DCF is flagged a likely artifact rather than presented as a real bear case.
 
 ## Conviction refinements
-On top of the guardrails, four adjustments make the ranking more trustworthy:
+On top of the guardrails, five adjustments make the ranking more trustworthy:
 
 1. **Stock-based comp (SBC) is subtracted from free cash flow.** OCF adds SBC back as "non-cash",
    but it's a real dilution cost — so SBC-heavy names (much of tech) no longer look cheaper than they
@@ -275,7 +275,15 @@ On top of the guardrails, four adjustments make the ranking more trustworthy:
    safety. Shown in the DCF assumptions.
 3. **Cyclical-peak flag.** When current margins/ROE run well above the company's own multi-year
    average (insurers, energy, autos), the report flags that earnings may be at a peak, not durable.
-4. **AI read on the shortlist.** The weekly job runs Claude's moat / management / risk / verdict on
+4. **Incremental ROIC.** Average ROIC flatters a value trap — a mature business can post a high
+   average while reinvesting *new* capital at a poor rate (empire-building M&A, forced growth). We
+   compute the return on the last few years of *added* capital (Δ NOPAT ÷ Δ invested capital, 3-year
+   endpoints) and grade it: **productive** (green), **fading** (still above cost of capital — an amber
+   note), or **below cost / destructive** (a red flag that docks the verdict). Displayed right beside
+   ROIC−WACC, so a name whose *average* "creates value" while its *marginal* dollar destroys it can't
+   hide (CVS: +4% ROIC−WACC on average, but 2.8% incremental — below its cost of capital). A flat or
+   shrinking capital base has no incremental story, so it's marked capital-light rather than flagged.
+5. **AI read on the shortlist.** The weekly job runs Claude's moat / management / risk / verdict on
    each buy candidate (needs `ANTHROPIC_API_KEY`; `--no-ai` to skip) — the value-trap and moat
    judgment the pure-quant screen can't provide. Plus a **week-over-week diff** (🆕 new / ❌ dropped
    candidates vs the previous run).

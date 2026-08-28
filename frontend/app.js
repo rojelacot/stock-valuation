@@ -1122,6 +1122,14 @@ function ddSection(d, cur) {
       ${cell("ROIC − WACC", dd.roic_vs_wacc_spread != null ? signPct(dd.roic_vs_wacc_spread) : "—",
              dd.creates_value ? "creates value ✓" : "destroys value",
              dd.creates_value ? "text-good" : (dd.roic_vs_wacc_spread != null ? "text-bad" : ""))}
+      ${(() => {
+        const ir = dd.incremental_roic;
+        if (!ir || !ir.applicable) return cell("Incremental ROIC",
+          ir && ir.capital_light ? "capital-light" : "—", "return on new capital");
+        const c = ir.level === "productive" ? "text-good" : ir.level === "fading" ? "text-warn" : "text-bad";
+        const tag = { productive: "productive ✓", fading: "fading", below_cost: "< cost of capital", destructive: "destroying value" }[ir.level] || "";
+        return cell("Incremental ROIC", fmtPct(ir.value), tag, c);
+      })()}
       ${cell("FCF margin", fmtPct(dd.fcf_margin_avg), "FCF ÷ revenue")}
       ${cell("FCF / share", dd.fcf_per_share != null ? price(dd.fcf_per_share, cur) : "—")}
       ${cell("Share count trend", dil != null ? signPct(dil) + "/yr" : "—",
@@ -1145,6 +1153,14 @@ function ddSection(d, cur) {
       })()}
       ${cell("Payout ratio", fmtPct((dd.capital_returns || {}).payout_ratio, 0), "dividends ÷ earnings")}
     </div>
+    ${(() => {
+      const ir = dd.incremental_roic;
+      if (!ir || !ir.applicable || (!ir.flag && !ir.note)) return "";
+      const c = (ir.level === "destructive" || ir.level === "below_cost") ? "bad"
+        : ir.level === "fading" ? "warn" : "good";
+      return `<div class="mt-4 text-sm text-${c} bg-${c}/10 border border-${c}/30 rounded-lg p-3">
+        <span class="font-medium">Incremental ROIC (${ir.window}):</span> ${ir.flag || ir.note}</div>`;
+    })()}
     ${(() => {
       const vh = dd.valuation_vs_history || {};
       const row = (label, m) => {

@@ -281,6 +281,39 @@ ok(valuation_history([(2019, 1.0), (2020, 1.0)], [], [], [], _vh_ph, {"current_p
    "valuation history: too few overlapping years → not applicable (needs a real band)")
 
 
+# --- incremental ROIC: return on the LAST few years of added capital ---
+from duediligence import incremental_roic                        # noqa: E402
+
+
+def _ir(nopat_list, cap_list, roic_avg, wacc, start=2016):
+    ys = range(start, start + len(nopat_list))
+    return incremental_roic(dict(zip(ys, nopat_list)), dict(zip(ys, cap_list)), roic_avg, wacc)
+
+# Capital +20/yr → Δcapital 100 (early avg 120 → recent avg 220) across 8 years.
+_pro = _ir([20, 26, 32, 38, 44, 50, 56, 62], [100, 120, 140, 160, 180, 200, 220, 240], 0.25, 0.08)
+ok(_pro["applicable"] and _pro["level"] == "productive" and _pro["flag"] is None,
+   "incremental ROIC: NOPAT outgrowing capital reads as productive (no flag)")
+
+_bc = _ir([20, 22, 24, 22, 24, 26, 25, 26], [100, 120, 140, 160, 180, 200, 220, 240], 0.15, 0.08)
+ok(_bc["level"] == "below_cost" and _bc["flag"],
+   "incremental ROIC: new capital earning below WACC is flagged (below_cost)")
+
+_de = _ir([30, 32, 34, 28, 26, 24, 22, 20], [100, 120, 140, 160, 180, 200, 220, 240], 0.20, 0.08)
+ok(_de["level"] == "destructive" and _de["value"] < 0 and _de["flag"],
+   "incremental ROIC: NOPAT falling while capital rises reads as destructive")
+
+_fa = _ir([20, 22, 24, 26, 28, 30, 31, 32], [100, 120, 140, 160, 180, 200, 220, 240], 0.30, 0.08)
+ok(_fa["level"] == "fading" and _fa["flag"] is None and _fa["note"],
+   "incremental ROIC: decelerating-but-above-WACC reads as fading (note, not a red flag)")
+
+_cl = _ir([30] * 8, [240, 220, 200, 180, 160, 140, 120, 100], 0.20, 0.08)
+ok(_cl["applicable"] is False and _cl.get("capital_light"),
+   "incremental ROIC: shrinking capital base → not applicable (capital-light, no false flag)")
+
+ok(_ir([10, 11, 12], [100, 110, 120], 0.1, 0.08)["applicable"] is False,
+   "incremental ROIC: fewer than ~6yr of data → not applicable")
+
+
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")
     print("\n".join("  - " + f for f in FAILS))

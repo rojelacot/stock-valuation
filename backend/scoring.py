@@ -235,6 +235,17 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
         elif spread < 0:
             red.append(f"ROIC is below WACC (~{_pct(spread)}%) — the company may be destroying value.")
 
+    # Incremental ROIC: is NEW capital still earning, or does the average flatter a
+    # fading reinvestment story? A guardrail against the value trap that clears the
+    # quality filter on its legacy returns.
+    inc_roic = dd.get("incremental_roic") or {}
+    if inc_roic.get("applicable") and inc_roic.get("flag"):
+        red.append(inc_roic["flag"])
+    elif (inc_roic.get("applicable") and inc_roic.get("level") == "productive"
+          and (inc_roic.get("value") or 0) >= 0.15):
+        green.append(f"Incremental capital still earns ~{_pct(inc_roic['value'])}% — "
+                     "reinvestment stays productive, not just legacy ROIC.")
+
     # Cyclical-peak warning (earnings may not be durable).
     cyc = metrics.get("cyclical_peak", {})
     if cyc.get("peak"):

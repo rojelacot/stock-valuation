@@ -179,6 +179,61 @@ def dupont(statements: dict[str, Any]) -> Optional[dict[str, Any]]:
     return {"latest": latest, "prior": prior, "driver": driver, "series": series}
 
 
+DEFAULT_INC_ROIC_BAR = 0.08  # fallback cost-of-capital hurdle when WACC is unavailable
+
+
+def incremental_roic(nopat_by: dict, inv_cap_by: dict,
+                     roic_avg: Optional[float], wacc: Optional[float]) -> dict:
+    """Return on the LAST few years of ADDED capital — the marginal economics that
+    average ROIC hides. A mature business can post a high average while reinvesting
+    new capital at a poor rate (empire-building M&A, forced growth); that's a value
+    trap the quality filter would otherwise wave through.
+
+    Compares average NOPAT and average invested capital across an early vs a recent
+    window: incremental ROIC = ΔNOPAT ÷ ΔInvested capital. A flat or shrinking
+    capital base has no 'incremental' story (it's self-funding / capital-light), so
+    it's marked not-applicable rather than flagged. Endpoints are 3-year averages so
+    a single outlier year (a trough, a one-off charge) doesn't drive the verdict."""
+    years = sorted(set(nopat_by) & set(inv_cap_by))
+    if len(years) < 6:
+        return {"applicable": False, "reason": "Needs ~6yr of overlapping data."}
+    k = min(3, len(years) // 2)
+    early, recent = years[:k], years[-k:]
+    def avg(d, ys):
+        return sum(d[y] for y in ys) / len(ys)
+    n0, n1 = avg(nopat_by, early), avg(nopat_by, recent)
+    c0, c1 = avg(inv_cap_by, early), avg(inv_cap_by, recent)
+    d_cap = c1 - c0
+    if c0 <= 0 or d_cap <= 0.15 * c0:
+        return {"applicable": False, "capital_light": d_cap <= 0,
+                "reason": "Capital base flat or shrinking — self-funding / capital-light; "
+                          "no incremental-return story to tell."}
+    inc = (n1 - n0) / d_cap
+    bar = wacc if (wacc and wacc > 0) else DEFAULT_INC_ROIC_BAR
+    avg_pct = (roic_avg or 0) * 100
+    level, flag, note = "productive", None, None
+    if inc < 0:
+        level = "destructive"
+        flag = (f"Incremental ROIC is negative (~{inc*100:.0f}%): over this window operating "
+                f"profit fell while invested capital grew — the newest capital is destroying "
+                f"value, and the ~{avg_pct:.0f}% average ROIC hides it.")
+    elif inc < bar:
+        level = "below_cost"
+        flag = (f"Incremental ROIC ~{inc*100:.0f}% is below the ~{bar*100:.0f}% cost of capital "
+                f"— the newest capital earns less than it costs, even though the average ROIC "
+                f"(~{avg_pct:.0f}%) still looks healthy.")
+    elif roic_avg and inc < 0.5 * roic_avg:
+        level = "fading"
+        note = (f"Incremental ROIC ~{inc*100:.0f}% is well below the ~{avg_pct:.0f}% average — "
+                f"reinvestment economics are fading, though still above the cost of capital.")
+    else:
+        note = (f"Incremental capital earns ~{inc*100:.0f}% — reinvestment stays productive, "
+                f"at or above the legacy business.")
+    return {"applicable": True, "value": inc, "avg": roic_avg, "wacc": wacc, "bar": bar,
+            "window": f"{early[0]}–{early[-1]} → {recent[0]}–{recent[-1]}",
+            "level": level, "flag": flag, "note": note}
+
+
 def analyze(statements: dict[str, Any], info: dict[str, Any],
             fcf: list[tuple[int, float]],
             price_history: Optional[list[dict[str, Any]]] = None) -> dict[str, Any]:
@@ -255,6 +310,15 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
     roic_avg = (sum(roic_vals) / len(roic_vals)) if roic_vals else None
     value_spread = (roic_avg - wacc_d["wacc"]) if (roic_avg is not None and wacc_d.get("wacc")) else None
 
+    # ---- Incremental ROIC: return on the last few years of ADDED capital ----
+    inv_cap_by = {}
+    for y in set(eq_map) | set(debt_map):
+        ic = (eq_map.get(y) or 0) + (debt_map.get(y) or 0) - (cash_map.get(y) or 0)
+        if ic > 0:
+            inv_cap_by[y] = ic
+    nopat_by = {y: oi * (1 - tr) for y, oi in op_income}
+    inc_roic = incremental_roic(nopat_by, inv_cap_by, roic_avg, wacc_d.get("wacc"))
+
     # ---- Valuation vs its own history (P/E, P/FCF over the available years) ----
     eps_s = _series(statements.get("eps"))
     shares_s = _series(statements.get("shares"))
@@ -308,6 +372,7 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
         "wacc_detail": wacc_d,
         "roic_vs_wacc_spread": value_spread,
         "creates_value": (value_spread is not None and value_spread > 0),
+        "incremental_roic": inc_roic,
         "valuation_vs_history": valuation_vs_history,
         "price_to_sales": _div(mc, rev_l),
         "return_on_assets": _div(ni_l, assets_l),
