@@ -137,6 +137,23 @@ def scan(symbols, assumptions, signature=None, workers=6):
     return rows, errors
 
 
+def _ai_veto(ai):
+    """The value-trap gate. A candidate scored well partly on durable high returns —
+    but if the qualitative read judges the business has NO moat, those returns will
+    erode (competition, disruption), which is exactly the value trap the quant can't
+    see. Returns a short reason to veto the BUY, or None to let it stand. Conservative:
+    only a clear 'None' moat vetoes, and a missing/failed read never does (can't judge
+    -> don't block). Reads the same fields the report shows."""
+    if not ai or not ai.get("available"):
+        return None
+    moat = ai.get("moat")
+    rating = (moat.get("rating") if isinstance(moat, dict) else moat) or ""
+    if "none" in str(rating).lower() or "no moat" in str(rating).lower():
+        why = moat.get("reasoning", "") if isinstance(moat, dict) else ""
+        return "no durable moat" + (f" — {why[:110]}" if why else "")
+    return None
+
+
 def enrich_with_ai(candidates, assumptions):
     """Run Claude's qualitative read on each buy candidate (moat / management /
     risks / verdict). Adds an 'ai' dict per candidate. Needs ANTHROPIC_API_KEY."""
@@ -157,7 +174,7 @@ def enrich_with_ai(candidates, assumptions):
     return True
 
 
-def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
+def report_md(rows, candidates, errors, min_score, assumptions, diff=None, vetoed=None):
     d = date.today().isoformat()
     lines = [f"# Weekly buy screen — {d}", ""]
     lines.append(f"Scanned **{len(rows)}** names · buy bar = score ≥ **{min_score}** · "
@@ -176,6 +193,17 @@ def report_md(rows, candidates, errors, min_score, assumptions, diff=None):
             lines.append(f"**Dropped ({len(diff['dropped'])}):** " + ", ".join(drop))
         if not diff["added"] and not diff["dropped"]:
             lines.append("No changes — same candidates as last scan.")
+        lines.append("")
+    if vetoed:
+        lines.append(f"## Vetoed by the qualitative read ({len(vetoed)})")
+        lines.append("")
+        lines.append("Cleared the quant bar but dropped from the buy list — the AI read found "
+                     "no durable moat, so the high trailing returns are likely to erode "
+                     "(the value trap the numbers can't see):")
+        lines.append("")
+        for r in vetoed:
+            lines.append(f"- **{r['ticker']}** (score {r.get('score')}, "
+                         f"{pct(r.get('upside'))} upside) — {r.get('ai_veto')}")
         lines.append("")
     if candidates:
         lines.append(f"## {len(candidates)} candidate(s) clearing the bar — grouped by sector")
@@ -372,6 +400,23 @@ def main():
                   if (r["score"] or 0) >= args.min_score
                   and r.get("rating") == "BUY" and not r.get("suspect")]
 
+    # ---- AI qualitative read + value-trap veto (BEFORE recording) ----
+    # Run Claude's read on the candidates first, then veto any the read finds
+    # undurable (no moat) — so a name the quant likes but the qualitative layer flags
+    # as a value trap is dropped from the buy list, not merely annotated. Runs on the
+    # ~N finalists only; skips (and vetoes nothing) without an API key or --no-ai.
+    vetoed = []
+    if candidates and not args.no_ai:
+        print(f"\nRunning AI qualitative read on {len(candidates)} candidate(s)…")
+        enrich_with_ai(candidates, assumptions)
+        for r in candidates:
+            r["ai_veto"] = _ai_veto(r.get("ai"))
+        vetoed = [r for r in candidates if r.get("ai_veto")]
+        candidates = [r for r in candidates if not r.get("ai_veto")]
+        if vetoed:
+            print("  AI VETOED (dropped from buy list): "
+                  + ", ".join(f"{r['ticker']} ({r['ai_veto']})" for r in vetoed))
+
     # ---- Week-over-week diff (shared with the app, keyed by scope) ----
     scope_key = "custom" if args.tickers else args.scope
     cur_map = {r["ticker"]: r["score"] for r in candidates}
@@ -394,11 +439,6 @@ def main():
     if wl_alerts:
         print(f"\n{len(wl_alerts)} WATCHLIST NAME(S) IN BUY ZONE:",
               ", ".join(f"{r['ticker']} ({usd(r['price'])} ≤ {usd(r['buy_below'])})" for r in wl_alerts))
-
-    # ---- AI qualitative read on the candidates (the value-trap / moat check) ----
-    if candidates and not args.no_ai:
-        print(f"\nRunning AI qualitative read on {len(candidates)} candidate(s)…")
-        enrich_with_ai(candidates, assumptions)
 
     print("\n" + "=" * 56)
     if diff["prev_date"]:
@@ -424,7 +464,7 @@ def main():
     reports = ROOT / "reports"
     reports.mkdir(exist_ok=True)
     out = reports / f"screen-{date.today().isoformat()}.md"
-    md = report_md(rows, candidates, errors, args.min_score, assumptions, diff)
+    md = report_md(rows, candidates, errors, args.min_score, assumptions, diff, vetoed=vetoed)
     if wl_alerts:
         alert_md = ["## Watchlist — in the buy zone", "",
                     "| Ticker | Name | Price | Buy-below | Upside |", "|---|---|---:|---:|---:|"]
