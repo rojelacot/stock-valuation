@@ -1261,22 +1261,6 @@ function ddSection(d, cur) {
       return `<div class="mt-3 text-sm text-${c} bg-${c}/10 border border-${c}/30 rounded-lg p-3">
         <span class="font-medium">Buyback timing:</span> ${msg}</div>`;
     })()}
-    ${(() => {
-      const vh = dd.valuation_vs_history || {};
-      const row = (label, m) => {
-        if (!m) return "";
-        const p = m.premium_to_avg;
-        const c = p == null ? "muted" : p <= -0.1 ? "good" : p >= 0.1 ? "bad" : "muted";
-        const tag = p == null ? "" : p <= -0.1 ? "cheap vs its history" : p >= 0.1 ? "rich vs its history" : "in line";
-        return `<div class="flex items-center justify-between text-sm py-1.5 border-b border-line/40">
-          <span class="text-muted">${label}</span>
-          <span>now <span class="font-semibold">${fmtNum(m.current, 1)}</span> · ${m.years}yr avg ${fmtNum(m.avg, 1)} (range ${fmtNum(m.min, 1)}–${fmtNum(m.max, 1)})
-          <span class="text-${c} ml-2">${p == null ? "" : signPct(p) + " · " + tag}</span></span></div>`;
-      };
-      const rows = row("P/E", vh.pe) + row("P/FCF", vh.pfcf);
-      return rows ? `<div class="mt-5"><div class="text-sm font-medium mb-1">Valuation vs its own history</div>${rows}
-        <p class="text-[11px] text-muted mt-1.5">Trading below its own multi-year average can signal a better-than-usual entry (or a broken thesis — check why).</p></div>` : "";
-    })()}
   </section>`);
 }
 

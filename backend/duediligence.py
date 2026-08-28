@@ -74,25 +74,6 @@ def compute_wacc(info: dict[str, Any], interest_expense: Optional[float],
             "beta": beta, "equity_weight": we, "debt_weight": wd}
 
 
-def _hist_multiple(per_share: list[tuple[int, float]],
-                   price_by_year: dict[int, float]) -> dict[int, float]:
-    out = {}
-    for y, v in per_share:
-        if v and v > 0 and y in price_by_year:
-            out[y] = price_by_year[y] / v
-    return out
-
-
-def _vs_history(hist: dict[int, float], current: Optional[float]) -> Optional[dict[str, Any]]:
-    vals = list(hist.values())
-    if len(vals) < 2 or current is None:
-        return None
-    avg = sum(vals) / len(vals)
-    return {"current": current, "avg": avg, "min": min(vals), "max": max(vals),
-            "premium_to_avg": (current / avg - 1) if avg else None,
-            "years": len(vals)}
-
-
 def piotroski_score(statements: dict[str, Any]) -> Optional[dict[str, Any]]:
     """Piotroski F-Score (0-9) — a compact financial-strength check across
     profitability, leverage/liquidity and operating efficiency. Needs 2+ years.
@@ -355,24 +336,16 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
     nopat_by = {y: oi * (1 - tr) for y, oi in op_income}
     inc_roic = incremental_roic(nopat_by, inv_cap_by, roic_avg, wacc_d.get("wacc"))
 
-    # ---- Valuation vs its own history (P/E, P/FCF over the available years) ----
+    # ---- Per-year price series for the buyback-timing check below. (The
+    #      valuation-vs-own-history panel now lives in metrics.valuation_history
+    #      (valuation.py) — a richer P/E · P/FCF · P/Sales percentile band.) ----
     eps_s = _series(statements.get("eps"))
-    shares_s = _series(statements.get("shares"))
     price_by_year: dict[int, float] = {}
     for p in (price_history or []):
         try:
             price_by_year[int(p["date"][:4])] = p["close"]   # last month of year wins
         except Exception:  # noqa: BLE001
             continue
-    shares_map = dict(shares_s)
-    fcf_ps = [(y, v / shares_map[y]) for y, v in fcf if shares_map.get(y)]
-    pe_hist = _hist_multiple(eps_s, price_by_year)
-    pfcf_hist = _hist_multiple(fcf_ps, price_by_year)
-    cur_pfcf = _div(mc, fcf_l)
-    valuation_vs_history = {
-        "pe": _vs_history(pe_hist, info.get("trailing_pe")),
-        "pfcf": _vs_history(pfcf_hist, cur_pfcf),
-    }
 
     # ---- Buyback quality: did repurchases happen cheap or dear vs own history? ----
     eps_map = dict(eps_s)
@@ -417,7 +390,6 @@ def analyze(statements: dict[str, Any], info: dict[str, Any],
         "creates_value": (value_spread is not None and value_spread > 0),
         "incremental_roic": inc_roic,
         "buyback_quality": bb_quality,
-        "valuation_vs_history": valuation_vs_history,
         "price_to_sales": _div(mc, rev_l),
         "return_on_assets": _div(ni_l, assets_l),
         "capital_returns": capital_returns,
