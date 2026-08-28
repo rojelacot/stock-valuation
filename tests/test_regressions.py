@@ -155,6 +155,16 @@ ok(_fair_ni and _fair_float and _fair_float <= _fair_ni * 1.15,
 _u = metrics(healthy(price=2.0, extra_info={"currency_unresolved": True}))
 ok(score(_u)["rating"] != "BUY", "a currency-unresolved name is never rated BUY")
 
+# ── Mortgage-REIT routing — NLY/AGNC (a bond portfolio, not a property REIT) ───
+def reit(dep_over_ni):
+    _ni = [v * 0.22 for v in [100, 112, 125, 138, 152, 168, 185, 205, 226, 250, 276, 305, 336, 371, 410, 452]]
+    return healthy(price=40.0, extra_info={"sic": 6798},
+                   statements_over={"depreciation": years(2010, [n * dep_over_ni for n in _ni])})
+ok(metrics(reit(0.02))["valuation"].get("method") == "book-value",
+   "NLY: a mortgage REIT (negligible real-estate depreciation) routes to book-value")
+ok(metrics(reit(1.5))["valuation"].get("method") == "ffo",
+   "a property REIT (heavy real-estate depreciation) stays on FFO")
+
 
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")

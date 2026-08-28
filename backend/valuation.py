@@ -665,6 +665,17 @@ def compute_metrics(stock: dict[str, Any],
     reit_valuation = None
     price = info.get("current_price")
     is_reit = needs_ffo_valuation(info)
+    # A MORTGAGE REIT (NLY, AGNC, RITM) owns mortgages/MBS, not depreciable
+    # buildings — it's a leveraged bond portfolio that trades around book value, so
+    # the property-FFO model misvalues it. Detect it by negligible real-estate
+    # depreciation relative to earnings and route it to the book-value model (like a
+    # levered bank/insurer) instead of FFO.
+    if is_reit:
+        _dep_sum = sum(v for _, v in _series(st.get("depreciation") or {}) if v)
+        _ni_sum = sum(abs(v) for _, v in net_income if v)
+        if _ni_sum > 0 and (_dep_sum / _ni_sum) < 0.2:
+            is_reit = False
+            is_fin = True
 
     # REITs: value on FFO (net income + real-estate depreciation), discounted as
     # an equity-level stream (no net-cash add-back — FFO is already post-interest).
