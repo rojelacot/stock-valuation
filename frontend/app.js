@@ -288,11 +288,10 @@ function confidenceBanner(dc) {
 }
 
 function verdictCard(d, rs, cur) {
-  const v = d.verdict, info = d.info;
-  const dash = 264, off = dash - (dash * v.score) / 100;
+  const info = d.info;
   return h(`
   <section class="card rounded-2xl p-6">
-    <div class="flex flex-col md:flex-row md:items-center gap-6">
+    <div class="flex flex-col md:flex-row md:items-start gap-6">
       <div class="flex-1">
         <div class="flex items-center gap-3 flex-wrap">
           <h2 class="text-2xl font-semibold">${info.name}</h2>
@@ -306,23 +305,76 @@ function verdictCard(d, rs, cur) {
           ${info.analyst_target != null ? `<div><div class="text-xs text-muted">Analyst target</div><div class="text-lg">${price(info.analyst_target, cur)}</div></div>` : ""}
         </div>
       </div>
-      <div class="flex items-center gap-5">
-        <div class="relative w-28 h-28 grid place-items-center">
-          <svg class="w-28 h-28 -rotate-90" viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#26334a" stroke-width="9"/>
-            <circle cx="50" cy="50" r="42" fill="none" stroke="${rs.ring}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${dash}" stroke-dashoffset="${off}"/>
-          </svg>
-          <div class="absolute text-center"><div class="text-3xl font-bold">${v.score}</div><div class="text-[10px] text-muted -mt-1">/ 100</div></div>
-        </div>
-        <div class="text-center md:text-left max-w-[220px]">
-          <div class="inline-block px-3 py-1 rounded-lg ${rs.bg} border ${rs.br} text-${rs.c} font-bold text-lg">${v.rating}</div>
-          <p class="text-sm text-muted mt-2 leading-snug">${v.stance}</p>
-        </div>
-      </div>
+      ${marginOfSafetyHero(d, rs, cur)}
     </div>
     ${decisionStrip(d, cur)}
     ${confidenceBanner(d.metrics.data_confidence)}
   </section>`);
+}
+
+// The hero: margin of safety — where price sits versus the certainty-scaled
+// buy-below. The full-universe backtest proved this carries the edge (and the
+// downside cushion), so it's the biggest number on the card. The quality score
+// is demoted to a small gate chip below, because that same backtest showed it's
+// a weak return predictor — a filter that screens junk, not a forecast that
+// ranks winners. Making the loudest element match what the data rewards.
+function marginOfSafetyHero(d, rs, cur) {
+  const v = d.metrics.valuation || {};
+  const px = d.info.current_price;
+  const verdict = d.verdict;
+  const up = v.upside_mid;   // + = discount to fair value (safety), − = premium (none)
+  let big, label, sub, tone;
+  if (v.suspect || v.mid == null || up == null || !px) {
+    big = "—"; tone = "muted";
+    label = "margin of safety unavailable";
+    sub = "valuation is unreliable for this name — see the model section below";
+  } else {
+    // The margin of safety is the discount to intrinsic value, per the thesis —
+    // not the sliver below the buy-below gate. The buy-below (which already bakes
+    // in the required, certainty-scaled discount) is the actionable threshold, so
+    // it lives in the sub-line and the decision strip.
+    const inZone = v.buy_below != null && px <= v.buy_below;
+    const mos = fmtPct(v.margin_of_safety, 0);
+    const buyAt = v.buy_below != null ? price(v.buy_below, cur) : "its buy-below";
+    big = fmtPct(Math.abs(up), 0);
+    if (up >= 0 && inZone) {
+      tone = "good"; label = "below fair value";
+      sub = `in the buy zone — clears the ${mos} margin of safety you require (buy-below ${buyAt})`;
+    } else if (up >= 0) {
+      tone = "warn"; label = "below fair value";
+      sub = `cheap, but short of your ${mos} margin of safety — wait for ${buyAt}`;
+    } else {
+      tone = "warn"; label = "above fair value";
+      sub = `no margin of safety — buy below ${buyAt} for a ${mos} cushion`;
+    }
+  }
+  return `
+  <div class="flex flex-col items-center md:items-end gap-3 md:min-w-[280px]">
+    <div class="text-center md:text-right">
+      <div class="inline-block px-3 py-1 rounded-lg ${rs.bg} border ${rs.br} text-${rs.c} font-bold text-lg">${verdict.rating}</div>
+      ${verdict.stance ? `<p class="text-[11px] text-muted mt-1.5 leading-snug max-w-[240px] md:ml-auto">${verdict.stance}</p>` : ""}
+    </div>
+    <div class="text-center md:text-right">
+      <div class="text-[11px] uppercase tracking-wide text-muted mb-0.5">Margin of safety</div>
+      <div class="text-4xl md:text-5xl font-bold text-${tone} leading-none">${big}</div>
+      <div class="text-xs font-medium text-${tone} mt-1">${label}</div>
+      <p class="text-[11px] text-muted mt-1.5 leading-snug max-w-[260px] md:ml-auto">${sub}</p>
+    </div>
+    ${scoreGate(verdict)}
+  </div>`;
+}
+
+// The quality score, demoted to a gate chip. The backtest showed it filters junk
+// but doesn't rank winners, so it reads as a pass/fail quality gate — deliberately
+// understated next to the margin-of-safety hero.
+function scoreGate(verdict) {
+  const s = verdict.score;
+  const c = s >= 70 ? "good" : s >= 50 ? "warn" : "bad";
+  return `<div class="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full bg-ink/60 border border-line text-muted">
+    <span>Quality gate</span>
+    <span class="font-bold text-${c}">${s}</span><span class="opacity-60">/100</span>
+    <span class="opacity-50">·</span><span class="opacity-70">a filter, not a forecast</span>
+  </div>`;
 }
 
 // The decision at a glance — the three numbers that actually drive a buy/hold/pass,
@@ -340,23 +392,20 @@ function decisionStrip(d, cur) {
       <div class="text-[11px] ${subCls} mt-0.5 leading-snug">${sub}</div>
     </div>`;
 
-  // Tile 1 — buy-below / buy-zone status (the actionable number).
+  // Tile 1 — the exact buy-below price (the actionable dollar level). The hero
+  // above already conveys how far price sits from it and whether we're in the
+  // zone, so this tile just gives the precise target, in-zone styling aside.
   let t1;
   if (v.suspect || v.buy_below == null || !px) {
     t1 = tile("Buy-below", "—", "valuation unreliable — see below");
+  } else if (px <= v.buy_below) {
+    t1 = `<div class="bg-good/10 rounded-xl p-3 border border-good/40">
+      <div class="text-[11px] text-good">✓ Buy below</div>
+      <div class="text-lg font-semibold mt-0.5 text-good">${price(v.buy_below, cur)}</div>
+      <div class="text-[11px] text-muted mt-0.5 leading-snug">your entry for a ${fmtPct(v.margin_of_safety, 0)} margin of safety — met today</div></div>`;
   } else {
-    const inZone = px <= v.buy_below;
-    if (inZone) {
-      const below = (1 - px / v.buy_below) * 100;
-      t1 = `<div class="bg-good/10 rounded-xl p-3 border border-good/40">
-        <div class="text-[11px] text-good">✓ In the buy zone</div>
-        <div class="text-lg font-semibold mt-0.5 text-good">at / below ${price(v.buy_below, cur)}</div>
-        <div class="text-[11px] text-muted mt-0.5 leading-snug">price is ${below.toFixed(0)}% under the buy-below (${fmtPct(v.margin_of_safety, 0)} margin of safety)</div></div>`;
-    } else {
-      const above = (px / v.buy_below - 1) * 100;
-      t1 = tile("Buy below", price(v.buy_below, cur),
-        `${above.toFixed(0)}% above it today — wait for a ${fmtPct(v.margin_of_safety, 0)} margin of safety`, "text-warn");
-    }
+    t1 = tile("Buy below", price(v.buy_below, cur),
+      `your entry for a ${fmtPct(v.margin_of_safety, 0)} margin of safety`);
   }
 
   // Tile 2 — fair value & gap.
