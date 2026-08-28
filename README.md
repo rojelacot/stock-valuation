@@ -255,6 +255,12 @@ guardrails keep the ranking honest (see `data.py` and `valuation.py`):
    Capital-light "financials" — exchanges, index/data/ratings shops, payment networks, asset managers,
    insurance brokers — carry trivial balance sheets, so book value is meaningless; by SIC they route
    to the ordinary DCF → earnings-power path instead. See [Valuation models](#valuation-models--the-right-one-per-business).
+   Because the Altman Z / Beneish M forensic screens are calibrated on industrial balance sheets and
+   are meaningless for a financial, book-value banks/insurers instead get a **financial-firm distress
+   screen** (`financial_health.py`): capital adequacy (common equity ÷ assets — a crude tangible-common-
+   equity / leverage proxy), return on assets, and book-value erosion. Thin capital (>~20× leverage)
+   reads as *distress* and docks the score; a single loss year is *watch*. Conservative by design, so a
+   well-capitalized insurer's catastrophe year doesn't read as insolvency.
 3. **Sanity caps.** Growth is extrapolated cautiously (tighter stage-1 cap, extra caution when only
    ~4yr of history exists), and any DCF implying **>100% upside** is flagged *suspect* — its valuation
    pillar is capped, it's downgraded out of BUY, and it's excluded from the buy-candidate list (a

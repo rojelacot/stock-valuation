@@ -1076,6 +1076,9 @@ def compute_metrics(stock: dict[str, Any],
     import forensics  # lazy: forensics imports this module (needs_earnings_valuation)
     forensic_scores = forensics.analyze(st, info)
 
+    import financial_health  # lazy (same circular-import reason as forensics)
+    fin_health = financial_health.analyze(st, info)
+
     # ---- Debt maturities & refinancing risk ----
     import refinancing
     refin = refinancing.assess(st, info)
@@ -1123,6 +1126,7 @@ def compute_metrics(stock: dict[str, Any],
         "sensitivity": sensitivity,
         "monte_carlo": monte_carlo,
         "forensics": forensic_scores,
+        "financial_health": fin_health,
         "refinancing": refin,
         "working_capital": workcap,
         "leverage_trend": levtrend,

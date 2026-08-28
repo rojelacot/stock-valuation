@@ -260,6 +260,15 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
                          f"vs its own history (~{bbq['weighted_percentile']}th percentile), "
                          "compounding per-share value.")
 
+    # Financial-firm distress: banks/insurers that Altman/Beneish can't score.
+    fh = metrics.get("financial_health") or {}
+    if fh.get("applicable"):
+        if fh.get("level") in ("watch", "distress"):
+            for r in fh.get("reasons", []):
+                red.append(r)
+        elif fh.get("positive"):
+            green.append(fh["positive"])
+
     # Cyclical-peak warning (earnings may not be durable).
     cyc = metrics.get("cyclical_peak", {})
     if cyc.get("peak"):
@@ -309,6 +318,18 @@ def score(metrics: dict[str, Any]) -> dict[str, Any]:
                 penalty += 5
                 red.append(f"Beneish M ~{m:.2f} — some manipulation-risk markers; "
                            "worth a closer look at accruals.")
+
+    # ---- Financial-firm distress penalty (banks/insurers) ----
+    # The reasons are already surfaced as red flags above; here we dock the numeric
+    # score so a thinly-capitalized or unprofitable financial — which Altman/Beneish
+    # can't catch — can't clear the ≥80 buy-screen gate.
+    fh_p = metrics.get("financial_health") or {}
+    if fh_p.get("applicable"):
+        if fh_p.get("level") == "distress":
+            penalty += 12
+        elif fh_p.get("level") == "watch":
+            penalty += 4
+
     # ---- Refinancing / debt-maturity risk (timing + refi-rate stress) ----
     # Sharper than the static D/E flag: when does the debt come due, can cash +
     # free cash flow cover the near-term wall, and does rolling it at +300bps

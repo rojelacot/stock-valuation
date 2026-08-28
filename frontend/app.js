@@ -720,6 +720,13 @@ function _riskDims(d, cur) {
     const sev = _SEV_RANK[azSev] <= _SEV_RANK[bmSev] ? azSev : bmSev;
     const status = sev === "bad" ? "distress / flagged" : sev === "warn" ? "grey zone" : "safe";
     dims.push({ title: "Distress & manipulation", sev, status, render: () => forensicsSection(d) });
+  } else if (m.financial_health && m.financial_health.applicable) {
+    // Banks/insurers can't be scored by Altman/Beneish — a financial-specific
+    // distress read takes the forensics slot instead.
+    const fh = m.financial_health;
+    const sev = { solid: "good", watch: "warn", distress: "bad" }[fh.level] || "muted";
+    const status = { solid: "Solid", watch: "Watch", distress: "Distress" }[fh.level] || fh.level;
+    dims.push({ title: "Financial-firm distress (bank/insurer)", sev, status, render: () => financialHealthSection(d) });
   } else if (fx) na.push("distress checks");
 
   const rf = m.refinancing;
@@ -808,6 +815,34 @@ function riskSection(d, cur) {
     rows.appendChild(det);
   });
   return card;
+}
+
+// Distress read for banks & insurers — the financial-specific signals Altman and
+// Beneish can't provide (they're calibrated on industrial balance sheets).
+function financialHealthSection(d) {
+  const fh = d.metrics.financial_health;
+  if (!fh || !fh.applicable) return h(`<div class="hidden"></div>`);
+  const col = { solid: "good", watch: "warn", distress: "bad" }[fh.level] || "muted";
+  const txt = { solid: "Solid", watch: "Watch", distress: "Distress" }[fh.level] || fh.level;
+  const pct = (v, dp = 1) => v == null ? "—" : (v * 100).toFixed(dp) + "%";
+  const stat = (label, val, hint, c = "") => `<div class="bg-ink/40 rounded-lg p-2.5"><div class="text-[11px] text-muted">${label}</div><div class="text-lg font-bold ${c}">${val}</div>${hint ? `<div class="text-[10px] text-muted mt-0.5">${hint}</div>` : ""}</div>`;
+  const bullets = (fh.reasons && fh.reasons.length)
+    ? `<ul class="mt-4 space-y-1 text-sm text-${col}">${fh.reasons.map(r => `<li>• ${r}</li>`).join("")}</ul>`
+    : (fh.positive ? `<p class="mt-4 text-sm text-good">✓ ${fh.positive}</p>` : "");
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1">
+      <h3 class="font-semibold">Financial-firm distress (bank / insurer)</h3>
+      <div class="text-[10px] uppercase px-2 py-0.5 rounded bg-${col}/15 text-${col}">${txt}</div>
+    </div>
+    <p class="text-xs text-muted mb-4">Altman/Beneish are calibrated on industrial balance sheets and don't fit a financial, so this screens the signals that do: capital adequacy (common equity ÷ assets), profitability (ROA), book-value erosion, and dividend cuts. Thin capital docks the score.</p>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+      ${stat("Common equity / assets", pct(fh.equity_to_assets), fh.leverage != null ? `~${fh.leverage.toFixed(0)}× leverage` : "", fh.equity_to_assets != null && fh.equity_to_assets < 0.07 ? "text-warn" : "")}
+      ${stat("Return on assets", pct(fh.roa, 2), "net income ÷ assets", fh.roa != null && fh.roa < 0.004 ? "text-warn" : "")}
+      ${stat("Book value (3yr)", fh.book_value_change_3yr != null ? signPct(fh.book_value_change_3yr) : "—", "common equity")}
+    </div>
+    ${bullets}
+  </section>`);
 }
 
 function forensicsSection(d) {

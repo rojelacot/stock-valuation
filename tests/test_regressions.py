@@ -341,6 +341,45 @@ ok(buyback_quality({2020: 100}, _pe_band).get("applicable") is False,
    "buyback quality: a single buyback year → not applicable (no timing story)")
 
 
+# --- financial-firm distress: banks/insurers that Altman/Beneish can't score ---
+import financial_health as _fh                                   # noqa: E402
+
+_BANK = {"sector": "Financial Services", "industry": "Banks - Regional"}
+_NONFIN = {"sector": "Technology", "industry": "Software"}
+
+def _fhst(assets, equity, ni):
+    ys = range(2019, 2019 + len(assets))
+    return {"total_assets": dict(zip(ys, assets)), "total_equity": dict(zip(ys, equity)),
+            "net_income": dict(zip(ys, ni)), "preferred_stock": {}}
+
+# Well-capitalized bank: ~9% equity/assets, positive ROA → solid.
+_ok = _fh.analyze(_fhst([1000]*5, [90, 91, 92, 93, 95], [12, 12, 13, 13, 14]), _BANK)
+ok(_ok["applicable"] and _ok["level"] == "solid" and not _ok["reasons"],
+   "financial health: a well-capitalized, profitable bank reads as solid")
+
+# Thin capital (~3.5% equity/assets) → distress.
+_thin = _fh.analyze(_fhst([1000]*5, [50, 45, 42, 40, 35], [3, 2, 2, 1, 1]), _BANK)
+ok(_thin["level"] == "distress" and any("Thin capital" in r for r in _thin["reasons"]),
+   "financial health: thin capital (>20x leverage) reads as distress")
+
+# Net loss → at least watch, with an unprofitable flag.
+_loss = _fh.analyze(_fhst([1000]*5, [90, 88, 85, 82, 80], [10, 5, 2, -3, -8]), _BANK)
+ok(_loss["level"] in ("watch", "distress") and any("Unprofitable" in r for r in _loss["reasons"]),
+   "financial health: a loss-making financial is flagged (unprofitable)")
+
+# Non-financial → not applicable (runs Altman/Beneish instead).
+ok(_fh.analyze(_fhst([1000]*5, [400]*5, [50]*5), _NONFIN).get("applicable") is False,
+   "financial health: a non-financial is not applicable (forensics covers it)")
+
+# The scoring layer docks a distressed financial and surfaces the reason.
+_dm = metrics(make_stock(statements=_fhst([1000]*5, [40, 38, 36, 34, 32], [2, 1, 1, 0, -1]),
+                         info={"sector": "Financial Services", "industry": "Banks - Regional",
+                               "current_price": 10, "shares_outstanding": 100, "market_cap": 1000}))
+_ds = score(_dm)
+ok(any("Thin capital" in f or "Unprofitable" in f for f in _ds["red_flags"]),
+   "financial health: distress reasons reach the verdict's red flags")
+
+
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")
     print("\n".join("  - " + f for f in FAILS))
