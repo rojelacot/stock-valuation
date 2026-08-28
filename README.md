@@ -29,9 +29,13 @@ inflation, layer in an AI qualitative read (moat, management, risks), and output
 - **Margin of safety that scales with certainty** — from ~12% below intrinsic value for a
   fortress compounder up to ~45% for the least certain names.
 - **Quality is the filter, not the ranker.** High ROIC, real growth, a strong balance sheet
-  and expanding margins *don't* predict returns on their own — expensive quality mean-reverts —
-  but they earn their keep by screening **value traps** out of the cheap names. Quality *at a
-  fair price* beats either lever alone; over-weighting cheapness alone pulls in distressed junk.
+  and expanding margins *don't* predict returns on their own — expensive quality mean-reverts.
+  They earn their keep by ranking expensive junk *down* the composite, and — on a principle the
+  backtest can't test — by keeping the cheap names that go to zero off the buy list. A
+  survivor-only backtest actually shows cheap-**and-ugly** winning (mean reversion among the
+  names that lived), because the traps quality is meant to catch already delisted and are missing
+  from the sample. So "quality at a fair price" is a discipline, not a proven return lift; the
+  guardrail against **value traps** is worth keeping precisely where the data can't vouch for it.
 - **A shrinking business is never a bargain.** Cheap-and-declining is a value trap, not a margin
   of safety: a sustained revenue decline is flagged and kept out of the buy list, however good the
   trailing margins and ROE still look.
