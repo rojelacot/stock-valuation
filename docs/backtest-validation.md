@@ -115,3 +115,32 @@ which this codebase already does: the buy-below rating gate (a BUY must trade be
 its certainty-scaled fair value) and the value-trap / suspect guards enforce exactly
 the "buy cheap, avoid the traps" discipline the data rewards. Weighting the score
 toward cheapness would double-count valuation and, per the backtest, hurt.
+
+## Downside protection — the 2022 bear (does the value tilt cushion a drawdown?)
+
+The multi-window runs above all landed in a rising decade, so they can't test the
+other half of the value promise: protection when the market falls. The one clean
+downturn in the EDGAR era is **2022**. Scoring the `full` universe **as of 2021**
+(a market peak) and measuring the **2022** total return:
+
+| as-of-2021 margin of safety | 2022 return (median) |
+|---|--:|
+| cheap (upside ≥ 20%) | **+14%** |
+| fair (0–20%) | +10% |
+| expensive (0 to −30%) | +2% |
+| very expensive (< −30%) | **−14%** |
+
+**A clean, monotonic gradient: the cheaper a name was going in, the better it held up.**
+Names bought with a real margin of safety were *up* in a down year while the expensive
+ones fell double digits. That is exactly the downside protection value investing
+promises — and it comes from the *price discipline*, not the quality score:
+
+- The composite **score did NOT protect** — names scoring ≥65 as of 2021 fell −16% in
+  2022, *worse* than the <45 names (−9%). At a market peak "high score" mostly catches
+  fairly-valued quality/growth, which was hit hardest in the 2022 de-rating.
+
+**This closes the loop with the bull-market result.** The margin of safety is the edge
+on the way up *and* the cushion on the way down; the quality-weighted score is a filter,
+neither an upside forecast nor a downside shield. (Caveat: at a 2021 peak few names score
+high or screen cheap, so the high-score buckets here are thin — n=1–8; the margin-of-safety
+gradient rests on the well-populated n≈189 split and is the meaningful signal.)

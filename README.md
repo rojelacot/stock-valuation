@@ -20,8 +20,23 @@ inflation, layer in an AI qualitative read (moat, management, risks), and output
 ## Philosophy baked in
 - **Hold 10–15 years**, so durability and returns on capital matter more than this quarter.
 - **Beat inflation** (~3% bar) — the benchmark is inflation, *not* an index.
-- **Margin of safety that scales with certainty** — from ~12% below intrinsic value for a fortress compounder up to ~45% for the least certain names.
-- **Quality first** — high ROIC, real growth, strong balance sheet, expanding margins.
+- **The margin of safety is both the edge and the cushion.** A backtest of ~900 names
+  ([`docs/backtest-validation.md`](docs/backtest-validation.md)) says it plainly: buying
+  *below* a certainty-scaled fair value is what separated winners from losers over 5 years
+  **and** what protected capital in the 2022 bear — names cheap going in were *up* ~14% that
+  year while expensive ones fell ~14%, a clean monotonic gradient. Price discipline carries
+  the return and the downside protection; the quality score, on its own, does neither.
+- **Margin of safety that scales with certainty** — from ~12% below intrinsic value for a
+  fortress compounder up to ~45% for the least certain names.
+- **Quality is the filter, not the ranker.** High ROIC, real growth, a strong balance sheet
+  and expanding margins *don't* predict returns on their own — expensive quality mean-reverts —
+  but they earn their keep by screening **value traps** out of the cheap names. Quality *at a
+  fair price* beats either lever alone; over-weighting cheapness alone pulls in distressed junk.
+- **A shrinking business is never a bargain.** Cheap-and-declining is a value trap, not a margin
+  of safety: a sustained revenue decline is flagged and kept out of the buy list, however good the
+  trailing margins and ROE still look.
+- **The score is a filter, not a forecast.** Use it to weed out low-quality and richly-priced
+  names; the buy-below gate — a BUY must trade below fair value — does the actual work.
 
 ## Quick start
 ```bash
