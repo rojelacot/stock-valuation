@@ -245,6 +245,7 @@ function renderAnalysis(d) {
   const el = $("results"); el.innerHTML = "";
   el.append(
     verdictCard(d, rs, cur), watchlistControl(d), metricsGrid(d, cur), dcfSection(d, cur),
+    sellDisciplineSection(d, cur),
     monteCarloSection(d, cur), scenariosSection(d, cur),
     riskSection(d, cur), ddSection(d, cur), valuationHistorySection(d, cur),
     analystSection(d, cur), earningsQualitySection(d, cur), segmentsSection(d),
@@ -653,6 +654,53 @@ function sensitivityGrid(d, cur) {
     <div class="text-sm text-muted mb-2">Fair-value sensitivity — discount rate × growth <span class="text-[11px]">(box = base case; green = upside, red = overvalued)</span></div>
     <div class="overflow-x-auto"><table class="w-full border-separate" style="border-spacing:3px">${head}${body}</table></div>
   </div>`;
+}
+
+// Sell discipline — the other half of "buy below fair value". When does a HELD
+// position become a trim (price past a certainty-scaled premium to fair value) or
+// a sell (the thesis broke — a shrinking/distressed business is a sell at any price)?
+function sellDisciplineSection(d, cur) {
+  const sd = d.metrics.sell_discipline;
+  if (!sd) return h(`<div class="hidden"></div>`);
+  const val = d.metrics.valuation || {};
+  const px = d.info.current_price;
+  const A = { hold: { c: "good", label: "HOLD" }, trim: { c: "warn", label: "TRIM" },
+              sell: { c: "bad", label: "SELL" } }[sd.action] || { c: "muted", label: "—" };
+  const clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+
+  // Buy-below → fair value → trim-above spectrum with today's price marked.
+  let spectrum = "";
+  if (sd.action !== "sell" && sd.fair_value && sd.trim_above && val.buy_below && px) {
+    const lo = val.buy_below, fv = sd.fair_value, hi = sd.trim_above;
+    const min = Math.min(lo, px) * 0.92, max = Math.max(hi, px) * 1.05;
+    const pos = v => clamp((v - min) / (max - min) * 100, 1, 99);
+    spectrum = `<div class="mt-4">
+      <div class="relative h-2 rounded-full" style="background:linear-gradient(90deg,#14351f 0%,#1b2534 50%,#3a1d1d 100%)">
+        <div class="absolute -top-1 h-4 w-px bg-good" style="left:${pos(lo)}%" title="buy-below ${price(lo, cur)}"></div>
+        <div class="absolute -top-1 h-4 w-px bg-muted" style="left:${pos(fv)}%" title="fair value ${price(fv, cur)}"></div>
+        <div class="absolute -top-1 h-4 w-px bg-bad" style="left:${pos(hi)}%" title="trim-above ${price(hi, cur)}"></div>
+        <div class="absolute -top-2 h-6 w-1.5 rounded bg-${A.c} border border-ink" style="left:calc(${pos(px)}% - 3px)" title="today ${price(px, cur)}"></div>
+      </div>
+      <div class="flex justify-between text-[10px] mt-1.5">
+        <span class="text-good">buy ≤ ${price(lo, cur)}</span>
+        <span class="text-muted">fair ${price(fv, cur)}</span>
+        <span class="text-bad">trim ≥ ${price(hi, cur)}</span>
+      </div>
+    </div>`;
+  }
+  const breaks = (sd.thesis_breaks && sd.thesis_breaks.length)
+    ? `<ul class="mt-3 space-y-1 text-sm text-bad">${sd.thesis_breaks.map(b => `<li>• ${b}</li>`).join("")}</ul>` : "";
+  return h(`
+  <section class="card rounded-2xl p-6">
+    <div class="flex items-center justify-between mb-1 gap-2">
+      <h3 class="font-semibold">Sell discipline</h3>
+      <div class="text-sm font-bold px-3 py-1 rounded-lg bg-${A.c}/15 text-${A.c} border border-${A.c}/40">${A.label}</div>
+    </div>
+    <p class="text-xs text-muted mb-1">The other half of "buy below fair value": when to trim or exit. A shrinking or distressed business is a sell at any price; otherwise trim only once price runs past a certainty-scaled premium to fair value — quality compounders are held longer, not sold a touch above a conservative estimate.</p>
+    <p class="text-sm mt-3 text-${A.c === "good" ? "muted" : A.c}">${sd.reason}</p>
+    ${breaks}
+    ${spectrum}
+  </section>`);
 }
 
 function monteCarloSection(d, cur) {

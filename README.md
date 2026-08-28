@@ -41,6 +41,12 @@ inflation, layer in an AI qualitative read (moat, management, risks), and output
   trailing margins and ROE still look.
 - **The score is a filter, not a forecast.** Use it to weed out low-quality and richly-priced
   names; the buy-below gate — a BUY must trade below fair value — does the actual work.
+- **Know when to sell, not just when to buy.** "Hold 10–15yr" is not "hold forever": a shrinking or
+  distressed business is a sell at *any* price (secular decline, financial-firm distress, or capital
+  being destroyed on the margin — the thesis has broken). Absent that, trim only once price runs past
+  a **certainty-scaled premium** to fair value (~35% for a fragile name up to ~75% for a fortress
+  compounder), so winners aren't sold a touch above a conservative estimate. The Analyze view shows
+  the full lifecycle — buy-below → fair value → trim-above — with a HOLD / TRIM / SELL verdict.
 
 ## Quick start
 ```bash

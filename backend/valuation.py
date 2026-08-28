@@ -1114,6 +1114,9 @@ def compute_metrics(stock: dict[str, Any],
     sector_relative = {"sector": _sector, "metrics": _sr,
                        "covered": bool(_sb.sector_median(_sector, "roic"))}
 
+    sell = sell_discipline(valuation, certainty, business_decline, fin_health,
+                           dd, forensic_scores, info.get("current_price"))
+
     return {
         "assumptions_used": A,
         "risk_premium": rp,
@@ -1127,6 +1130,7 @@ def compute_metrics(stock: dict[str, Any],
         "monte_carlo": monte_carlo,
         "forensics": forensic_scores,
         "financial_health": fin_health,
+        "sell_discipline": sell,
         "refinancing": refin,
         "working_capital": workcap,
         "leverage_trend": levtrend,
@@ -1268,6 +1272,56 @@ def valuation_history(eps, fcf, revenue, shares, price_history, info) -> dict:
     if not bands:
         return {"applicable": False, "reason": "Not enough price/fundamental overlap."}
     return {"applicable": True, "bands": bands, "primary": bands[0]["key"]}
+
+
+def sell_discipline(val, certainty, business_decline, financial_health,
+                    due_diligence, forensics, price) -> dict:
+    """The mirror of buy-below: when does a HELD position become a trim or a sell?
+    Two independent triggers. (1) Thesis break — a shrinking or distressed business
+    is a sell at ANY price, not a hold: sustained revenue decline, financial-firm
+    distress, value-destructive incremental capital, or a forensic distress /
+    manipulation flag. (2) Richly valued — price past a certainty-scaled premium to
+    fair value where the margin of safety has fully inverted; quality compounders
+    earn a wider premium (held longer) than fragile names, so we don't sell winners
+    a touch above a conservative fair value."""
+    cert = certainty if certainty is not None else 0.5
+    trim_premium = 0.35 + 0.40 * cert          # 0.35 (fragile) → 0.75 (fortress)
+    fv = None if (val or {}).get("suspect") else (val or {}).get("mid")
+    trim_above = fv * (1 + trim_premium) if fv else None
+    premium_to_fv = (price / fv - 1) if (fv and price and fv > 0) else None
+
+    breaks = []
+    if (business_decline or {}).get("declining"):
+        breaks.append("the business is in sustained revenue decline")
+    if (financial_health or {}).get("level") == "distress":
+        breaks.append("financial-firm distress (thin capital / losses)")
+    if ((due_diligence or {}).get("incremental_roic") or {}).get("level") == "destructive":
+        breaks.append("new capital is destroying value (negative incremental ROIC)")
+    fx = forensics or {}
+    if (fx.get("altman") or {}).get("distress"):
+        breaks.append("Altman Z in the distress zone")
+    if (fx.get("beneish") or {}).get("manipulator"):
+        breaks.append("accounting resembles earnings manipulators")
+
+    if breaks:
+        action = "sell"
+        reason = ("Thesis broken — " + "; ".join(breaks) +
+                  ". A shrinking or distressed business is a sell at any price, not a hold.")
+    elif trim_above is not None and price and price > trim_above:
+        action = "trim"
+        reason = (f"Richly valued — trading ~{premium_to_fv*100:.0f}% above fair value, past the "
+                  f"~{trim_premium*100:.0f}% premium where the margin of safety has fully inverted. "
+                  "The odds now favor multiple compression; consider trimming.")
+    else:
+        action = "hold"
+        if premium_to_fv is not None and premium_to_fv > 0:
+            reason = (f"Hold — ~{premium_to_fv*100:.0f}% above fair value but still inside the "
+                      f"~{trim_premium*100:.0f}% premium a business of this quality earns before trimming.")
+        else:
+            reason = "Hold — trading at or below fair value with the thesis intact."
+    return {"action": action, "fair_value": fv, "trim_above": trim_above,
+            "trim_premium": round(trim_premium, 2), "premium_to_fv": premium_to_fv,
+            "thesis_breaks": breaks, "reason": reason, "certainty": round(cert, 2)}
 
 
 def _margin_by_year(numer: list, revenue: list) -> list:

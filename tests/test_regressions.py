@@ -380,6 +380,34 @@ ok(any("Thin capital" in f or "Unprofitable" in f for f in _ds["red_flags"]),
    "financial health: distress reasons reach the verdict's red flags")
 
 
+# --- sell discipline: the mirror of buy-below (trim / sell / hold) ---
+from valuation import sell_discipline                            # noqa: E402
+
+_valc = {"mid": 100.0, "buy_below": 80.0, "suspect": False}
+
+ok(sell_discipline(_valc, 0.9, {}, {}, {}, {}, 60)["action"] == "hold",
+   "sell discipline: trading below fair value with the thesis intact → hold")
+
+# cert 0.9 → trim premium 0.71 → trim above ~171; price 200 is past it.
+ok(sell_discipline(_valc, 0.9, {}, {}, {}, {}, 200)["action"] == "trim",
+   "sell discipline: price past the certainty-scaled premium → trim")
+
+ok(sell_discipline(_valc, 0.9, {"declining": True}, {}, {}, {}, 60)["action"] == "sell",
+   "sell discipline: a shrinking business is a sell even when it looks cheap")
+ok(sell_discipline(_valc, 0.9, {}, {"level": "distress"}, {}, {}, 60)["action"] == "sell",
+   "sell discipline: financial-firm distress triggers a sell")
+ok(sell_discipline(_valc, 0.9, {}, {}, {"incremental_roic": {"level": "destructive"}}, {}, 60)["action"] == "sell",
+   "sell discipline: value-destructive incremental capital triggers a sell")
+
+_hi = sell_discipline(_valc, 1.0, {}, {}, {}, {}, 100)["trim_above"]
+_lo = sell_discipline(_valc, 0.0, {}, {}, {}, {}, 100)["trim_above"]
+ok(_hi > _lo,
+   "sell discipline: a high-certainty compounder is held to a bigger premium before trimming")
+
+ok(sell_discipline({"mid": 100.0, "suspect": True}, 0.9, {}, {}, {}, {}, 500)["action"] == "hold",
+   "sell discipline: a suspect fair value can't call a trim on price alone (no false sell)")
+
+
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")
     print("\n".join("  - " + f for f in FAILS))
