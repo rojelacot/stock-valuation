@@ -187,6 +187,30 @@ ok(not metrics(hypergrowth(3, 0.25))["valuation"].get("low_multiple_artifact"),
 ok(not metrics(hypergrowth(80, 0.03))["valuation"].get("low_multiple_artifact"),
    "a slow/shrinking grower with a low DCF value is left un-flagged (can deserve it)")
 
+# ── MLP conservatism — MPLX/WES (no growth premium; D&A isn't free cash) ───────
+from valuation import is_mlp                                   # noqa: E402
+ok(is_mlp({"name": "Energy Transfer LP"}) and is_mlp({"name": "Enterprise Products Partners L.P."}),
+   "MPLX: an 'L.P.'/'LP' name is detected as a master limited partnership")
+ok(not is_mlp({"name": "ONEOK, Inc."}) and not is_mlp({"name": "Kinder Morgan, Inc."}),
+   "a C-corp midstream peer (Inc.) is NOT treated as an MLP")
+def _pipeline(name):
+    _rev = [100 * 1.08 ** i for i in range(12)]
+    st = {"revenue": years(2014, _rev), "gross_profit": years(2014, [r * 0.5 for r in _rev]),
+          "operating_income": years(2014, [r * 0.15 for r in _rev]),
+          "net_income": years(2014, [r * 0.08 for r in _rev]),
+          "eps": years(2014, [r * 0.08 / 50 for r in _rev]),
+          "operating_cashflow": years(2014, [r * 0.22 for r in _rev]),  # D&A add-back -> FCF > NI
+          "capex": years(2014, [-r * 0.05 for r in _rev]),
+          "depreciation": years(2014, [r * 0.12 for r in _rev]),
+          "total_equity": years(2014, [r * 0.6 for r in _rev]),
+          "total_debt": years(2014, [r * 0.5 for r in _rev]), "cash": years(2014, [10] * 12),
+          "ebitda": years(2014, [r * 0.27 for r in _rev])}
+    return make_stock(statements=st, info={"name": name, "current_price": 30,
+                                           "shares_outstanding": 50, "market_cap": 1500, "sector": "Energy"})
+ok(metrics(_pipeline("Midstream Partners L.P."))["valuation"]["mid"]
+   < metrics(_pipeline("Midstream Holdings Inc."))["valuation"]["mid"],
+   "WES: an MLP is valued more conservatively than the identical C-corp (no premium, D&A not free cash)")
+
 
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")

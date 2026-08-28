@@ -546,15 +546,19 @@ def compute_metrics(stock: dict[str, Any],
 
     # ---- Normalized base FCF (shared by DCF + expected return) ----
     base_fcf = _normalized_base_fcf(fcf, info.get("free_cashflow_ttm"))
-    # A capital-light financial (asset manager / insurer-hybrid) routed to the
-    # operating DCF path can carry insurance/annuity FLOAT in its operating cash
-    # flow, so its "free cash flow" overstates what's actually distributable to
-    # shareholders — Ameriprise reports $8.2B OCF against $3.5B net income, and the
-    # DCF valued it at ~2x its real worth (+97%). Cap the DCF base at normalized net
-    # income for a financial (by SIC) on the operating path. A pure asset manager
-    # (TROW, BLK: FCF already below NI) is untouched.
+    # Cap the DCF base at normalized net income where "free cash flow" overstates
+    # what's really distributable. Two cases:
+    #  - a capital-light financial (asset manager / insurer-hybrid) on the operating
+    #    path carries insurance/annuity FLOAT in operating cash flow (Ameriprise:
+    #    $8.2B OCF vs $3.5B net income, valued at ~2x its worth, +97%);
+    #  - a master limited partnership adds back heavy pipeline depreciation as if it
+    #    were free, but that D&A is real asset consumption, so its owner-earnings base
+    #    overstates distributable cash (Western Midstream: $2.2B FCF vs $1.2B NI).
+    # A pure asset manager (TROW, BLK: FCF already below NI) is untouched.
     _sic_int = int(info["sic"]) if str(info.get("sic")).isdigit() else None
-    if _sic_int and 6000 <= _sic_int <= 6799 and _sic_class(info) == "operating":
+    _cap_at_ni = ((_sic_int and 6000 <= _sic_int <= 6799 and _sic_class(info) == "operating")
+                  or is_mlp(info))
+    if _cap_at_ni:
         _ni_base = _normalized_base_fcf(net_income, None)
         if _ni_base and _ni_base > 0 and base_fcf and base_fcf > _ni_base:
             base_fcf = _ni_base
@@ -634,6 +638,16 @@ def compute_metrics(stock: dict[str, Any],
                                                loglin_growth(revenue)) if g is not None]
     oe_growth_robust = (sum(oe_growth_robust_candidates) / len(oe_growth_robust_candidates)
                         ) if oe_growth_robust_candidates else oe_growth
+    # Master limited partnerships pay out nearly all their cash and fund growth by
+    # issuing units, so per-unit earnings don't compound like a C-corp's — and they
+    # carry K-1 tax and terminal-decline risk a growth multiple ignores. Value them as
+    # a stable yield vehicle: cap the growth feeding the DCF and the earnings-power
+    # multiple to the terminal rate, so no compounder premium inflates the number
+    # (MPLX read +67% on a growth multiple it can't earn).
+    if is_mlp(info):
+        _tg = A["terminal_growth"]
+        oe_growth = _tg if oe_growth is None else min(oe_growth, _tg)
+        oe_growth_robust = _tg if oe_growth_robust is None else min(oe_growth_robust, _tg)
     # Base: owner earnings normally; but for financials/REITs (guardrail 2) their
     # capex/D&A are meaningless, so value on normalized net income directly.
     base_ni = _normalized_base_fcf(net_income, None)
@@ -1314,6 +1328,16 @@ def needs_ffo_valuation(info: dict[str, Any]) -> bool:
     sec = (info.get("sector") or "").lower()
     ind = (info.get("industry") or "").lower()
     return "real estate" in sec or "reit" in ind
+
+
+def is_mlp(info: dict[str, Any]) -> bool:
+    """A master limited partnership (MPLX, Energy Transfer, Western Midstream) — its
+    legal name carries an 'L.P.'/'LP' suffix or ends in 'Partners'. An MLP distributes
+    nearly all its cash and funds growth by ISSUING UNITS, so it can't compound
+    retained earnings the way a C-corp does — a growth-premium multiple over-values
+    it. C-corp midstream peers (ONEOK Inc., Kinder Morgan Inc.) don't match."""
+    n = (info.get("name") or "").lower()
+    return (" lp" in n or "l.p." in n or n.rstrip(". ").endswith(" partners"))
 
 
 # Above this implied upside, a DCF is almost always a data/extrapolation artifact
