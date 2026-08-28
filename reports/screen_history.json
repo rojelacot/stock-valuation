@@ -1150,6 +1150,195 @@
           "below_buy": true
         }
       ]
+    },
+    {
+      "date": "2026-08-28",
+      "min_score": 80,
+      "count": 14,
+      "winners": [
+        {
+          "ticker": "DECK",
+          "name": "Deckers Outdoor Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 98,
+          "rating": "BUY",
+          "upside": 0.8563135821204304,
+          "price": 87.41,
+          "certainty": 0.66,
+          "mos": 0.20278872122311828,
+          "buy_below": 129.35579723243302,
+          "below_buy": true
+        },
+        {
+          "ticker": "CRUS",
+          "name": "Cirrus Logic, Inc.",
+          "sector": "Technology",
+          "score": 93,
+          "rating": "BUY",
+          "upside": 0.28860334034244384,
+          "price": 108.225,
+          "certainty": 0.62,
+          "mos": 0.21418674892663933,
+          "buy_below": 109.58880601914586,
+          "below_buy": true
+        },
+        {
+          "ticker": "CTSH",
+          "name": "Cognizant Technology Solutions Corporation",
+          "sector": "Other / Unknown",
+          "score": 91,
+          "rating": "BUY",
+          "upside": 0.5582355420488609,
+          "price": 64.39,
+          "certainty": 0.93,
+          "mos": 0.12216295399847327,
+          "buy_below": 88.07759263846326,
+          "below_buy": true
+        },
+        {
+          "ticker": "AMP",
+          "name": "Ameriprise Financial, Inc.",
+          "sector": "Other / Unknown",
+          "score": 90,
+          "rating": "BUY",
+          "upside": 0.3674742971688416,
+          "price": 557.58,
+          "certainty": 0.91,
+          "mos": 0.1270632073141711,
+          "buy_below": 665.5936320710279,
+          "below_buy": true
+        },
+        {
+          "ticker": "ACN",
+          "name": "Accenture plc",
+          "sector": "Technology",
+          "score": 88,
+          "rating": "BUY",
+          "upside": 0.36079082309285604,
+          "price": 189.2,
+          "certainty": 0.97,
+          "mos": 0.12,
+          "buy_below": 226.56622888166817,
+          "below_buy": true
+        },
+        {
+          "ticker": "PGR",
+          "name": "The Progressive Corporation",
+          "sector": "Financial Services",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.3929310492129697,
+          "price": 219.09,
+          "certainty": 0.81,
+          "mos": 0.15678397403131195,
+          "buy_below": 257.33035940523934,
+          "below_buy": true
+        },
+        {
+          "ticker": "AOS",
+          "name": "A. O. Smith Corporation",
+          "sector": "Industrials",
+          "score": 87,
+          "rating": "BUY",
+          "upside": 0.5798651619295607,
+          "price": 59.72,
+          "certainty": 0.89,
+          "mos": 0.13263303166872398,
+          "buy_below": 81.8356809528576,
+          "below_buy": true
+        },
+        {
+          "ticker": "TROW",
+          "name": "T. Rowe Price Group, Inc.",
+          "sector": "Financial Services",
+          "score": 86,
+          "rating": "BUY",
+          "upside": 0.4184822826089939,
+          "price": 111.28,
+          "certainty": 0.95,
+          "mos": 0.12,
+          "buy_below": 138.90686339968138,
+          "below_buy": true
+        },
+        {
+          "ticker": "GNTX",
+          "name": "Gentex Corporation",
+          "sector": "Consumer Cyclical",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.7391612351540295,
+          "price": 22.875,
+          "certainty": 0.89,
+          "mos": 0.13228671160545638,
+          "buy_below": 34.52050956698736,
+          "below_buy": true
+        },
+        {
+          "ticker": "MMS",
+          "name": "Maximus, Inc.",
+          "sector": "Other / Unknown",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.8487922356387771,
+          "price": 60.215,
+          "certainty": 0.86,
+          "mos": 0.1423289936697668,
+          "buy_below": 95.4802457660556,
+          "below_buy": true
+        },
+        {
+          "ticker": "CF",
+          "name": "CF Industries Holdings, Inc.",
+          "sector": "Other / Unknown",
+          "score": 85,
+          "rating": "BUY",
+          "upside": 0.3777586416070391,
+          "price": 125.18,
+          "certainty": 0.82,
+          "mos": 0.15303868136170312,
+          "buy_below": 146.07357797225578,
+          "below_buy": true
+        },
+        {
+          "ticker": "ZTS",
+          "name": "Zoetis Inc.",
+          "sector": "Other / Unknown",
+          "score": 84,
+          "rating": "BUY",
+          "upside": 0.8374126001563066,
+          "price": 76.67,
+          "certainty": 0.67,
+          "mos": 0.19850724019549343,
+          "buy_below": 112.90983092089802,
+          "below_buy": true
+        },
+        {
+          "ticker": "CINF",
+          "name": "Cincinnati Financial Corporation",
+          "sector": "Financial Services",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.5325343182577027,
+          "price": 171.66,
+          "certainty": 0.71,
+          "mos": 0.18670231861567307,
+          "buy_below": 213.95815827450323,
+          "below_buy": true
+        },
+        {
+          "ticker": "NVR",
+          "name": "NVR, Inc.",
+          "sector": "Other / Unknown",
+          "score": 81,
+          "rating": "BUY",
+          "upside": 0.6361450817529892,
+          "price": 6368.25,
+          "certainty": 0.66,
+          "mos": 0.2010339477866897,
+          "buy_below": 8324.7316376611,
+          "below_buy": true
+        }
+      ]
     }
   ]
 }
