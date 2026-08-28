@@ -83,3 +83,35 @@ zone** — did modestly beat the bottom (+100% vs +76%, a +24pt median edge).
   the downside protection the value tilt is supposed to provide.
 - Score buckets ≠ the exact screen (which also requires rating BUY, not-suspect, and
   a deep EDGAR re-verify) — but the ≥80 slice is a close proxy and tells the same story.
+
+## Can we strengthen the margin-of-safety signal in the score?
+
+The result above (cheapness is the strongest raw slice) suggests weighting the
+valuation pillar more heavily. **The backtest says: don't — it makes the tool
+worse.** Re-scoring all 2,241 observations with different pillar weights and
+measuring the top-quintile vs bottom-quintile 5-yr return gap:
+
+| pillar weighting (val, quality, growth, strength, inflation, margins) | winner-vs-loser edge |
+|---|--:|
+| **balanced — current [30, 20, 15, 15, 10, 10]** | **+19.3 pt** |
+| deep_value [45, 12, 8, 15, 10, 10] | +7 pt |
+| valuation-heavy [42, 14, 10, 16, 10, 8] | +10 pt |
+| valuation-dominant [55, 10, 8, 12, 10, 5] | +8 pt |
+
+A full grid search over valuation ∈ [26–38] and the quality/growth/strength weights
+finds **no weighting that beats the current balanced set** — every shift toward
+valuation lowers the edge. Steepening the valuation *curve* to reward only the
+deep-value tail (max points at ≥45% upside instead of ≥35%) also lowered it
+(15.5 vs 17.1 pt).
+
+**Why:** pure cheapness pulls in value traps, distressed names and cyclically-
+depressed junk that never recover. The quality pillars — negatively correlated with
+returns *in isolation* — earn their keep as a **filter** on the cheap names. The
+"quality at a fair price" combination beats either lever alone, and the current
+balance is already at the sweet spot.
+
+**So the margin of safety is best strengthened not in the score, but at the GATE** —
+which this codebase already does: the buy-below rating gate (a BUY must trade below
+its certainty-scaled fair value) and the value-trap / suspect guards enforce exactly
+the "buy cheap, avoid the traps" discipline the data rewards. Weighting the score
+toward cheapness would double-count valuation and, per the backtest, hurt.
