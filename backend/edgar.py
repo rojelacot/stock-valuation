@@ -252,6 +252,8 @@ _CONCEPTS: dict[str, tuple[list[str], str, bool, bool]] = {
     "total_equity": (["StockholdersEquity",
                       "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
                      "USD", False, True),
+    "preferred_stock": (["PreferredStockValue", "PreferredStockValueOutstanding"],
+                        "USD", False, True),
     "long_term_debt": (["LongTermDebtNoncurrent", "LongTermDebt",
                         "LongTermDebtAndCapitalLeaseObligations"], "USD", False, True),
     "cash": (["CashAndCashEquivalentsAtCarryingValue",

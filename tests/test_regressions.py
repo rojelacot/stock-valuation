@@ -211,6 +211,20 @@ ok(metrics(_pipeline("Midstream Partners L.P."))["valuation"]["mid"]
    < metrics(_pipeline("Midstream Holdings Inc."))["valuation"]["mid"],
    "WES: an MLP is valued more conservatively than the identical C-corp (no premium, D&A not free cash)")
 
+# ── Preferred stock subtracted from common book value — Citigroup ──────────────
+def _bank(pref):
+    st = {"revenue": years(2010, [50] * 16), "net_income": years(2010, [10] * 16),
+          "total_equity": years(2010, [100] * 16), "shares": years(2010, [10] * 16),
+          "preferred_stock": years(2010, [pref] * 16)}
+    return make_stock(statements=st, info={"sic": 6021, "current_price": 8,
+                                           "shares_outstanding": 10, "market_cap": 80})
+_bvps_pref = metrics(_bank(20))["valuation"].get("bvps")     # 20 of 100 equity is preferred
+_bvps_none = metrics(_bank(0))["valuation"].get("bvps")
+ok(_bvps_pref is not None and _bvps_none is not None and _bvps_pref < _bvps_none,
+   "C: preferred stock is subtracted from equity before book value per COMMON share")
+ok(abs(_bvps_none - 10.0) < 0.01 and abs(_bvps_pref - 8.0) < 0.01,
+   "C: common book value drops exactly by the preferred fraction (10 -> 8 on 20% preferred)")
+
 
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")

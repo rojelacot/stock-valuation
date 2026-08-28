@@ -746,7 +746,13 @@ def compute_metrics(stock: dict[str, Any],
         # a runaway growth assumption either.
         _fin_g1 = (min(oe_growth_robust, 0.12)
                    if oe_growth_robust is not None else None)
-        fv = financials.value(latest_equity, fin_shares, fin_roe, eff_discount,
+        # Preferred stock belongs to preferred holders, not common shareholders, so
+        # subtract it from equity before computing book value PER COMMON SHARE — else
+        # the justified-P/B fair value is overstated by the preferred fraction (a big
+        # bank like Citigroup carries ~$20B of preferred, ~8% of equity).
+        _pref = _latest(st.get("preferred_stock") or {}) or 0.0
+        _common_equity = (latest_equity - _pref) if latest_equity is not None else latest_equity
+        fv = financials.value(_common_equity, fin_shares, fin_roe, eff_discount,
                               A["terminal_growth"], price, A["margin_of_safety"],
                               growth_stage1=_fin_g1)
         # The P/B model only fits balance-sheet financials, where book value ≈

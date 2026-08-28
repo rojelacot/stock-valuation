@@ -67,7 +67,7 @@ TS_MAP = {
 }
 STATEMENT_KEYS = [
     "revenue", "gross_profit", "operating_income", "net_income", "eps",
-    "interest_expense", "shares", "total_assets", "total_equity", "total_debt",
+    "interest_expense", "shares", "total_assets", "total_equity", "preferred_stock", "total_debt",
     "long_term_debt", "cash", "current_assets", "current_liabilities",
     "operating_cashflow", "capex", "free_cashflow", "stock_based_comp",
     "depreciation", "depreciation_recon", "gross_ppe", "net_ppe",
