@@ -59,9 +59,9 @@ python3 -m venv .venv
 cp .env.example .env    # then paste your ANTHROPIC_API_KEY into .env
 
 # run it
-./run.sh                # or: .venv/bin/uvicorn main:app --app-dir backend --port 8000
+./run.sh                # or: .venv/bin/uvicorn main:app --app-dir backend --port 8077
 ```
-Then open http://127.0.0.1:8000 and type a ticker (AAPL, MSFT, KO, GOOGL, JNJ, BRK-B…).
+Then open http://127.0.0.1:8077 and type a ticker (AAPL, MSFT, KO, GOOGL, JNJ, BRK-B…).
 
 ## Run with Docker (self-host)
 Runs anywhere Docker does — no Python setup, one command. Each instance is a single
