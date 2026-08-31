@@ -28,6 +28,12 @@ ROOT = Path(__file__).resolve().parent.parent
 HISTORY_FILE = ROOT / "reports" / "screen_history.json"
 _CACHE: dict[str, tuple[float, dict]] = {}   # scope -> (timestamp, result)
 CACHE_TTL = 900   # 15 min — live prices, but no need to re-fetch on every tab click
+INFLATION_HURDLE = 0.03   # the thesis's ~3%/yr bar (matches the assumptions default)
+
+
+def _infl_over(days: int) -> float:
+    """3%/yr inflation compounded over `days` — the thesis hurdle, pro-rated."""
+    return (1 + INFLATION_HURDLE) ** (days / 365.25) - 1
 
 
 def _load(scope: str) -> list:
@@ -94,6 +100,8 @@ def forward_performance(scope: str = "large") -> dict[str, Any]:
     picks.sort(key=lambda p: p["return"], reverse=True)
     rets = [p["return"] for p in picks]
     alphas = [p["alpha"] for p in picks if p["alpha"] is not None]
+    sp_rets = [p["sp_return"] for p in picks if p["sp_return"] is not None]
+    avg_days = round(sum(p["days"] for p in picks) / len(picks))
     summary = {
         "n": len(picks),
         "median_return": statistics.median(rets),
@@ -101,8 +109,15 @@ def forward_performance(scope: str = "large") -> dict[str, Any]:
         "median_alpha": statistics.median(alphas) if alphas else None,
         "mean_alpha": (sum(alphas) / len(alphas)) if alphas else None,
         "hit_rate": (sum(1 for a in alphas if a > 0) / len(alphas)) if alphas else None,
-        "avg_days": round(sum(p["days"] for p in picks) / len(picks)),
+        "avg_days": avg_days,
         "since": min(p["flagged"] for p in picks),
+        # Benchmark returns over the same spans (price-only, apples-to-apples).
+        "sp_median": statistics.median(sp_rets) if sp_rets else None,
+        "sp_mean": (sum(sp_rets) / len(sp_rets)) if sp_rets else None,
+        "inflation_return": _infl_over(avg_days),
+        "inflation_hurdle": INFLATION_HURDLE,
+        # Each pick vs the 3%/yr bar over its OWN span.
+        "beat_inflation": sum(1 for p in picks if p["return"] > _infl_over(p["days"])) / len(picks),
     }
     result = {"available": True, "picks": picks, "summary": summary}
     _CACHE[scope] = (now, result)

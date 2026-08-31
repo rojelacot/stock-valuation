@@ -418,6 +418,8 @@ ok(_tr._spy_close_at(_spy, "2026-05-01") is None,
    "track record: a flag date before any S&P data yields no benchmark (no crash)")
 ok(_tr._spy_close_at(_spy, "2026-08-01") == 770.0,
    "track record: an exact date match uses that day's close")
+ok(abs(_tr._infl_over(365) - 0.03) < 0.001 and _tr._infl_over(0) == 0 and 0 < _tr._infl_over(11) < 0.002,
+   "track record: inflation hurdle pro-rates (3%/yr over a year, ~0 over days)")
 
 
 if FAILS:

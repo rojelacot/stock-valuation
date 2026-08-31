@@ -2248,12 +2248,26 @@ function trackRecordCard(d) {
       <h3 class="font-semibold">Forward performance <span class="text-xs text-muted font-normal">· past picks vs the S&P 500</span></h3>
       <span class="text-[11px] text-muted">${s.n} picks · since ${s.since.slice(5)} · ~${s.avg_days}d avg</span>
     </div>
-    <p class="text-xs text-muted mb-4">The honest, survivorship-free test the backtest can't be: each pick's <em>actual</em> price return since the screen first flagged it, vs the S&P over the same span. Buy-and-hold from first flag; price-only.</p>
+    <p class="text-xs text-muted mb-4">The honest, survivorship-free test the backtest can't be: each pick's <em>actual</em> price return since the screen first flagged it, vs two benchmarks over the same span — the <strong>S&P 500</strong> (SPY, the opportunity cost) and <strong>3%/yr inflation</strong> (the thesis's hurdle). Equal-weight, buy-and-hold from first flag; price-only on both sides.</p>
+    <div class="grid grid-cols-3 gap-2.5 mb-3">
+      <div class="bg-brand/5 rounded-xl p-3 border border-brand/30">
+        <div class="text-[11px] text-muted">Your picks</div>
+        <div class="text-2xl font-bold ${col(s.mean_return)}">${sgn(s.mean_return)}</div>
+        <div class="text-[10px] text-muted mt-0.5">equal-weight · ~${s.avg_days}d</div></div>
+      <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+        <div class="text-[11px] text-muted">S&P 500</div>
+        <div class="text-2xl font-bold ${col(s.sp_mean)}">${sgn(s.sp_mean)}</div>
+        <div class="text-[10px] text-muted mt-0.5">same spans · price-only</div></div>
+      <div class="bg-ink/40 rounded-xl p-3 border border-line/60">
+        <div class="text-[11px] text-muted">Inflation</div>
+        <div class="text-2xl font-bold text-muted">${sgn(s.inflation_return)}</div>
+        <div class="text-[10px] text-muted mt-0.5">3%/yr · ~${s.avg_days}d</div></div>
+    </div>
     <div class="grid grid-cols-2 md:grid-cols-4 gap-2.5 mb-4">
-      ${tile("Median pick", sgn(s.median_return), "mean " + sgn(s.mean_return), col(s.median_return))}
-      ${tile("Median α vs S&P", sgn(s.median_alpha), "mean " + sgn(s.mean_alpha), col(s.median_alpha))}
+      ${tile("Median pick", sgn(s.median_return), "typical name", col(s.median_return))}
+      ${tile("Median α vs S&P", sgn(s.median_alpha), "per pick", col(s.median_alpha))}
       ${tile("Beat the S&P", s.hit_rate == null ? "—" : Math.round(s.hit_rate * 100) + "%", "of picks", "")}
-      ${tile("Picks tracked", String(s.n), `~${s.avg_days} days held`, "")}
+      ${tile("Beat inflation", s.beat_inflation == null ? "—" : Math.round(s.beat_inflation * 100) + "%", "of picks", "")}
     </div>
     ${early ? `<div class="text-[11px] text-warn bg-warn/10 border border-warn/30 rounded-lg p-2.5 mb-3">⏳ Early days — picks average only ~${s.avg_days} days. Short-horizon returns are noise and the S&P is dated to monthly closes; this validator needs months of picks aging to mean anything. It compounds every week.</div>` : ""}
     <div class="overflow-x-auto">
