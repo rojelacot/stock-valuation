@@ -422,6 +422,28 @@ ok(abs(_tr._infl_over(365) - 0.03) < 0.001 and _tr._infl_over(0) == 0 and 0 < _t
    "track record: inflation hurdle pro-rates (3%/yr over a year, ~0 over days)")
 
 
+# --- weekly digest: composition + watchlist-first ordering ---
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import notify as _notify                                         # noqa: E402
+
+_subj, _body = _notify.build_digest(
+    "2026-08-28",
+    [{"ticker": "DECK", "score": 98, "upside": 0.88, "buy_below": 131.69}],
+    {"prev_date": "2026-08-27", "added": ["DECK"], "dropped": []},
+    [{"ticker": "FOO", "ai_veto": "no durable moat"}],
+    [{"ticker": "KO", "price": 60.0, "buy_below": 65.0, "upside": 0.12}],
+    [{"ticker": "INTC", "sell_action": "sell", "sell_reason": "thesis broken"}],
+    "reports/screen-2026-08-28.md")
+ok("1 buys" in _subj and "2 watchlist alerts" in _subj,
+   "digest: headline summarizes buy count + watchlist alerts")
+ok(_body.index("Your watchlist") < _body.index("Buy list"),
+   "digest: the watchlist (what you hold) leads the buy list")
+ok("SELL **INTC**" in _body and "BUY ZONE **KO**" in _body,
+   "digest: watchlist trim/sell and buy-zone are both surfaced")
+ok("Vetoed by the qualitative read" in _body and "FOO" in _body,
+   "digest: AI vetoes are listed")
+
+
 if FAILS:
     print(f"\n{len(FAILS)} regression test(s) FAILED:")
     print("\n".join("  - " + f for f in FAILS))

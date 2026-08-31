@@ -223,6 +223,15 @@ out of the buy list. The installed **LaunchAgent**
 plist's `StartCalendarInterval` / `--scope` and reload
 (`launchctl unload … && launchctl load -w …`) to change the time or breadth.
 
+**Weekly digest.** After each run the screen writes a short, scannable
+`reports/digest-YYYY-MM-DD.md` and fires a native macOS notification, so the scheduled Monday
+run *reaches* you instead of sitting in a report file. The digest leads with your **watchlist**
+— holdings now flagged to **trim/sell** (the sell-discipline signal) or that fell into their
+**buy zone** — then the week's new/dropped candidates, AI vetoes, and the buy list. To also get
+it by email, set `DIGEST_SMTP_HOST` / `DIGEST_SMTP_USER` / `DIGEST_SMTP_PASS` / `DIGEST_EMAIL_TO`
+(and optional `DIGEST_SMTP_PORT` / `DIGEST_EMAIL_FROM`) in your environment — opt-in, nothing is
+required, and the password is read from the env, never stored (`notify.py`).
+
 ## Earnings quality & the capex-cycle distortion
 Capital expenditure hits earnings *slowly* (as depreciation) but hits cash *immediately*. So when
 a company is building hard — as the AI hyperscalers are in 2025–26 — two opposite distortions appear:

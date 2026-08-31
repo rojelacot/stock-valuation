@@ -58,9 +58,12 @@ def _analyze(sym, assumptions, deep=False):
     m = compute_metrics(stock, assumptions)
     v = score(m)
     val = m.get("valuation", {})
+    sd = m.get("sell_discipline") or {}
     return {
         "deep_verified": deep,
         "ticker": sym,
+        "sell_action": sd.get("action"),
+        "sell_reason": sd.get("reason"),
         "name": stock["info"].get("name"),
         "sector": stock["info"].get("sector") or "Other / Unknown",
         "score": v["score"],
@@ -426,19 +429,28 @@ def main():
     import history as _history
     _history.record(scope_key, today_iso, args.min_score, candidates)
 
-    # ---- Watchlist buy-zone alerts ----
+    # ---- Watchlist alerts: buy-zone entries AND trim/sell signals on holdings ----
+    # Holdings get the deep pass so the sell-discipline signal (which needs EDGAR
+    # history for decline / distress / incremental-ROIC) is reliable.
     import watchlist as _wl
-    wl_alerts = []
+    wl_alerts, wl_sell = [], []
     for tk in _wl.load():
         try:
-            row, err = _analyze(tk, assumptions)
-            if row and row.get("buy_below") and row.get("price") and row["price"] <= row["buy_below"]:
+            row, err = _analyze(tk, assumptions, deep=True)
+            if not row:
+                continue
+            if row.get("buy_below") and row.get("price") and row["price"] <= row["buy_below"]:
                 wl_alerts.append(row)
+            elif row.get("sell_action") in ("trim", "sell"):
+                wl_sell.append(row)
         except Exception: # noqa: BLE001
             pass
     if wl_alerts:
         print(f"\n{len(wl_alerts)} WATCHLIST NAME(S) IN BUY ZONE:",
               ", ".join(f"{r['ticker']} ({usd(r['price'])} ≤ {usd(r['buy_below'])})" for r in wl_alerts))
+    if wl_sell:
+        print(f"{len(wl_sell)} WATCHLIST NAME(S) FLAGGED TO TRIM/SELL:",
+              ", ".join(f"{r['ticker']} ({r['sell_action']})" for r in wl_sell))
 
     print("\n" + "=" * 56)
     if diff["prev_date"]:
@@ -475,6 +487,16 @@ def main():
         md = md[0] + "\n" + md[1] + "\n\n" + "\n".join(alert_md) + "\n\n" + (md[2] if len(md) > 2 else "")
     out.write_text(md)
     print(f"Report saved: {out}")
+
+    # ---- Weekly digest: a short, scannable summary delivered to you ----
+    try:
+        import notify
+        subject, body = notify.build_digest(today_iso, candidates, diff, vetoed,
+                                            wl_alerts, wl_sell, out)
+        notify.deliver(subject, body, today_iso)
+    except Exception as e:  # noqa: BLE001  — digest is a nicety, never fail the run over it
+        print(f"(digest step skipped: {e})")
+
     if CHECKPOINT.exists():
         CHECKPOINT.unlink() # run completed cleanly — clear resume state
 
